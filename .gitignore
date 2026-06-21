@@ -37,6 +37,9 @@ Thumbs.db
 # Internal working docs (kept local, not committed to the public repo)
 /notes/
 
+# Raw asset source kits (local browsing only; only curated models get committed)
+/assets/kenney-factory-kit/
+
 # Logs / coverage
 *.log
 coverage.out
