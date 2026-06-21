@@ -40,7 +40,7 @@ func (w *World) stepBelts() {
 
 // stepExtractors has each extractor drop one ore onto the belt in front of it,
 // once every period ticks, when there's room. If the belt is full it waits and
-// tries again next tick — no ore is created or lost.
+// retries next tick, so no ore is created or lost.
 func (w *World) stepExtractors() {
 	for i := range w.tiles {
 		if w.tiles[i].Kind != Extractor {

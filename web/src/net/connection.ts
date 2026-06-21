@@ -13,8 +13,8 @@ class Connection {
   private backoff = 500; // ms; doubles on each failed attempt, capped
   private listeners = new Set<StatusListener>();
 
-  // start opens the connection. Safe to call more than once (e.g. React Strict
-  // Mode mounts effects twice in dev) — extra calls are ignored.
+  // start opens the connection. Safe to call more than once; extra calls are
+  // ignored (React Strict Mode runs effects twice in dev).
   start(): void {
     if (this.ws) return;
     this.connect();
