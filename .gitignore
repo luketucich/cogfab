@@ -1,0 +1,43 @@
+# Build output / binaries
+/bin/
+/dist/
+*.exe
+*.out
+*.test
+*.prof
+*.cpu
+*.mem
+
+# Go
+/vendor/
+go.work
+go.work.sum
+
+# Node / frontend (web/)
+node_modules/
+web/dist/
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+*.swp
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Internal working docs (kept local, not committed to the public repo)
+/notes/
+
+# Logs / coverage
+*.log
+coverage.out
+coverage.html

@@ -1,0 +1,9 @@
+# <type>(<scope>): <short summary>   — imperative, ≤50 chars, no trailing period
+#
+# Conventional Commits — https://www.conventionalcommits.org
+#   type:  feat fix docs test refactor perf build ci chore revert
+#   scope: engine net web sim proto deploy docs ci   (optional)
+#
+# Body (optional): explain WHAT changed and WHY, not how. Wrap at ~72 chars.
+#
+# Footer (optional): "BREAKING CHANGE: <description>"   or   "Refs: #123"
