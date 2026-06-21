@@ -41,7 +41,7 @@ func TestFactoryFlowGolden(t *testing.T) {
 		"E>oo.", // tick 4: lead item blocked at the end, the next catches up
 		"Eooo.", // tick 5: belt filling
 		"Eooo.", // tick 6: belt full
-		"Eooo.", // tick 7: extractor now blocked too — nothing created or lost
+		"Eooo.", // tick 7: extractor blocked too, nothing created or lost
 	}
 
 	if got := w.String(); got != frames[0] {

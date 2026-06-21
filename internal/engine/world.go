@@ -1,10 +1,10 @@
 // Package engine is the core of the Cogfab factory simulation: a grid of tiles
 // that moves forward one step at a time when you call World.Step.
 //
-// The engine only does game logic — it never touches the network, the screen,
-// or the clock, and nothing in it is random. So the same starting grid always
-// gives the same result, which makes it easy to test: replay the same steps and
-// check the exact outcome.
+// It only does game logic. It never touches the network, the screen, or the
+// clock, and nothing in it is random, so the same starting grid always gives
+// the same result. That makes it easy to test: replay the steps and check the
+// outcome.
 package engine
 
 // Direction is which way a tile points: North, East, South, or West.

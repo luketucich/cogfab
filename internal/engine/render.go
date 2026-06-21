@@ -2,8 +2,8 @@ package engine
 
 import "strings"
 
-// String draws the grid as text, one row per line — handy for tests and
-// debugging. '.' is empty, '^>v<' is a belt pointing the way it moves items,
+// String draws the grid as text, one row per line, for tests and debugging.
+// '.' is empty, '^>v<' is a belt pointing the way it moves items,
 // 'E' is an extractor, and 'o' is an ore.
 func (w *World) String() string {
 	var b strings.Builder
