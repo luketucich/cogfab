@@ -40,6 +40,9 @@ Thumbs.db
 # Raw asset source kits (local browsing only; only curated models get committed)
 /assets/kenney-factory-kit/
 
+# Claude Code local tooling
+/.claude/
+
 # Logs / coverage
 *.log
 coverage.out
