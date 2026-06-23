@@ -1,29 +1,49 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { getLatest } from "./store";
+import { getFrame } from "./store";
+import { BELT_ROTATION, cellOffsets } from "./grid";
+import { sourceTile } from "./interpolation";
+import { useFactoryModels } from "./models";
 
-// Plenty of headroom for our grid; instances past the live count are hidden.
 const MAX_INSTANCES = 4096;
+const ORE_SIZE = 0.34;
+const ORE_HEIGHT = 0.42;
 
-// One reusable transform, filled in per instance each frame.
 const dummy = new THREE.Object3D();
 
-// Factory draws the grid as instanced boxes and repositions them every frame
-// from the latest snapshot. Reading the store here, rather than through React
-// state, keeps the fast stream off React's render path.
+// placeInstance writes one positioned, rotated instance into a mesh.
+function placeInstance(
+  mesh: THREE.InstancedMesh,
+  index: number,
+  x: number,
+  y: number,
+  z: number,
+  rotationY: number,
+) {
+  dummy.position.set(x, y, z);
+  dummy.rotation.set(0, rotationY, 0);
+  dummy.updateMatrix();
+  mesh.setMatrixAt(index, dummy.matrix);
+}
+
+// Factory draws the grid as instanced models, updated every frame from the
+// latest snapshots. The ore is interpolated between its previous and current
+// tile so it glides smoothly at the render frame rate instead of jumping once
+// per server tick. Reading the store here, not through React state, keeps the
+// fast stream off React's render path.
 export function Factory() {
+  const { belt, extractor } = useFactoryModels();
   const belts = useRef<THREE.InstancedMesh>(null!);
   const extractors = useRef<THREE.InstancedMesh>(null!);
   const ore = useRef<THREE.InstancedMesh>(null!);
 
   useFrame(() => {
-    const snap = getLatest();
-    if (!snap) return;
-
-    const { width, height, tiles } = snap;
-    const offX = (width - 1) / 2;
-    const offZ = (height - 1) / 2;
+    const frame = getFrame(performance.now());
+    if (!frame) return;
+    const { current, previous, alpha } = frame;
+    const { width, height, tiles } = current;
+    const { offX, offZ } = cellOffsets(current);
 
     let nBelt = 0;
     let nExt = 0;
@@ -32,23 +52,24 @@ export function Factory() {
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const tile = tiles[y * width + x];
-        const wx = x - offX;
-        const wz = y - offZ;
+        const rot = BELT_ROTATION[tile.dir];
 
         if (tile.kind === "belt") {
-          dummy.position.set(wx, 0.08, wz);
-          dummy.updateMatrix();
-          belts.current.setMatrixAt(nBelt++, dummy.matrix);
+          placeInstance(belts.current, nBelt++, x - offX, 0, y - offZ, rot);
         } else if (tile.kind === "extractor") {
-          dummy.position.set(wx, 0.25, wz);
-          dummy.updateMatrix();
-          extractors.current.setMatrixAt(nExt++, dummy.matrix);
+          placeInstance(extractors.current, nExt++, x - offX, 0, y - offZ, rot);
         }
 
         if (tile.item === "ore") {
-          dummy.position.set(wx, 0.45, wz);
-          dummy.updateMatrix();
-          ore.current.setMatrixAt(nOre++, dummy.matrix);
+          const [sx, sy] = previous ? sourceTile(previous, x, y) : [x, y];
+          placeInstance(
+            ore.current,
+            nOre++,
+            sx - offX + (x - sx) * alpha,
+            ORE_HEIGHT,
+            sy - offZ + (y - sy) * alpha,
+            0,
+          );
         }
       }
     }
@@ -63,30 +84,10 @@ export function Factory() {
 
   return (
     <>
-      <instancedMesh
-        ref={belts}
-        args={[undefined, undefined, MAX_INSTANCES]}
-        frustumCulled={false}
-      >
-        <boxGeometry args={[0.9, 0.16, 0.9]} />
-        <meshStandardMaterial color="#3b4250" />
-      </instancedMesh>
-
-      <instancedMesh
-        ref={extractors}
-        args={[undefined, undefined, MAX_INSTANCES]}
-        frustumCulled={false}
-      >
-        <boxGeometry args={[0.7, 0.5, 0.7]} />
-        <meshStandardMaterial color="#c0883c" />
-      </instancedMesh>
-
-      <instancedMesh
-        ref={ore}
-        args={[undefined, undefined, MAX_INSTANCES]}
-        frustumCulled={false}
-      >
-        <boxGeometry args={[0.32, 0.32, 0.32]} />
+      <instancedMesh ref={belts} args={[belt.geometry, belt.material, MAX_INSTANCES]} frustumCulled={false} />
+      <instancedMesh ref={extractors} args={[extractor.geometry, extractor.material, MAX_INSTANCES]} frustumCulled={false} />
+      <instancedMesh ref={ore} args={[undefined, undefined, MAX_INSTANCES]} frustumCulled={false}>
+        <boxGeometry args={[ORE_SIZE, ORE_SIZE, ORE_SIZE]} />
         <meshStandardMaterial color="#5bd66f" />
       </instancedMesh>
     </>
