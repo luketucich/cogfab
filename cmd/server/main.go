@@ -43,19 +43,32 @@ func main() {
 	_ = srv.Shutdown(shutdownCtx)
 }
 
-// demoWorld builds a small factory worth watching: an extractor feeding an
-// L-shaped belt path that runs east, turns south, then runs back west.
+// demoWorld builds a closed belt loop with a few ore on it, so there is always
+// something moving to look at. A real factory has extractors and sinks; this is
+// just a lively placeholder for the renderer.
 func demoWorld() *engine.World {
-	w := engine.NewWorld(8, 4)
-	w.PlaceExtractor(0, 0, engine.East, 3)
-	for x := 1; x <= 4; x++ {
+	w := engine.NewWorld(6, 4)
+	// Top edge runs east; the corner at x=5 turns south.
+	for x := 0; x <= 4; x++ {
 		w.PlaceBelt(x, 0, engine.East)
 	}
 	w.PlaceBelt(5, 0, engine.South)
+	// Right edge runs south; the corner at y=3 turns west.
 	w.PlaceBelt(5, 1, engine.South)
-	w.PlaceBelt(5, 2, engine.West)
+	w.PlaceBelt(5, 2, engine.South)
+	w.PlaceBelt(5, 3, engine.West)
+	// Bottom edge runs west; the corner at x=0 turns north.
 	for x := 4; x >= 1; x-- {
-		w.PlaceBelt(x, 2, engine.West)
+		w.PlaceBelt(x, 3, engine.West)
 	}
+	w.PlaceBelt(0, 3, engine.North)
+	// Left edge runs north, back to the start.
+	w.PlaceBelt(0, 2, engine.North)
+	w.PlaceBelt(0, 1, engine.North)
+	// A few ore spread around the loop so it is always moving.
+	w.SetItem(1, 0, engine.ItemOre)
+	w.SetItem(5, 2, engine.ItemOre)
+	w.SetItem(3, 3, engine.ItemOre)
+	w.SetItem(0, 1, engine.ItemOre)
 	return w
 }
