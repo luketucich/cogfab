@@ -4,7 +4,7 @@
 
 **Status:** early development (engine-first). Not yet playable.
 
-Cogfab is a browser game where multiple players share one factory grid and build it together in real time, placing extractors, conveyor belts, and machines that refine raw materials into a final product. Under the game it is a server-authoritative, real-time, distributed simulation: a Go server owns a deterministic, fixed-timestep simulation and streams authoritative state to thin clients that predict, reconcile, and render.
+Cogfab is a browser game where multiple players share one factory grid and build it together in real time, placing extractors, conveyor belts, and machines that refine raw materials into a final product. Under the game it is a server-authoritative, real-time, distributed simulation: a Go server owns a deterministic, fixed-timestep simulation and streams authoritative state to thin clients that interpolate and render it; client-side prediction and reconciliation come later.
 
 ## Why this exists
 
@@ -12,7 +12,7 @@ A portfolio project to demonstrate (and defend in depth) real-time netcode, Go c
 
 ## Architecture in one line
 
-The Go server runs a fixed-timestep (20 Hz) deterministic simulation as a pure package, `Step(state) -> state`, with no networking or rendering inside it. Clients send commands and render authoritative state deltas. That decoupling is what makes the engine unit-testable and makes multiplayer an architecture rather than an afterthought.
+The Go server runs a fixed-timestep deterministic simulation as a pure package, `Step(state) -> state`, with no networking or rendering inside it. Today clients render the full-state snapshots it streams; sending commands and streaming deltas come next. That decoupling is what makes the engine unit-testable and makes multiplayer an architecture rather than an afterthought.
 
 ## Tech stack
 

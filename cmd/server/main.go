@@ -47,28 +47,30 @@ func main() {
 // something moving to look at. A real factory has extractors and sinks; this is
 // just a lively placeholder for the renderer.
 func demoWorld() *engine.World {
-	w := engine.NewWorld(6, 4)
-	// Top edge runs east; the corner at x=5 turns south.
+	world := engine.NewWorld(12, 8)
+	// Sit the 6x4 loop in the middle of the floor, leaving room to build around it.
+	const ox, oy = 3, 2
+	// Top edge runs east; the corner turns south.
 	for x := 0; x <= 4; x++ {
-		w.PlaceBelt(x, 0, engine.East)
+		world.PlaceBelt(ox+x, oy, engine.East)
 	}
-	w.PlaceBelt(5, 0, engine.South)
-	// Right edge runs south; the corner at y=3 turns west.
-	w.PlaceBelt(5, 1, engine.South)
-	w.PlaceBelt(5, 2, engine.South)
-	w.PlaceBelt(5, 3, engine.West)
-	// Bottom edge runs west; the corner at x=0 turns north.
+	world.PlaceBelt(ox+5, oy, engine.South)
+	// Right edge runs south; the corner turns west.
+	world.PlaceBelt(ox+5, oy+1, engine.South)
+	world.PlaceBelt(ox+5, oy+2, engine.South)
+	world.PlaceBelt(ox+5, oy+3, engine.West)
+	// Bottom edge runs west; the corner turns north.
 	for x := 4; x >= 1; x-- {
-		w.PlaceBelt(x, 3, engine.West)
+		world.PlaceBelt(ox+x, oy+3, engine.West)
 	}
-	w.PlaceBelt(0, 3, engine.North)
+	world.PlaceBelt(ox, oy+3, engine.North)
 	// Left edge runs north, back to the start.
-	w.PlaceBelt(0, 2, engine.North)
-	w.PlaceBelt(0, 1, engine.North)
+	world.PlaceBelt(ox, oy+2, engine.North)
+	world.PlaceBelt(ox, oy+1, engine.North)
 	// A few ore spread around the loop so it is always moving.
-	w.SetItem(1, 0, engine.ItemOre)
-	w.SetItem(5, 2, engine.ItemOre)
-	w.SetItem(3, 3, engine.ItemOre)
-	w.SetItem(0, 1, engine.ItemOre)
-	return w
+	world.SetItem(ox+1, oy, engine.ItemOre)
+	world.SetItem(ox+5, oy+2, engine.ItemOre)
+	world.SetItem(ox+3, oy+3, engine.ItemOre)
+	world.SetItem(ox, oy+1, engine.ItemOre)
+	return world
 }

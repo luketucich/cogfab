@@ -2,6 +2,15 @@
   color-scheme: dark;
 }
 
-body {
+html,
+body,
+#root {
   margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #1a1e27;
+}
+
+canvas {
+  display: block;
 }
