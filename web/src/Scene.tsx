@@ -28,8 +28,7 @@ export function Scene() {
         enableRotate={false}
         screenSpacePanning={false}
         zoomToCursor
-        enableDamping
-        dampingFactor={0.08}
+        enableDamping={false}
         zoomSpeed={0.8}
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}

@@ -11,16 +11,6 @@ export const BELT_ROTATION: Record<TileView["dir"], number> = {
   west: -Math.PI / 2,
 };
 
-// Belt direction to the (dx, dy) step toward the tile it feeds.
-export const STEP: Record<TileView["dir"], [number, number]> = {
-  north: [0, -1],
-  east: [1, 0],
-  south: [0, 1],
-  west: [-1, 0],
-};
-
-export const DIRS = ["north", "east", "south", "west"] as const;
-
 // cellOffsets centre each tile on a grid cell, for any grid size, so a 1-unit
 // model fills exactly one cell. World position of tile (x, y) is then
 // (x - offX, y - offZ).

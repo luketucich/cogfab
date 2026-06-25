@@ -1,6 +1,7 @@
 import { Scene } from "./Scene";
 import { Vignette } from "./Vignette";
 import { Hud } from "./Hud";
+import { Toolbar } from "./toolbar/Toolbar";
 
 export function App() {
   return (
@@ -15,6 +16,7 @@ export function App() {
       <Scene />
       <Vignette />
       <Hud />
+      <Toolbar />
     </div>
   );
 }

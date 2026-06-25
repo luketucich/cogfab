@@ -27,14 +27,3 @@ func (k TileKind) String() string {
 	}
 	return "unknown"
 }
-
-// String returns the lowercase name of the item (e.g. "ore"); "none" when empty.
-func (i ItemKind) String() string {
-	switch i {
-	case ItemNone:
-		return "none"
-	case ItemOre:
-		return "ore"
-	}
-	return "unknown"
-}

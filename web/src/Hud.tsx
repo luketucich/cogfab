@@ -1,8 +1,9 @@
 import { useConnection } from "./useConnection";
 
-// Hud is the overlay drawn on top of the 3D scene: connection status and tick.
+// Hud is the overlay drawn on top of the 3D scene: the title and connection
+// status.
 export function Hud() {
-  const { connected, tick } = useConnection();
+  const { connected } = useConnection();
 
   return (
     <div
@@ -22,7 +23,6 @@ export function Hud() {
           {connected ? "connected" : "disconnected"}
         </span>
       </div>
-      <div style={{ fontSize: 13 }}>tick: {tick ?? "-"}</div>
     </div>
   );
 }

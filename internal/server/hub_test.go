@@ -10,36 +10,38 @@ import (
 
 func newTestWorld() *engine.World {
 	w := engine.NewWorld(3, 1)
-	w.PlaceExtractor(0, 0, engine.East, 1) // emits every tick
+	w.PlaceExtractor(0, 0, engine.East)
 	w.PlaceBelt(1, 0, engine.East)
 	w.PlaceBelt(2, 0, engine.East)
 	return w
 }
 
-func TestNewHubStartsAtTickZero(t *testing.T) {
-	h := NewHub(newTestWorld())
-	if h.tick != 0 {
-		t.Errorf("tick = %d, want 0", h.tick)
+func TestApplyPlacesAndDestroys(t *testing.T) {
+	h := NewHub(engine.NewWorld(2, 1))
+
+	h.apply(wire.Command{Type: wire.CmdPlace, X: 0, Y: 0, Kind: wire.KindBelt})
+	if got := h.world.At(0, 0).Kind; got != engine.Belt {
+		t.Errorf("after place, kind = %v, want belt", got)
+	}
+
+	h.apply(wire.Command{Type: wire.CmdDestroy, X: 0, Y: 0})
+	if got := h.world.At(0, 0).Kind; got != engine.Empty {
+		t.Errorf("after destroy, kind = %v, want empty", got)
 	}
 }
 
-func TestStepAndEncodeAdvancesTickAndEncodesState(t *testing.T) {
+func TestEncodeProducesStateJSON(t *testing.T) {
 	h := NewHub(newTestWorld())
 
-	b := h.stepAndEncode()
-
-	if h.tick != 1 {
-		t.Errorf("tick = %d, want 1 after one step", h.tick)
-	}
 	var msg wire.StateMessage
-	if err := json.Unmarshal(b, &msg); err != nil {
+	if err := json.Unmarshal(h.encode(), &msg); err != nil {
 		t.Fatalf("encoded bytes are not valid StateMessage JSON: %v", err)
 	}
-	if msg.Type != "state" || msg.Tick != 1 {
-		t.Errorf("msg = {Type:%q Tick:%d}, want {state 1}", msg.Type, msg.Tick)
+	if msg.Type != "state" {
+		t.Errorf("Type = %q, want state", msg.Type)
 	}
-	if msg.Tiles[1].Item != "ore" {
-		t.Errorf("after one step the extractor should emit; tile (1,0) item = %q, want ore", msg.Tiles[1].Item)
+	if msg.Tiles[0].Kind != "extractor" {
+		t.Errorf("tile (0,0) kind = %q, want extractor", msg.Tiles[0].Kind)
 	}
 }
 

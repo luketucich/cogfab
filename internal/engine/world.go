@@ -1,13 +1,12 @@
-// Package engine is the core of the Cogfab factory simulation: a grid of tiles
-// that moves forward one step at a time when you call World.Step.
+// Package engine is the core of the Cogfab factory: a grid of tiles you place
+// structures on.
 //
 // It only does game logic. It never touches the network, the screen, or the
-// clock, and nothing in it is random, so the same starting grid always gives
-// the same result. That makes it easy to test: replay the steps and check the
-// outcome.
+// clock, so the same calls always produce the same grid. That makes it easy to
+// test.
 package engine
 
-// Direction is which way a tile points: North, East, South, or West.
+// Direction is which way a tile faces: North, East, South, or West.
 // On the grid, x goes East and y goes South, starting from the top-left.
 type Direction uint8
 
@@ -18,21 +17,6 @@ const (
 	West
 )
 
-// delta returns the (dx, dy) step for moving one tile in this direction.
-func (d Direction) delta() (dx, dy int) {
-	switch d {
-	case North:
-		return 0, -1
-	case East:
-		return 1, 0
-	case South:
-		return 0, 1
-	case West:
-		return -1, 0
-	}
-	return 0, 0
-}
-
 // TileKind is what's on a tile: nothing, a belt, or an extractor.
 type TileKind uint8
 
@@ -42,31 +26,18 @@ const (
 	Extractor
 )
 
-// ItemKind is the item on a tile. ItemNone means the tile is empty.
-type ItemKind uint8
-
-const (
-	ItemNone ItemKind = iota
-	ItemOre
-)
-
-// Tile is one square of the grid. A belt or extractor can hold one item.
+// Tile is one square of the grid: what's on it and the way it faces.
 type Tile struct {
 	Kind TileKind
 	Dir  Direction
-	Item ItemKind
-
-	period   uint16 // extractor: how many ticks between drops
-	cooldown uint16 // extractor: ticks left until the next drop
 }
 
 // World is the whole factory: a fixed-size grid of tiles.
 //
-// The tiles live in one flat list, always walked in the same order (not a map,
-// whose order is random), so each step gives the same result every time.
+// The tiles live in one flat list, row by row (index = y*width + x).
 type World struct {
 	width, height int
-	tiles         []Tile // one flat list, row by row: index = y*width + x
+	tiles         []Tile
 }
 
 // NewWorld makes an empty grid of the given size.
@@ -95,21 +66,28 @@ func (w *World) index(x, y int) int { return y*w.width + x }
 // At returns the tile at (x, y).
 func (w *World) At(x, y int) Tile { return w.tiles[w.index(x, y)] }
 
-// PlaceBelt puts a belt facing dir at (x, y).
+// PlaceBelt puts a belt facing dir at (x, y). Off-grid coordinates are ignored.
 func (w *World) PlaceBelt(x, y int, dir Direction) {
+	if !w.inBounds(x, y) {
+		return
+	}
 	w.tiles[w.index(x, y)] = Tile{Kind: Belt, Dir: dir}
 }
 
-// PlaceExtractor puts an extractor at (x, y) that drops one ore every period
-// ticks onto the tile in front of it. A period of 0 is treated as 1.
-func (w *World) PlaceExtractor(x, y int, dir Direction, period uint16) {
-	if period == 0 {
-		period = 1
+// PlaceExtractor puts an extractor facing dir at (x, y). Off-grid coordinates
+// are ignored.
+func (w *World) PlaceExtractor(x, y int, dir Direction) {
+	if !w.inBounds(x, y) {
+		return
 	}
-	w.tiles[w.index(x, y)] = Tile{Kind: Extractor, Dir: dir, period: period}
+	w.tiles[w.index(x, y)] = Tile{Kind: Extractor, Dir: dir}
 }
 
-// SetItem puts item on the tile at (x, y). Handy for setting up tests.
-func (w *World) SetItem(x, y int, item ItemKind) {
-	w.tiles[w.index(x, y)].Item = item
+// Destroy empties the tile at (x, y), removing any structure on it. Off-grid
+// coordinates are ignored.
+func (w *World) Destroy(x, y int) {
+	if !w.inBounds(x, y) {
+		return
+	}
+	w.tiles[w.index(x, y)] = Tile{}
 }

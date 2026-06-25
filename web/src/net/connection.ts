@@ -1,4 +1,4 @@
-import type { StateMessage } from "./types";
+import type { Command, StateMessage } from "./types";
 import { setLatest } from "../world/store";
 
 const SERVER_URL = "ws://localhost:8080/ws";
@@ -29,6 +29,14 @@ class Connection {
     };
   }
 
+  // send sends a command to the server. If the socket is not connected, the
+  // command is dropped.
+  send(cmd: Command): void {
+    if (!this.ws) return;
+    this.ws.send(JSON.stringify(cmd));
+  }
+
+  // connect opens the WebSocket and sets up its event handlers.
   private connect(): void {
     const ws = new WebSocket(SERVER_URL);
     this.ws = ws;
@@ -49,12 +57,14 @@ class Connection {
     ws.onerror = () => ws.close();
   }
 
+  // scheduleReconnect waits a bit and then tries to connect again, with exponential backoff.
   private scheduleReconnect(): void {
     const delay = this.backoff;
     this.backoff = Math.min(this.backoff * 2, 10_000);
     setTimeout(() => this.connect(), delay);
   }
 
+  // emit calls all the status listeners with the current connection state.
   private emit(connected: boolean): void {
     for (const fn of this.listeners) fn(connected);
   }
