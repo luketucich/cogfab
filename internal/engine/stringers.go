@@ -27,3 +27,18 @@ func (k TileKind) String() string {
 	}
 	return "unknown"
 }
+
+// ParseDirection turns a direction name (as produced by Direction.String) back
+// into a Direction. Unknown names fall back to North.
+func ParseDirection(s string) Direction {
+	switch s {
+	case "east":
+		return East
+	case "south":
+		return South
+	case "west":
+		return West
+	default:
+		return North
+	}
+}

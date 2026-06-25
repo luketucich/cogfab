@@ -78,12 +78,12 @@ func (h *Hub) Submit(cmd wire.Command) { h.commands <- cmd }
 func (h *Hub) apply(cmd wire.Command) {
 	switch cmd.Type {
 	case wire.CmdPlace:
-		// Placed structures face north until rotation exists.
+		dir := engine.ParseDirection(cmd.Dir)
 		switch cmd.Kind {
 		case wire.KindBelt:
-			h.world.PlaceBelt(cmd.X, cmd.Y, engine.North)
+			h.world.PlaceBelt(cmd.X, cmd.Y, dir)
 		case wire.KindExtractor:
-			h.world.PlaceExtractor(cmd.X, cmd.Y, engine.North)
+			h.world.PlaceExtractor(cmd.X, cmd.Y, dir)
 		}
 	case wire.CmdDestroy:
 		h.world.Destroy(cmd.X, cmd.Y)
