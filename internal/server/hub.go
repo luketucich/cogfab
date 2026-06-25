@@ -1,29 +1,18 @@
-// Package server runs the authoritative game: it owns the world, advances it on
-// a fixed-rate loop, and streams each tick to connected WebSocket clients.
+// Package server runs the authoritative game: it owns the world, streams it to
+// connected WebSocket clients, and updates it when they send commands.
 package server
 
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/luketucich/cogfab/internal/engine"
 	"github.com/luketucich/cogfab/internal/wire"
 )
 
-const (
-	// tickInterval is how often the world advances. Slow on purpose for now so
-	// you can see items move tile by tile; the real target is faster.
-	tickInterval = 250 * time.Millisecond
-
-	// maxCatchUp clamps how much elapsed time we replay after a stall, so a slow
-	// moment can't trigger an unbounded burst of steps.
-	maxCatchUp = time.Second
-
-	// clientBuffer is how many pending messages a client may queue before it is
-	// treated as too slow and dropped.
-	clientBuffer = 16
-)
+// clientBuffer is how many pending messages a client may queue before it is
+// treated as too slow and dropped.
+const clientBuffer = 16
 
 // Client is one connected viewer. The hub only knows its outbound queue; the
 // WebSocket plumbing lives in the transport layer.
@@ -36,11 +25,11 @@ type Client struct {
 // locks and no data races.
 type Hub struct {
 	world *engine.World
-	tick  int
 
 	clients    map[*Client]bool
 	register   chan *Client
 	unregister chan *Client
+	commands   chan wire.Command
 }
 
 // NewHub creates a hub for the given world.
@@ -50,20 +39,15 @@ func NewHub(w *engine.World) *Hub {
 		clients:    make(map[*Client]bool),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		commands:   make(chan wire.Command),
 	}
 }
 
-// Run drives the simulation until ctx is cancelled. It accumulates elapsed wall
-// time rather than taking one step per ticker fire: if the loop falls behind,
-// the elapsed time still drives the right number of steps, so no game-time is
-// lost. On cancellation it disconnects every client.
+// Run owns the world until ctx is cancelled. There is nothing to simulate yet,
+// so it just waits for events: clients joining or leaving, and commands that
+// change the world. It broadcasts the new state right after each command, so a
+// placement shows up immediately. On cancellation it disconnects every client.
 func (h *Hub) Run(ctx context.Context) {
-	ticker := time.NewTicker(tickInterval)
-	defer ticker.Stop()
-
-	last := time.Now()
-	var acc time.Duration
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -73,34 +57,47 @@ func (h *Hub) Run(ctx context.Context) {
 			h.addClient(c)
 		case c := <-h.unregister:
 			h.removeClient(c)
-		case now := <-ticker.C:
-			acc += now.Sub(last)
-			last = now
-			if acc > maxCatchUp {
-				acc = maxCatchUp
-			}
-			for acc >= tickInterval {
-				h.broadcast(h.stepAndEncode())
-				acc -= tickInterval
-			}
+		case cmd := <-h.commands:
+			h.apply(cmd)
+			h.broadcast(h.encode())
 		}
 	}
 }
 
-// Register and Unregister are called from client goroutines to join or leave.
-func (h *Hub) Register(c *Client)   { h.register <- c }
+// Register, Unregister, and Submit are called from client goroutines; the work
+// itself happens on the Run goroutine.
+func (h *Hub) Register(c *Client) { h.register <- c }
+
 func (h *Hub) Unregister(c *Client) { h.unregister <- c }
 
-// stepAndEncode advances the world one tick and returns the JSON snapshot.
-func (h *Hub) stepAndEncode() []byte {
-	h.world.Step()
-	h.tick++
-	b, _ := json.Marshal(wire.Snapshot(h.world, h.tick)) // a fixed struct; marshal can't fail
+func (h *Hub) Submit(cmd wire.Command) { h.commands <- cmd }
+
+// apply changes the world for one client command, ignoring anything it does not
+// recognize. The world ignores off-grid coordinates, so the client's x and y
+// need no checking here.
+func (h *Hub) apply(cmd wire.Command) {
+	switch cmd.Type {
+	case wire.CmdPlace:
+		// Placed structures face north until rotation exists.
+		switch cmd.Kind {
+		case wire.KindBelt:
+			h.world.PlaceBelt(cmd.X, cmd.Y, engine.North)
+		case wire.KindExtractor:
+			h.world.PlaceExtractor(cmd.X, cmd.Y, engine.North)
+		}
+	case wire.CmdDestroy:
+		h.world.Destroy(cmd.X, cmd.Y)
+	}
+}
+
+// encode is the current world as a JSON state message.
+func (h *Hub) encode() []byte {
+	b, _ := json.Marshal(wire.Snapshot(h.world)) // a fixed struct; marshal can't fail
 	return b
 }
 
 // broadcast queues b to every client. A client whose buffer is full is too slow
-// to keep up, so it is dropped rather than allowed to stall the tick loop.
+// to keep up, so it is dropped rather than allowed to stall the hub.
 func (h *Hub) broadcast(b []byte) {
 	for c := range h.clients {
 		select {
@@ -112,12 +109,11 @@ func (h *Hub) broadcast(b []byte) {
 }
 
 // addClient adds a client and sends it the current state immediately, so it is
-// not blank until the next tick.
+// not blank until something changes.
 func (h *Hub) addClient(c *Client) {
 	h.clients[c] = true
-	b, _ := json.Marshal(wire.Snapshot(h.world, h.tick))
 	select {
-	case c.send <- b:
+	case c.send <- h.encode():
 	default:
 	}
 }

@@ -3,8 +3,8 @@ package engine
 import "strings"
 
 // String draws the grid as text, one row per line, for tests and debugging.
-// '.' is empty, '^>v<' is a belt pointing the way it moves items,
-// 'E' is an extractor, and 'o' is an ore.
+// '.' is empty, '^>v<' is a belt facing the way it points, and 'E' is an
+// extractor.
 func (w *World) String() string {
 	var b strings.Builder
 	b.Grow((w.width + 1) * w.height)
@@ -19,13 +19,9 @@ func (w *World) String() string {
 	return b.String()
 }
 
-// glyph is the single character drawn for the tile at (x, y). An item shows on
-// top of the tile it sits on.
+// glyph is the single character drawn for the tile at (x, y).
 func (w *World) glyph(x, y int) byte {
 	t := w.tiles[w.index(x, y)]
-	if t.Item == ItemOre {
-		return 'o'
-	}
 	switch t.Kind {
 	case Belt:
 		switch t.Dir {

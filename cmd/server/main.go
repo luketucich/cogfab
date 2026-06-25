@@ -43,9 +43,8 @@ func main() {
 	_ = srv.Shutdown(shutdownCtx)
 }
 
-// demoWorld builds a closed belt loop with a few ore on it, so there is always
-// something moving to look at. A real factory has extractors and sinks; this is
-// just a lively placeholder for the renderer.
+// demoWorld builds a small belt loop as a starting scene, so the grid is not
+// empty on first load. The belts just sit there for now; nothing moves yet.
 func demoWorld() *engine.World {
 	world := engine.NewWorld(12, 8)
 	// Sit the 6x4 loop in the middle of the floor, leaving room to build around it.
@@ -67,10 +66,5 @@ func demoWorld() *engine.World {
 	// Left edge runs north, back to the start.
 	world.PlaceBelt(ox, oy+2, engine.North)
 	world.PlaceBelt(ox, oy+1, engine.North)
-	// A few ore spread around the loop so it is always moving.
-	world.SetItem(ox+1, oy, engine.ItemOre)
-	world.SetItem(ox+5, oy+2, engine.ItemOre)
-	world.SetItem(ox+3, oy+3, engine.ItemOre)
-	world.SetItem(ox, oy+1, engine.ItemOre)
 	return world
 }

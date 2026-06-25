@@ -34,18 +34,3 @@ func TestTileKindString(t *testing.T) {
 		}
 	}
 }
-
-func TestItemKindString(t *testing.T) {
-	cases := []struct {
-		i    ItemKind
-		want string
-	}{
-		{ItemNone, "none"},
-		{ItemOre, "ore"},
-	}
-	for _, c := range cases {
-		if got := c.i.String(); got != c.want {
-			t.Errorf("ItemKind(%d).String() = %q, want %q", c.i, got, c.want)
-		}
-	}
-}

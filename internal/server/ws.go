@@ -2,19 +2,20 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/luketucich/cogfab/internal/wire"
 )
 
 // writeTimeout bounds how long a single message write may take before the
 // client is considered stuck.
 const writeTimeout = 5 * time.Second
 
-// Handler upgrades a request to a WebSocket, joins it to the hub, and streams
-// state to it until it disconnects. No client-to-server messages are expected
-// yet, but we keep reading so control frames (ping/pong/close) are handled.
+// Handler upgrades a request to a WebSocket, joins it to the hub, streams state
+// to it, and applies the commands it sends, until it disconnects.
 func (h *Hub) Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
@@ -34,14 +35,21 @@ func (h *Hub) Handler() http.HandlerFunc {
 		h.Register(client)
 		defer h.Unregister(client)
 
-		// Reader: drain incoming frames so control frames are processed; on any
-		// read error (including the client closing) tear the connection down.
+		// Reader: decode each frame as a client command and hand it to the hub.
+		// Frames that are not valid commands are skipped; any read error
+		// (including the client closing) tears the connection down.
 		go func() {
 			for {
-				if _, _, err := conn.Read(ctx); err != nil {
+				_, data, err := conn.Read(ctx)
+				if err != nil {
 					cancel()
 					return
 				}
+				var cmd wire.Command
+				if err := json.Unmarshal(data, &cmd); err != nil {
+					continue
+				}
+				h.Submit(cmd)
 			}
 		}()
 

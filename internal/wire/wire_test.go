@@ -10,18 +10,14 @@ import (
 
 func TestSnapshotCapturesGrid(t *testing.T) {
 	w := engine.NewWorld(3, 1)
-	w.PlaceExtractor(0, 0, engine.East, 2)
+	w.PlaceExtractor(0, 0, engine.East)
 	w.PlaceBelt(1, 0, engine.East)
-	w.SetItem(1, 0, engine.ItemOre)
 	// (2,0) stays empty
 
-	msg := Snapshot(w, 7)
+	msg := Snapshot(w)
 
 	if msg.Type != "state" {
 		t.Errorf("Type = %q, want %q", msg.Type, "state")
-	}
-	if msg.Tick != 7 {
-		t.Errorf("Tick = %d, want 7", msg.Tick)
 	}
 	if msg.Width != 3 || msg.Height != 1 {
 		t.Errorf("size = %dx%d, want 3x1", msg.Width, msg.Height)
@@ -29,10 +25,10 @@ func TestSnapshotCapturesGrid(t *testing.T) {
 	if len(msg.Tiles) != 3 {
 		t.Fatalf("len(Tiles) = %d, want 3", len(msg.Tiles))
 	}
-	if got, want := msg.Tiles[0], (TileView{Kind: "extractor", Dir: "east", Item: "none"}); got != want {
+	if got, want := msg.Tiles[0], (TileView{Kind: "extractor", Dir: "east"}); got != want {
 		t.Errorf("Tiles[0] = %+v, want %+v", got, want)
 	}
-	if got, want := msg.Tiles[1], (TileView{Kind: "belt", Dir: "east", Item: "ore"}); got != want {
+	if got, want := msg.Tiles[1], (TileView{Kind: "belt", Dir: "east"}); got != want {
 		t.Errorf("Tiles[1] = %+v, want %+v", got, want)
 	}
 	if msg.Tiles[2].Kind != "empty" {
@@ -41,12 +37,12 @@ func TestSnapshotCapturesGrid(t *testing.T) {
 }
 
 func TestSnapshotJSONHasExpectedKeys(t *testing.T) {
-	b, err := json.Marshal(Snapshot(engine.NewWorld(1, 1), 1))
+	b, err := json.Marshal(Snapshot(engine.NewWorld(1, 1)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(b)
-	for _, key := range []string{`"type"`, `"tick"`, `"width"`, `"height"`, `"tiles"`, `"kind"`, `"dir"`, `"item"`} {
+	for _, key := range []string{`"type"`, `"width"`, `"height"`, `"tiles"`, `"kind"`, `"dir"`} {
 		if !strings.Contains(s, key) {
 			t.Errorf("JSON missing key %s in: %s", key, s)
 		}
