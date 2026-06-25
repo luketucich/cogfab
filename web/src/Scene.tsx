@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { MapControls, OrthographicCamera } from "@react-three/drei";
+import * as THREE from "three";
 import { Factory } from "./world/Factory";
 import { Floor } from "./world/Floor";
 import { Ground } from "./world/Ground";
@@ -32,6 +33,7 @@ export function Scene() {
         zoomSpeed={0.8}
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
+        mouseButtons={{ LEFT: undefined, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
       />
 
       <ambientLight intensity={0.45} />

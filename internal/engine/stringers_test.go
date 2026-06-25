@@ -34,3 +34,14 @@ func TestTileKindString(t *testing.T) {
 		}
 	}
 }
+
+func TestParseDirectionRoundTrips(t *testing.T) {
+	for _, d := range []Direction{North, East, South, West} {
+		if got := ParseDirection(d.String()); got != d {
+			t.Errorf("ParseDirection(%q) = %v, want %v", d.String(), got, d)
+		}
+	}
+	if got := ParseDirection("nonsense"); got != North {
+		t.Errorf("ParseDirection(unknown) = %v, want North", got)
+	}
+}

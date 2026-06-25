@@ -18,11 +18,12 @@ const (
 	KindExtractor = "extractor"
 )
 
-// Command targets a cell (X, Y) with an action (Type). Kind says which item to
-// place and is only set for "place". Add fields like direction as needed.
+// Command targets a cell (X, Y) with an action (Type). For a "place", Kind says
+// which structure to place and Dir says which way it faces.
 type Command struct {
 	Type string `json:"type"`
 	X    int    `json:"x"`
 	Y    int    `json:"y"`
 	Kind string `json:"kind"`
+	Dir  string `json:"dir"`
 }

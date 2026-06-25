@@ -19,9 +19,9 @@ func newTestWorld() *engine.World {
 func TestApplyPlacesAndDestroys(t *testing.T) {
 	h := NewHub(engine.NewWorld(2, 1))
 
-	h.apply(wire.Command{Type: wire.CmdPlace, X: 0, Y: 0, Kind: wire.KindBelt})
-	if got := h.world.At(0, 0).Kind; got != engine.Belt {
-		t.Errorf("after place, kind = %v, want belt", got)
+	h.apply(wire.Command{Type: wire.CmdPlace, X: 0, Y: 0, Kind: wire.KindBelt, Dir: "east"})
+	if got := h.world.At(0, 0); got.Kind != engine.Belt || got.Dir != engine.East {
+		t.Errorf("after place, got kind %v dir %v, want belt east", got.Kind, got.Dir)
 	}
 
 	h.apply(wire.Command{Type: wire.CmdDestroy, X: 0, Y: 0})
