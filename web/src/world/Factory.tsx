@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { getLatest, subscribe } from "./store";
-import { BELT_ROTATION, cellOffsets } from "./grid";
+import { BELT_ROTATION, cellOffsets, cornerRotation, teeRotation } from "./grid";
+import { beltShape } from "./beltShape";
 import { useFactoryModels } from "./models";
 
 const MAX_INSTANCES = 4096;
@@ -9,29 +10,37 @@ const MAX_INSTANCES = 4096;
 const dummy = new THREE.Object3D();
 
 // placeInstance writes one positioned, rotated instance into a mesh.
-function placeInstance(
-  mesh: THREE.InstancedMesh,
-  index: number,
-  x: number,
-  z: number,
-  rotationY: number,
-) {
+function placeInstance(mesh: THREE.InstancedMesh, index: number, x: number, z: number, rotationY: number) {
   dummy.position.set(x, 0, z);
   dummy.rotation.set(0, rotationY, 0);
   dummy.updateMatrix();
   mesh.setMatrixAt(index, dummy.matrix);
 }
 
-// Factory draws the placed structures as instanced models. Nothing moves, so it
-// rebuilds the instances only when a new snapshot arrives, not every frame.
+// flush sets how many instances a mesh draws and uploads them to the GPU.
+function flush(mesh: THREE.InstancedMesh, count: number) {
+  mesh.count = count;
+  mesh.instanceMatrix.needsUpdate = true;
+}
+
+// Factory draws the placed structures as instanced models. Belts split into
+// straight, corner, tee, and cross pieces, where the shape comes from each
+// belt's neighbours. Nothing moves, so it rebuilds only when a new snapshot
+// arrives.
 export function Factory() {
-  const { belt, extractor } = useFactoryModels();
-  const belts = useRef<THREE.InstancedMesh>(null!);
+  const { belt, corner, tee, cross, extractor } = useFactoryModels();
+  const straights = useRef<THREE.InstancedMesh>(null!);
+  const corners = useRef<THREE.InstancedMesh>(null!);
+  const tees = useRef<THREE.InstancedMesh>(null!);
+  const crosses = useRef<THREE.InstancedMesh>(null!);
   const extractors = useRef<THREE.InstancedMesh>(null!);
   const snap = useSyncExternalStore(subscribe, getLatest);
 
   useLayoutEffect(() => {
-    let nBelt = 0;
+    let nStraight = 0;
+    let nCorner = 0;
+    let nTee = 0;
+    let nCross = 0;
     let nExt = 0;
     if (snap) {
       const { width, height, tiles } = snap;
@@ -39,24 +48,38 @@ export function Factory() {
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const tile = tiles[y * width + x];
-          const rot = BELT_ROTATION[tile.dir];
+          const wx = x - offX;
+          const wz = y - offZ;
           if (tile.kind === "belt") {
-            placeInstance(belts.current, nBelt++, x - offX, y - offZ, rot);
+            const shape = beltShape(snap, x, y, tile.dir);
+            if (shape.kind === "corner") {
+              placeInstance(corners.current, nCorner++, wx, wz, cornerRotation(shape.edges));
+            } else if (shape.kind === "tee") {
+              placeInstance(tees.current, nTee++, wx, wz, teeRotation(shape.edges));
+            } else if (shape.kind === "cross") {
+              placeInstance(crosses.current, nCross++, wx, wz, 0);
+            } else {
+              placeInstance(straights.current, nStraight++, wx, wz, BELT_ROTATION[shape.dir]);
+            }
           } else if (tile.kind === "extractor") {
-            placeInstance(extractors.current, nExt++, x - offX, y - offZ, rot);
+            placeInstance(extractors.current, nExt++, wx, wz, BELT_ROTATION[tile.dir]);
           }
         }
       }
     }
-    belts.current.count = nBelt;
-    extractors.current.count = nExt;
-    belts.current.instanceMatrix.needsUpdate = true;
-    extractors.current.instanceMatrix.needsUpdate = true;
+    flush(straights.current, nStraight);
+    flush(corners.current, nCorner);
+    flush(tees.current, nTee);
+    flush(crosses.current, nCross);
+    flush(extractors.current, nExt);
   }, [snap]);
 
   return (
     <>
-      <instancedMesh ref={belts} args={[belt.geometry, belt.material, MAX_INSTANCES]} frustumCulled={false} />
+      <instancedMesh ref={straights} args={[belt.geometry, belt.material, MAX_INSTANCES]} frustumCulled={false} />
+      <instancedMesh ref={corners} args={[corner.geometry, corner.material, MAX_INSTANCES]} frustumCulled={false} />
+      <instancedMesh ref={tees} args={[tee.geometry, tee.material, MAX_INSTANCES]} frustumCulled={false} />
+      <instancedMesh ref={crosses} args={[cross.geometry, cross.material, MAX_INSTANCES]} frustumCulled={false} />
       <instancedMesh ref={extractors} args={[extractor.geometry, extractor.material, MAX_INSTANCES]} frustumCulled={false} />
     </>
   );
