@@ -12,7 +12,7 @@ const COLOR = "#6ea8ff";
 const TILE = 0.96; // highlight footprint, a hair inside the cell
 const H_FLAT = 0.04; // height over empty ground: a thin slab
 const H_WRAP = 0.6; // height over a structure: tall enough to wrap it
-const FOLLOW = 16; // how fast the highlight slides between cells
+const FOLLOW = 30; // how fast the highlight glides between cells: smooth but quick
 const GROW = 14; // how fast it grows or shrinks between flat and wrapping
 const FADE = 14; // how fast it fades in and out
 const FILL_BASE = 0.16;
@@ -126,6 +126,7 @@ export function Ground() {
       const tx = cell.x - offX;
       const tz = cell.y - offZ;
       if (placed.current) {
+        // Glide to the hovered cell: smooth, but quick enough not to trail.
         g.position.x = THREE.MathUtils.damp(g.position.x, tx, FOLLOW, delta);
         g.position.z = THREE.MathUtils.damp(g.position.z, tz, FOLLOW, delta);
       } else {
