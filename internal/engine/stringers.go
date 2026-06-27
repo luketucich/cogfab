@@ -24,6 +24,8 @@ func (k TileKind) String() string {
 		return "belt"
 	case Extractor:
 		return "extractor"
+	case Seller:
+		return "seller"
 	}
 	return "unknown"
 }
