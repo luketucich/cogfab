@@ -17,13 +17,14 @@ const (
 	West
 )
 
-// TileKind is what's on a tile: nothing, a belt, or an extractor.
+// TileKind is what's on a tile: nothing, a belt, an extractor, or a seller.
 type TileKind uint8
 
 const (
 	Empty TileKind = iota
 	Belt
 	Extractor
+	Seller
 )
 
 // Tile is one square of the grid: what's on it and the way it faces.
@@ -81,6 +82,15 @@ func (w *World) PlaceExtractor(x, y int, dir Direction) {
 		return
 	}
 	w.tiles[w.index(x, y)] = Tile{Kind: Extractor, Dir: dir}
+}
+
+// PlaceSeller puts a seller facing dir at (x, y). Off-grid coordinates are
+// ignored.
+func (w *World) PlaceSeller(x, y int, dir Direction) {
+	if !w.inBounds(x, y) {
+		return
+	}
+	w.tiles[w.index(x, y)] = Tile{Kind: Seller, Dir: dir}
 }
 
 // Destroy empties the tile at (x, y), removing any structure on it. Off-grid

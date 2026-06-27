@@ -16,6 +16,7 @@ const (
 const (
 	KindBelt      = "belt"
 	KindExtractor = "extractor"
+	KindSeller    = "seller"
 )
 
 // Command targets a cell (X, Y) with an action (Type). For a "place", Kind says

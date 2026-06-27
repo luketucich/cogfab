@@ -21,6 +21,16 @@ const DIR_ANGLE: Record<Dir, number> = {
 // moves items. The model flows south by default, so this is just DIR_ANGLE.
 export const BELT_ROTATION: Record<Dir, number> = DIR_ANGLE;
 
+// MACHINE_ROTATION orients the machine models (extractor, seller). Their opening
+// faces across the conveyor's default, so they turn a quarter past BELT_ROTATION
+// to line the opening up with the belt they sit on.
+export const MACHINE_ROTATION: Record<Dir, number> = {
+  north: DIR_ANGLE.north + Math.PI / 2,
+  east: DIR_ANGLE.east + Math.PI / 2,
+  south: DIR_ANGLE.south + Math.PI / 2,
+  west: DIR_ANGLE.west + Math.PI / 2,
+};
+
 // Sum of two edge unit vectors points to the cell corner where they meet, e.g.
 // south+west -> (-1, +1) is the SW corner. Used to orient corner pieces.
 const EDGE_VEC: Record<Dir, [number, number]> = {

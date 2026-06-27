@@ -14,6 +14,7 @@ const place = (kind: PlaceableKind, x: number, y: number, dir: Dir): Command => 
 export const TOOLS: Tool[] = [
   { id: "belt", label: "Belt", command: (x, y, dir) => place("belt", x, y, dir) },
   { id: "extractor", label: "Extractor", command: (x, y, dir) => place("extractor", x, y, dir) },
+  { id: "seller", label: "Seller", command: (x, y, dir) => place("seller", x, y, dir) },
   { id: "destroy", label: "Destroy", command: (x, y) => ({ type: "destroy", x, y }) },
 ];
 

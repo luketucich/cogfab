@@ -43,8 +43,9 @@ func main() {
 	_ = srv.Shutdown(shutdownCtx)
 }
 
-// demoWorld builds a small belt loop as a starting scene, so the grid is not
-// empty on first load. The belts just sit there for now; nothing moves yet.
+// demoWorld builds a small belt loop with an extractor feeding it and a seller
+// draining it, as a starting scene so the grid is not empty on first load.
+// Nothing moves yet.
 func demoWorld() *engine.World {
 	world := engine.NewWorld(12, 8)
 	// Sit the 6x4 loop in the middle of the floor, leaving room to build around it.
@@ -66,5 +67,8 @@ func demoWorld() *engine.World {
 	// Left edge runs north, back to the start.
 	world.PlaceBelt(ox, oy+2, engine.North)
 	world.PlaceBelt(ox, oy+1, engine.North)
+	// An extractor feeds the loop from the left; a seller drains it on the right.
+	world.PlaceExtractor(ox-1, oy+1, engine.East)
+	world.PlaceSeller(ox+6, oy+2, engine.West)
 	return world
 }

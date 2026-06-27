@@ -2,7 +2,7 @@
 // change these to match.
 
 export type TileView = {
-  kind: "empty" | "belt" | "extractor";
+  kind: "empty" | "belt" | "extractor" | "seller";
   dir: "north" | "east" | "south" | "west";
 };
 

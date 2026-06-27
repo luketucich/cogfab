@@ -27,6 +27,7 @@ func TestTileKindString(t *testing.T) {
 		{Empty, "empty"},
 		{Belt, "belt"},
 		{Extractor, "extractor"},
+		{Seller, "seller"},
 	}
 	for _, c := range cases {
 		if got := c.k.String(); got != c.want {

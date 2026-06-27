@@ -3,14 +3,15 @@ package engine
 import "testing"
 
 func TestStringRendersGlyphs(t *testing.T) {
-	w := NewWorld(5, 1)
+	w := NewWorld(6, 1)
 	w.PlaceExtractor(0, 0, East)
 	w.PlaceBelt(1, 0, East)
 	w.PlaceBelt(2, 0, East)
 	w.PlaceBelt(3, 0, East)
-	// (4,0) stays Empty.
+	w.PlaceSeller(4, 0, East)
+	// (5,0) stays Empty.
 
-	if got, want := w.String(), "E>>>."; got != want {
+	if got, want := w.String(), "E>>>S."; got != want {
 		t.Errorf("render mismatch:\n got %q\nwant %q", got, want)
 	}
 }

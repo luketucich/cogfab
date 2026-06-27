@@ -84,6 +84,8 @@ func (h *Hub) apply(cmd wire.Command) {
 			h.world.PlaceBelt(cmd.X, cmd.Y, dir)
 		case wire.KindExtractor:
 			h.world.PlaceExtractor(cmd.X, cmd.Y, dir)
+		case wire.KindSeller:
+			h.world.PlaceSeller(cmd.X, cmd.Y, dir)
 		}
 	case wire.CmdDestroy:
 		h.world.Destroy(cmd.X, cmd.Y)
