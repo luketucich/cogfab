@@ -9,10 +9,7 @@ const CONVEYOR_CORNER_URL = "/models/conveyor-corner.glb";
 const CONVEYOR_TEE_URL = "/models/conveyor-junction-t.glb";
 const CONVEYOR_CROSS_URL = "/models/conveyor-cross.glb";
 const MACHINE_URL = "/models/machine.glb";
-
-// SELLER_TINT recolours the reused machine model so a seller reads apart from an
-// extractor. A dedicated model can replace this later.
-const SELLER_TINT = "#54d98c";
+const HOPPER_URL = "/models/hopper-square.glb";
 
 // firstMesh pulls the geometry and material out of a loaded model, so we can
 // draw many copies of it with a single instanced mesh.
@@ -29,16 +26,7 @@ function firstMesh(scene: THREE.Object3D): MeshParts {
   return { geometry, material };
 }
 
-// tint clones a model's material and multiplies it by a colour, so one mesh can
-// stand in for a differently coloured structure.
-function tint(parts: MeshParts, color: string): MeshParts {
-  if (!parts.material) return parts;
-  const material = parts.material.clone();
-  (material as THREE.MeshStandardMaterial).color = new THREE.Color(color);
-  return { geometry: parts.geometry, material };
-}
-
-type FactoryModels = {
+export type FactoryModels = {
   belt: MeshParts;
   corner: MeshParts;
   tee: MeshParts;
@@ -48,18 +36,20 @@ type FactoryModels = {
 };
 
 // useFactoryModels loads the building models once and returns their drawable parts.
+// The extractor is the machine; the seller is a hopper (a funnel materials drop into).
 export function useFactoryModels(): FactoryModels {
   const conveyor = useGLTF(CONVEYOR_URL);
   const conveyorCorner = useGLTF(CONVEYOR_CORNER_URL);
   const conveyorTee = useGLTF(CONVEYOR_TEE_URL);
   const conveyorCross = useGLTF(CONVEYOR_CROSS_URL);
   const machine = useGLTF(MACHINE_URL);
+  const hopper = useGLTF(HOPPER_URL);
   const belt = useMemo(() => firstMesh(conveyor.scene), [conveyor.scene]);
   const corner = useMemo(() => firstMesh(conveyorCorner.scene), [conveyorCorner.scene]);
   const tee = useMemo(() => firstMesh(conveyorTee.scene), [conveyorTee.scene]);
   const cross = useMemo(() => firstMesh(conveyorCross.scene), [conveyorCross.scene]);
   const extractor = useMemo(() => firstMesh(machine.scene), [machine.scene]);
-  const seller = useMemo(() => tint(firstMesh(machine.scene), SELLER_TINT), [machine.scene]);
+  const seller = useMemo(() => firstMesh(hopper.scene), [hopper.scene]);
   return { belt, corner, tee, cross, extractor, seller };
 }
 
@@ -68,3 +58,4 @@ useGLTF.preload(CONVEYOR_CORNER_URL);
 useGLTF.preload(CONVEYOR_TEE_URL);
 useGLTF.preload(CONVEYOR_CROSS_URL);
 useGLTF.preload(MACHINE_URL);
+useGLTF.preload(HOPPER_URL);

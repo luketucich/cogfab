@@ -4,7 +4,9 @@ import { MapControls, OrthographicCamera } from "@react-three/drei";
 import * as THREE from "three";
 import { Factory } from "./world/Factory";
 import { Floor } from "./world/Floor";
+import { FlowArrows } from "./world/FlowArrows";
 import { Ground } from "./world/Ground";
+import { HoverGlow } from "./world/HoverGlow";
 
 // Scale is anchored to how many tiles fill the view, not a magic zoom number.
 // For an R3F orthographic camera, zoom is pixels per world unit, and one cell is
@@ -45,7 +47,9 @@ export function Scene() {
 
       <Suspense fallback={null}>
         <Factory />
+        <HoverGlow />
       </Suspense>
+      <FlowArrows />
     </Canvas>
   );
 }

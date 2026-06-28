@@ -1,4 +1,5 @@
 import type { Dir, StateMessage } from "../net/types";
+import { BELT_ROTATION, cornerRotation, teeRotation } from "./grid";
 
 // Step to the neighbour on each side, in grid coordinates.
 const STEP: Record<Dir, [number, number]> = {
@@ -61,4 +62,17 @@ export function beltShape(snap: StateMessage, x: number, y: number, dir: Dir): B
     return { kind: "straight", dir: sides[0] }; // two opposite neighbours: lie along them
   }
   return { kind: "straight", dir };
+}
+
+// BeltPiece is the model a belt is drawn as plus its Y rotation. The factory
+// uses it to route each belt to the right instanced mesh; the hover glow uses it
+// to light up the matching shape. One source so the two never disagree.
+export type BeltPiece = { kind: "straight" | "corner" | "tee" | "cross"; rotationY: number };
+
+export function beltPiece(snap: StateMessage, x: number, y: number, dir: Dir): BeltPiece {
+  const shape = beltShape(snap, x, y, dir);
+  if (shape.kind === "corner") return { kind: "corner", rotationY: cornerRotation(shape.edges) };
+  if (shape.kind === "tee") return { kind: "tee", rotationY: teeRotation(shape.edges) };
+  if (shape.kind === "cross") return { kind: "cross", rotationY: 0 };
+  return { kind: "straight", rotationY: BELT_ROTATION[shape.dir] };
 }
