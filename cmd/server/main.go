@@ -43,32 +43,19 @@ func main() {
 	_ = srv.Shutdown(shutdownCtx)
 }
 
-// demoWorld builds a small belt loop with an extractor feeding it and a seller
-// draining it, as a starting scene so the grid is not empty on first load.
-// Nothing moves yet.
+// demoWorld builds a small complete line as a starting scene, so the grid is not
+// empty on first load: an extractor feeds belts that curve around to a seller, a
+// full source -> belts -> sink that the flow lights up.
 func demoWorld() *engine.World {
 	world := engine.NewWorld(12, 8)
-	// Sit the 6x4 loop in the middle of the floor, leaving room to build around it.
-	const ox, oy = 3, 2
-	// Top edge runs east; the corner turns south.
-	for x := 0; x <= 4; x++ {
-		world.PlaceBelt(ox+x, oy, engine.East)
-	}
-	world.PlaceBelt(ox+5, oy, engine.South)
-	// Right edge runs south; the corner turns west.
-	world.PlaceBelt(ox+5, oy+1, engine.South)
-	world.PlaceBelt(ox+5, oy+2, engine.South)
-	world.PlaceBelt(ox+5, oy+3, engine.West)
-	// Bottom edge runs west; the corner turns north.
-	for x := 4; x >= 1; x-- {
-		world.PlaceBelt(ox+x, oy+3, engine.West)
-	}
-	world.PlaceBelt(ox, oy+3, engine.North)
-	// Left edge runs north, back to the start.
-	world.PlaceBelt(ox, oy+2, engine.North)
-	world.PlaceBelt(ox, oy+1, engine.North)
-	// An extractor feeds the loop from the left; a seller drains it on the right.
-	world.PlaceExtractor(ox-1, oy+1, engine.East)
-	world.PlaceSeller(ox+6, oy+2, engine.West)
+	world.PlaceExtractor(3, 2, engine.East)
+	world.PlaceBelt(4, 2, engine.East)
+	world.PlaceBelt(5, 2, engine.East)
+	world.PlaceBelt(6, 2, engine.South) // corner, turning down
+	world.PlaceBelt(6, 3, engine.South)
+	world.PlaceBelt(6, 4, engine.West) // corner, turning back
+	world.PlaceBelt(5, 4, engine.West)
+	world.PlaceBelt(4, 4, engine.West)
+	world.PlaceSeller(3, 4, engine.West)
 	return world
 }

@@ -6,20 +6,18 @@ import { getLatest } from "./store";
 import { cellFromWorld, cellOffsets, cellsBetween, dirBetween, dirFromDelta, type Cell } from "./grid";
 import { connection } from "../net/connection";
 import { getFacing, getSelectedId, getSelectedTool, rotateFacing, setFacing } from "../toolbar/tools";
+import { setHover } from "./hover";
+import { chevronGeometry } from "./chevron";
 import type { Dir } from "../net/types";
 
 const COLOR = "#6ea8ff";
-const TILE = 0.96; // highlight footprint, a hair inside the cell
-const H_FLAT = 0.04; // height over empty ground: a thin slab
-const H_WRAP = 0.6; // height over a structure: tall enough to wrap it
-const FOLLOW = 30; // how fast the highlight glides between cells: smooth but quick
-const GROW = 14; // how fast it grows or shrinks between flat and wrapping
-const FADE = 14; // how fast it fades in and out
-const FILL_BASE = 0.16;
-const FILL_PULSE = 0.08; // extra fill opacity at the top of each pulse
-const EDGE_OPACITY = 0.85;
-const PULSE_SPEED = 6; // gentle breathing of the fill, about one pulse a second
+const TILE = 0.96; // footprint, a hair inside the cell
+const TILE_Y = 0.02; // sit just above the floor
+const TILE_OPACITY = 0.28; // a soft glow, not a hard outline
 const ARROW_Y = 0.08; // height of the facing arrow above the floor
+const ARROW_OPACITY = 0.9;
+const FOLLOW = 30; // how fast the highlight glides between cells: smooth but quick
+const FADE = 14; // how fast it fades in and out
 const AIM_STEP = 0.15; // cursor distance (in cells) before the arrow re-aims
 
 // Y rotation that aims the +x arrow toward each direction.
@@ -32,8 +30,8 @@ const ARROW_ROT: Record<Dir, number> = {
 
 // Ground is an invisible plane that catches pointer events. Left-drag lays belts
 // along the path you drag, each facing the way you go; a single left-click places
-// one facing the current direction (R rotates it). A highlight and a small arrow
-// preview the target cell and its facing.
+// one facing the current direction (R rotates it). An empty target cell previews
+// as a soft glow tile and a facing arrow; structures light up via HoverGlow.
 export function Ground() {
   const target = useRef<Cell | null>(null);
   const stroke = useRef<Cell[] | null>(null); // cells of the current drag, in order
@@ -42,16 +40,10 @@ export function Ground() {
   const shown = useRef(0); // 0..1 presence, drives the fade
 
   const group = useRef<THREE.Group>(null!);
-  const fillMat = useRef<THREE.MeshBasicMaterial>(null!);
-  const edgeMat = useRef<THREE.LineBasicMaterial>(null!);
+  const tileMat = useRef<THREE.MeshBasicMaterial>(null!);
   const arrow = useRef<THREE.Mesh>(null!);
   const arrowMat = useRef<THREE.MeshBasicMaterial>(null!);
-  const unitBox = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
-  const arrowGeo = useMemo(() => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute([0.24, 0, 0, -0.14, 0, 0.16, -0.14, 0, -0.16], 3));
-    return g;
-  }, []);
+  const arrowGeo = useMemo(() => chevronGeometry(), []);
 
   // cellAt returns the grid cell under a pointer event, or null if it is off the
   // world.
@@ -101,27 +93,52 @@ export function Ground() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "r" || e.key === "R") rotateFacing();
     };
-    const onUp = () => endStroke(); // finish a drag even if released off the canvas
+    const onUp = (e: PointerEvent) => {
+      // Finish the build only when released over the grid. A release over the
+      // toolbar or other UI cancels the stroke, so clicking a tool never builds.
+      if (e.target instanceof HTMLCanvasElement) endStroke();
+      else stroke.current = null;
+    };
+    const onLeave = () => {
+      // Pointer left the window, so onPointerOut never fires on the ground.
+      // Drop the hover so the preview does not strand on the last cell.
+      target.current = null;
+      aimFrom.current = null;
+      setHover(null);
+    };
+    const onOut = (e: PointerEvent) => {
+      if (e.relatedTarget === null) onLeave(); // pointer left the window entirely
+    };
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointerout", onOut);
+    window.addEventListener("blur", onLeave);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointerout", onOut);
+      window.removeEventListener("blur", onLeave);
     };
   }, []);
 
-  useFrame(({ clock }, delta) => {
+  useFrame((_, delta) => {
     const g = group.current;
     const snap = getLatest();
     const cell = target.current;
+    // Preview only over an empty cell with a build tool: structures get the hover
+    // glow, and destroy has nothing to place on empty ground.
+    const active =
+      !!snap && !!cell && snap.tiles[cell.y * snap.width + cell.x].kind === "empty" && getSelectedId() !== "destroy";
 
-    // Fade in while hovering a cell, out otherwise.
-    shown.current = THREE.MathUtils.damp(shown.current, snap && cell ? 1 : 0, FADE, delta);
+    shown.current = THREE.MathUtils.damp(shown.current, active ? 1 : 0, FADE, delta);
     g.visible = shown.current > 0.001;
-    arrow.current.visible = g.visible && getSelectedId() !== "destroy";
-    if (!g.visible || !snap) return;
+    arrow.current.visible = g.visible;
+    if (!g.visible) {
+      placed.current = false; // next appearance snaps in instead of gliding from afar
+      return;
+    }
 
-    if (cell) {
+    if (active && snap && cell) {
       const { offX, offZ } = cellOffsets(snap);
       const tx = cell.x - offX;
       const tz = cell.y - offZ;
@@ -135,25 +152,14 @@ export function Ground() {
         g.position.z = tz;
         placed.current = true;
       }
-      // Grow to wrap a structure, lie flat over empty ground.
-      const occupied = snap.tiles[cell.y * snap.width + cell.x].kind !== "empty";
-      const h = THREE.MathUtils.damp(g.scale.y, occupied ? H_WRAP : H_FLAT, GROW, delta);
-      g.scale.y = h;
-      g.position.y = h / 2;
-    } else {
-      // Cursor left the grid; the next cell snaps fresh instead of sliding.
-      placed.current = false;
     }
 
-    // Arrow rides along with the highlight and points the aim direction.
+    // Arrow rides along with the tile and points the aim direction.
     arrow.current.position.set(g.position.x, ARROW_Y, g.position.z);
     arrow.current.rotation.y = ARROW_ROT[aimDir()];
 
-    // Gentle pulse on the fill; everything fades with presence.
-    const pulse = 0.5 + 0.5 * Math.sin(clock.elapsedTime * PULSE_SPEED);
-    fillMat.current.opacity = (FILL_BASE + FILL_PULSE * pulse) * shown.current;
-    edgeMat.current.opacity = EDGE_OPACITY * shown.current;
-    arrowMat.current.opacity = EDGE_OPACITY * shown.current;
+    tileMat.current.opacity = TILE_OPACITY * shown.current;
+    arrowMat.current.opacity = ARROW_OPACITY * shown.current;
   });
 
   return (
@@ -165,11 +171,13 @@ export function Ground() {
           const cell = cellAt(e);
           if (!cell) return;
           target.current = cell;
+          setHover(cell);
           stroke.current = [cell];
         }}
         onPointerMove={(e) => {
           const cell = cellAt(e);
           target.current = cell;
+          setHover(cell);
           // Aim the arrow by how the cursor moves, fine enough to update within
           // one cell. Re-aim once it has moved a small step so it tracks the
           // mouse without jittering on tiny moves.
@@ -196,24 +204,33 @@ export function Ground() {
         onPointerOut={() => {
           target.current = null;
           aimFrom.current = null;
+          setHover(null);
         }}
       >
         <planeGeometry args={[1000, 1000]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
 
-      <group ref={group} visible={false} scale={[TILE, H_FLAT, TILE]}>
-        <mesh geometry={unitBox} raycast={() => null}>
-          <meshBasicMaterial ref={fillMat} color={COLOR} transparent opacity={0} depthWrite={false} />
+      {/* Soft glow tile previewing an empty target cell. */}
+      <group ref={group} visible={false}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, TILE_Y, 0]} scale={[TILE, TILE, 1]} raycast={() => null}>
+          <planeGeometry args={[1, 1]} />
+          <meshBasicMaterial
+            ref={tileMat}
+            color={COLOR}
+            transparent
+            opacity={0}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            side={THREE.DoubleSide}
+            toneMapped={false}
+          />
         </mesh>
-        <lineSegments raycast={() => null}>
-          <edgesGeometry args={[unitBox]} />
-          <lineBasicMaterial ref={edgeMat} color={COLOR} transparent opacity={0} depthWrite={false} />
-        </lineSegments>
       </group>
 
+      {/* Build-direction arrow: the same chevron the flow uses. */}
       <mesh ref={arrow} geometry={arrowGeo} visible={false} raycast={() => null}>
-        <meshBasicMaterial ref={arrowMat} color={COLOR} transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial ref={arrowMat} color={COLOR} transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
       </mesh>
     </>
   );

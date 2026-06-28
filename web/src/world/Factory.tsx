@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { getLatest, subscribe } from "./store";
-import { BELT_ROTATION, MACHINE_ROTATION, cellOffsets, cornerRotation, teeRotation } from "./grid";
-import { beltShape } from "./beltShape";
+import { MACHINE_ROTATION, cellOffsets } from "./grid";
+import { beltPiece } from "./beltShape";
 import { useFactoryModels } from "./models";
 
 const MAX_INSTANCES = 4096;
@@ -53,16 +53,11 @@ export function Factory() {
           const wx = x - offX;
           const wz = y - offZ;
           if (tile.kind === "belt") {
-            const shape = beltShape(snap, x, y, tile.dir);
-            if (shape.kind === "corner") {
-              placeInstance(corners.current, nCorner++, wx, wz, cornerRotation(shape.edges));
-            } else if (shape.kind === "tee") {
-              placeInstance(tees.current, nTee++, wx, wz, teeRotation(shape.edges));
-            } else if (shape.kind === "cross") {
-              placeInstance(crosses.current, nCross++, wx, wz, 0);
-            } else {
-              placeInstance(straights.current, nStraight++, wx, wz, BELT_ROTATION[shape.dir]);
-            }
+            const { kind, rotationY } = beltPiece(snap, x, y, tile.dir);
+            if (kind === "corner") placeInstance(corners.current, nCorner++, wx, wz, rotationY);
+            else if (kind === "tee") placeInstance(tees.current, nTee++, wx, wz, rotationY);
+            else if (kind === "cross") placeInstance(crosses.current, nCross++, wx, wz, rotationY);
+            else placeInstance(straights.current, nStraight++, wx, wz, rotationY);
           } else if (tile.kind === "extractor") {
             placeInstance(extractors.current, nExt++, wx, wz, MACHINE_ROTATION[tile.dir]);
           } else if (tile.kind === "seller") {
