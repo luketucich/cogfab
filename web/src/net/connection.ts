@@ -54,7 +54,7 @@ class Connection {
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data as string) as ServerMessage;
       if (msg.type === "state") setLatest(msg);
-      else if (msg.type === "stats") setStats(msg.ironOre, msg.ratePerSec);
+      else if (msg.type === "stats") setStats(msg);
       else if (msg.type === "pong") setPing(performance.now() - msg.t);
     };
     ws.onclose = () => {

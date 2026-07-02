@@ -3,14 +3,16 @@ import { useFrame } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { getLatest } from "./store";
-import { cellFromWorld, cellOffsets, cellsBetween, dirBetween, dirFromDelta, type Cell } from "./grid";
+import { addPendingSpend, getStats, spendableOre } from "./economy";
+import { cellFromWorld, cellIndex, cellOffsets, cellsBetween, dirBetween, dirFromDelta, isUnlocked, unlockedRect, type Cell } from "./grid";
 import { connection } from "../net/connection";
 import { getFacing, getSelectedId, getSelectedTool, rotateFacing, setFacing } from "../toolbar/tools";
 import { setHover } from "./hover";
 import { ACCENT } from "../ui";
 import { chevronGeometry } from "./chevron";
-import type { Dir } from "../net/types";
+import type { Dir, StateMessage } from "../net/types";
 
+const BLOCKED = "#e05260"; // preview colour when the build cannot go through
 const TILE = 0.96; // footprint, a hair inside the cell
 const TILE_Y = 0.02; // sit just above the floor
 const TILE_OPACITY = 0.28; // a soft glow, not a hard outline
@@ -26,6 +28,13 @@ const ARROW_ROT: Record<Dir, number> = {
   north: Math.PI / 2,
   west: Math.PI,
   south: -Math.PI / 2,
+};
+
+// kindAt is what sits on a cell; cellUnlocked is whether players may build there.
+const kindAt = (snap: StateMessage, cell: Cell) => snap.tiles[cellIndex(snap, cell.x, cell.y)].kind;
+const cellUnlocked = (snap: StateMessage, cell: Cell) => {
+  const stats = getStats();
+  return isUnlocked(unlockedRect(snap, stats.gridWidth, stats.gridHeight), cell.x, cell.y);
 };
 
 // Ground is an invisible plane that catches pointer events. Left-drag lays belts
@@ -53,8 +62,23 @@ export function Ground() {
     return cellFromWorld(e.point.x, e.point.z, snap);
   }
 
+  // canApply mirrors the server's checks so we never send a command it would
+  // reject: the cell must be in the bought region, and a build needs an empty
+  // cell and ore to cover the cost (a destroy just needs something to tear
+  // down). Ore already committed mid-drag counts as spent (see spendableOre).
+  function canApply(cell: Cell): boolean {
+    const snap = getLatest();
+    if (!snap || !cellUnlocked(snap, cell)) return false;
+    const tool = getSelectedTool();
+    if (tool.id === "destroy") return kindAt(snap, cell) !== "empty";
+    return kindAt(snap, cell) === "empty" && (tool.cost ?? 0) <= spendableOre();
+  }
+
   function send(cell: Cell, dir: Dir) {
-    connection.send(getSelectedTool().command(cell.x, cell.y, dir));
+    if (!canApply(cell)) return;
+    const tool = getSelectedTool();
+    connection.send(tool.command(cell.x, cell.y, dir));
+    addPendingSpend(tool.cost ?? 0);
   }
 
   // extendStroke places every cell the drag just crossed, each facing the next,
@@ -125,10 +149,14 @@ export function Ground() {
     const g = group.current;
     const snap = getLatest();
     const cell = target.current;
-    // Preview only over an empty cell with a build tool: structures get the hover
-    // glow, and destroy has nothing to place on empty ground.
+    // Preview only over an unlocked empty cell with a build tool: structures get
+    // the hover glow, destroy has nothing to place, and locked land is off-limits.
     const active =
-      !!snap && !!cell && snap.tiles[cell.y * snap.width + cell.x].kind === "empty" && getSelectedId() !== "destroy";
+      !!snap && !!cell && kindAt(snap, cell) === "empty" && getSelectedId() !== "destroy" && cellUnlocked(snap, cell);
+    // The preview turns red when the ore does not cover the selected tool.
+    const affordable = (getSelectedTool().cost ?? 0) <= spendableOre();
+    tileMat.current.color.set(affordable ? ACCENT : BLOCKED);
+    arrowMat.current.color.set(affordable ? ACCENT : BLOCKED);
 
     shown.current = THREE.MathUtils.damp(shown.current, active ? 1 : 0, FADE, delta);
     g.visible = shown.current > 0.001;

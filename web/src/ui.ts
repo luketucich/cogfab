@@ -7,6 +7,7 @@ export const FONT_DISPLAY = "'Baloo 2', ui-rounded, system-ui, sans-serif"; // t
 export const FONT_UI = "'Nunito', system-ui, sans-serif"; // its clean rounded sidekick for labels
 
 export const ACCENT = "#6ea8ff"; // selected / interactive highlight
+export const ORE_TEXT = "#d9b878"; // ore amounts and prices, a warm metal tone
 
 // panel is the frosted-dark card every HUD piece sits in.
 export const panel: CSSProperties = {

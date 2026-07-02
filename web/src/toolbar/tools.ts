@@ -1,23 +1,25 @@
 import type { Command, Dir, PlaceableKind } from "../net/types";
 import { SIDES } from "../world/dir";
 
-// A Tool is one toolbar entry: an id, a label, the number key that selects it, and
-// the command it makes for a cell facing a direction. "cell + direction in ->
-// command out."
+// A Tool is one toolbar entry: an id, a label, the number key that selects it,
+// what placing costs (destroy costs nothing), and the command it makes for a
+// cell facing a direction. "cell + direction in -> command out."
 export type Tool = {
   id: string;
   label: string;
   hotkey: string;
+  cost?: number;
   command: (x: number, y: number, dir: Dir) => Command;
 };
 
 const place = (kind: PlaceableKind, x: number, y: number, dir: Dir): Command => ({ type: "place", x, y, kind, dir });
 
-// The tools. Add one here and nothing else changes.
+// The tools. Costs mirror buildCost in internal/server/shop.go; keep them in
+// step. Add a tool here and nothing else changes.
 export const TOOLS: Tool[] = [
-  { id: "belt", label: "Belt", hotkey: "1", command: (x, y, dir) => place("belt", x, y, dir) },
-  { id: "extractor", label: "Extractor", hotkey: "2", command: (x, y, dir) => place("extractor", x, y, dir) },
-  { id: "seller", label: "Seller", hotkey: "3", command: (x, y, dir) => place("seller", x, y, dir) },
+  { id: "belt", label: "Belt", hotkey: "1", cost: 10, command: (x, y, dir) => place("belt", x, y, dir) },
+  { id: "extractor", label: "Extractor", hotkey: "2", cost: 75, command: (x, y, dir) => place("extractor", x, y, dir) },
+  { id: "seller", label: "Seller", hotkey: "3", cost: 75, command: (x, y, dir) => place("seller", x, y, dir) },
   { id: "destroy", label: "Destroy", hotkey: "4", command: (x, y) => ({ type: "destroy", x, y }) },
 ];
 

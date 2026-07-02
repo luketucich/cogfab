@@ -9,6 +9,7 @@ import { FlowArrows } from "./world/FlowArrows";
 import { FlowItems } from "./world/FlowItems";
 import { Ground } from "./world/Ground";
 import { HoverGlow } from "./world/HoverGlow";
+import { Region } from "./world/Region";
 
 // Zoom is set by how many tiles fill the view, not a magic number. For an ortho
 // camera, zoom is pixels per world unit and a tile is one unit, so zoom = view
@@ -71,6 +72,7 @@ export function Scene() {
       <directionalLight position={[12, 18, 8]} intensity={2.8} />
 
       <Floor />
+      <Region />
       <Ground />
 
       <Suspense fallback={null}>

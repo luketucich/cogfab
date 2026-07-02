@@ -13,12 +13,18 @@ export type StateMessage = {
   tiles: TileView[];
 };
 
-// StatsMessage is the economy update: the iron-ore total and production rate.
+// StatsMessage is the economy update: the iron-ore total, production rate, and
+// where the upgrades stand. A cost of 0 means that upgrade is maxed out.
 // Mirror of wire.StatsMessage in Go.
 export type StatsMessage = {
   type: "stats";
   ironOre: number;
   ratePerSec: number;
+  extractorLevel: number;
+  extractorCost: number;
+  gridWidth: number; // unlocked region, centred in the world
+  gridHeight: number;
+  gridCost: number;
 };
 
 // PongMessage answers a ping with the timestamp we sent, so we can measure the
@@ -52,4 +58,11 @@ export type DestroyCommand = {
   y: number;
 };
 
-export type Command = PlaceCommand | DestroyCommand;
+export type BuyCommand = {
+  type: "buy";
+  upgrade: "extractorRate" | "gridSize";
+};
+
+// Ping is deliberately not in this union: connection.ts sends it raw and the
+// server answers it in the transport layer, before commands reach the game.
+export type Command = PlaceCommand | DestroyCommand | BuyCommand;
