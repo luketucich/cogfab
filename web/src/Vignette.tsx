@@ -1,6 +1,6 @@
-// Vignette darkens the screen toward the edges, so the light pools around the
-// centre of the view. A screen-space overlay stays consistent at every zoom
-// level. Lower the transparent stop for a stronger, tighter vignette.
+// Vignette darkens the screen toward the edges so light pools at the centre.
+// Screen-space, so it holds at any zoom. Lower the transparent stop for a tighter
+// vignette.
 export function Vignette() {
   return (
     <div

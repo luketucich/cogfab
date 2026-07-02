@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/luketucich/cogfab/internal/engine"
 	"github.com/luketucich/cogfab/internal/wire"
@@ -26,28 +27,41 @@ type Client struct {
 type Hub struct {
 	world *engine.World
 
+	ironOre    int // authoritative iron-ore total: only ore that reached a seller
+	ratePerSec int // ore delivered per second right now, shown in the HUD
+
+	routes map[string]*route // live extractor-to-seller paths, for emitting ore
+	chunks []*chunk          // ore in flight on the belts
+
 	clients    map[*Client]bool
 	register   chan *Client
 	unregister chan *Client
 	commands   chan wire.Command
+	done       chan struct{} // closed when Run exits, so the calls above never hang
 }
 
 // NewHub creates a hub for the given world.
 func NewHub(w *engine.World) *Hub {
-	return &Hub{
+	h := &Hub{
 		world:      w,
+		routes:     make(map[string]*route),
 		clients:    make(map[*Client]bool),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		commands:   make(chan wire.Command),
+		done:       make(chan struct{}),
 	}
+	h.recompute()
+	return h
 }
 
-// Run owns the world until ctx is cancelled. There is nothing to simulate yet,
-// so it just waits for events: clients joining or leaving, and commands that
-// change the world. It broadcasts the new state right after each command, so a
-// placement shows up immediately. On cancellation it disconnects every client.
+// Run is the hub's event loop: it applies and broadcasts each command right away
+// (so a placement shows up at once) and accrues ore once a second. On ctx cancel
+// it disconnects everyone.
 func (h *Hub) Run(ctx context.Context) {
+	defer close(h.done)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -59,18 +73,43 @@ func (h *Hub) Run(ctx context.Context) {
 			h.removeClient(c)
 		case cmd := <-h.commands:
 			h.apply(cmd)
-			h.broadcast(h.encode())
+			h.broadcast(h.stateBytes())
+			h.recompute()
+		case <-ticker.C:
+			if len(h.routes) > 0 || len(h.chunks) > 0 {
+				h.tick()
+				h.broadcastStats()
+			} else if h.ratePerSec != 0 {
+				h.ratePerSec = 0 // sim went idle: one last update so the HUD stops
+				h.broadcastStats()
+			}
 		}
 	}
 }
 
 // Register, Unregister, and Submit are called from client goroutines; the work
-// itself happens on the Run goroutine.
-func (h *Hub) Register(c *Client) { h.register <- c }
+// itself happens on the Run goroutine. Each gives up once Run has exited, so a
+// client caught mid-call during shutdown cannot hang forever.
+func (h *Hub) Register(c *Client) {
+	select {
+	case h.register <- c:
+	case <-h.done:
+	}
+}
 
-func (h *Hub) Unregister(c *Client) { h.unregister <- c }
+func (h *Hub) Unregister(c *Client) {
+	select {
+	case h.unregister <- c:
+	case <-h.done:
+	}
+}
 
-func (h *Hub) Submit(cmd wire.Command) { h.commands <- cmd }
+func (h *Hub) Submit(cmd wire.Command) {
+	select {
+	case h.commands <- cmd:
+	case <-h.done:
+	}
+}
 
 // apply changes the world for one client command, ignoring anything it does not
 // recognize. The world ignores off-grid coordinates, so the client's x and y
@@ -92,10 +131,21 @@ func (h *Hub) apply(cmd wire.Command) {
 	}
 }
 
-// encode is the current world as a JSON state message.
-func (h *Hub) encode() []byte {
+// stateBytes is the current world as a JSON state message.
+func (h *Hub) stateBytes() []byte {
 	b, _ := json.Marshal(wire.Snapshot(h.world)) // a fixed struct; marshal can't fail
 	return b
+}
+
+// statsBytes is the current economy as a JSON stats message.
+func (h *Hub) statsBytes() []byte {
+	b, _ := json.Marshal(wire.Stats(h.ironOre, h.ratePerSec))
+	return b
+}
+
+// broadcastStats sends the current economy to every client.
+func (h *Hub) broadcastStats() {
+	h.broadcast(h.statsBytes())
 }
 
 // broadcast queues b to every client. A client whose buffer is full is too slow
@@ -110,12 +160,19 @@ func (h *Hub) broadcast(b []byte) {
 	}
 }
 
-// addClient adds a client and sends it the current state immediately, so it is
-// not blank until something changes.
+// addClient adds a client and sends it the current world and economy right away,
+// so it is not blank until something changes.
 func (h *Hub) addClient(c *Client) {
 	h.clients[c] = true
+	h.sendTo(c, h.stateBytes())
+	h.sendTo(c, h.statsBytes())
+}
+
+// sendTo queues one message to a single client, dropping it if the client's
+// buffer is full (a client that stays behind is cleaned up on the next broadcast).
+func (h *Hub) sendTo(c *Client, b []byte) {
 	select {
-	case c.send <- h.encode():
+	case c.send <- b:
 	default:
 	}
 }
@@ -130,7 +187,6 @@ func (h *Hub) removeClient(c *Client) {
 
 func (h *Hub) closeAll() {
 	for c := range h.clients {
-		delete(h.clients, c)
-		close(c.send)
+		h.removeClient(c)
 	}
 }

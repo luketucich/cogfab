@@ -7,10 +7,10 @@ import { cellFromWorld, cellOffsets, cellsBetween, dirBetween, dirFromDelta, typ
 import { connection } from "../net/connection";
 import { getFacing, getSelectedId, getSelectedTool, rotateFacing, setFacing } from "../toolbar/tools";
 import { setHover } from "./hover";
+import { ACCENT } from "../ui";
 import { chevronGeometry } from "./chevron";
 import type { Dir } from "../net/types";
 
-const COLOR = "#6ea8ff";
 const TILE = 0.96; // footprint, a hair inside the cell
 const TILE_Y = 0.02; // sit just above the floor
 const TILE_OPACITY = 0.28; // a soft glow, not a hard outline
@@ -217,7 +217,7 @@ export function Ground() {
           <planeGeometry args={[1, 1]} />
           <meshBasicMaterial
             ref={tileMat}
-            color={COLOR}
+            color={ACCENT}
             transparent
             opacity={0}
             depthWrite={false}
@@ -230,7 +230,7 @@ export function Ground() {
 
       {/* Build-direction arrow: the same chevron the flow uses. */}
       <mesh ref={arrow} geometry={arrowGeo} visible={false} raycast={() => null}>
-        <meshBasicMaterial ref={arrowMat} color={COLOR} transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+        <meshBasicMaterial ref={arrowMat} color={ACCENT} transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
       </mesh>
     </>
   );

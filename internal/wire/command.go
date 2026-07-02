@@ -9,6 +9,7 @@ package wire
 const (
 	CmdPlace   = "place"
 	CmdDestroy = "destroy"
+	CmdPing    = "ping" // a round-trip probe the server echoes back; see ws.go
 )
 
 // Place kinds: the "kind" a place command carries. Mirrors the placeable tile

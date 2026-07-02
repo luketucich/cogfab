@@ -30,12 +30,12 @@ func TestApplyPlacesAndDestroys(t *testing.T) {
 	}
 }
 
-func TestEncodeProducesStateJSON(t *testing.T) {
+func TestStateBytesProducesStateJSON(t *testing.T) {
 	h := NewHub(newTestWorld())
 
 	var msg wire.StateMessage
-	if err := json.Unmarshal(h.encode(), &msg); err != nil {
-		t.Fatalf("encoded bytes are not valid StateMessage JSON: %v", err)
+	if err := json.Unmarshal(h.stateBytes(), &msg); err != nil {
+		t.Fatalf("state bytes are not valid StateMessage JSON: %v", err)
 	}
 	if msg.Type != "state" {
 		t.Errorf("Type = %q, want state", msg.Type)

@@ -1,93 +1,128 @@
 import type { Dir, StateMessage } from "../net/types";
+import { OPPOSITE, SIDES, STEP } from "./dir";
+import { cellIndex } from "./grid";
 
-const STEP: Record<Dir, [number, number]> = {
-  north: [0, -1],
-  east: [1, 0],
-  south: [0, 1],
-  west: [-1, 0],
+// neighbour is the tiles index of the cell one step from i toward s, or -1 off
+// the grid.
+const neighbour = (snap: StateMessage, i: number, s: Dir): number => {
+  const x = i % snap.width;
+  const y = Math.floor(i / snap.width);
+  const [dx, dy] = STEP[s];
+  return cellIndex(snap, x + dx, y + dy);
 };
 
-const OPPOSITE: Record<Dir, Dir> = {
-  north: "south",
-  south: "north",
-  east: "west",
-  west: "east",
-};
+// FlowStep is one belt on a run: the cell and the sides ore enters and leaves by
+// (opposite sides run straight, perpendicular sides curve).
+export type FlowStep = { x: number; y: number; entry: Dir; exit: Dir };
 
-const SIDES: Dir[] = ["north", "east", "south", "west"];
+// FlowRun is one extractor's belt run: the ordered cells ore travels, and whether
+// it reaches a seller (complete) or dead-ends (broken). Both the flowing ore and
+// the path arrows are built from these, so they always agree.
+export type FlowRun = { steps: FlowStep[]; complete: boolean };
 
-// FlowCell is a live belt and how a dot crosses it: the side material enters
-// from and the side it leaves by (opposite sides run straight, perpendicular
-// sides curve), plus whether its run reaches a seller (complete) or not (broken).
-export type FlowCell = { entry: Dir; exit: Dir; complete: boolean };
-
-// FlowResult maps a cell index (y * width + x) to its flow, for live belts only.
-export type FlowResult = Map<number, FlowCell>;
-
-// flow lights up the belts connected to an extractor and sends material outward
-// along the belt path, whichever way it curves. A connected run that also
-// touches a seller is complete; one that does not is broken. Belt facing does
-// not gate flow, so the path you build is the path that flows.
-export function flow(snap: StateMessage): FlowResult {
+// flowPaths returns a run for the belt at each extractor's mouth: the shortest
+// path to a seller's mouth when one is reachable (complete), otherwise the path to
+// the farthest belt (broken). Ore leaves an extractor and enters a seller only on
+// the side each faces; between belts facing does not gate flow, so the run is just
+// the connected path the ore travels.
+export function flowPaths(snap: StateMessage): FlowRun[] {
   const w = snap.width;
-  const h = snap.height;
   const tiles = snap.tiles;
-  const result: FlowResult = new Map();
-  const seen = new Set<number>();
+  const runs: FlowRun[] = [];
 
-  const neighbour = (i: number, s: Dir): number => {
-    const x = i % w;
-    const y = (i - x) / w;
-    const [dx, dy] = STEP[s];
-    const nx = x + dx;
-    const ny = y + dy;
-    return nx < 0 || nx >= w || ny < 0 || ny >= h ? -1 : ny * w + nx;
+  const dirTo = (from: number, to: number): Dir => {
+    const fx = from % w;
+    const tx = to % w;
+    if (tx > fx) return "east";
+    if (tx < fx) return "west";
+    return to > from ? "south" : "north";
   };
 
-  // exitSide is where a dot leaves a belt: the first connected belt or seller
-  // that is not where it entered, falling back to straight through.
-  const exitSide = (i: number, entry: Dir): Dir => {
-    for (const s of SIDES) {
-      if (s === entry) continue;
-      const n = neighbour(i, s);
-      if (n >= 0 && (tiles[n].kind === "belt" || tiles[n].kind === "seller")) return s;
-    }
-    return OPPOSITE[entry];
-  };
-
-  // flood walks one connected run of belts from a starting belt, recording each
-  // belt's entry side and whether the run touches a seller anywhere.
-  const flood = (start: number, startEntry: Dir) => {
-    const run: { i: number; entry: Dir }[] = [];
-    const queue: { i: number; entry: Dir }[] = [{ i: start, entry: startEntry }];
-    seen.add(start);
-    let sells = false;
+  // route walks belts out from a source belt: it heads for the nearest seller, or
+  // failing that the farthest belt, and returns the ordered path either way.
+  const route = (start: number, fromExtractor: Dir): FlowRun => {
+    const prev = new Map<number, number>();
+    const seen = new Set<number>([start]);
+    const queue = [start];
+    let sellerCell = -1;
+    let sellerDir: Dir = "north";
+    let farthest = start;
     while (queue.length) {
-      const cell = queue.shift()!;
-      run.push(cell);
+      const cur = queue.shift()!;
+      farthest = cur; // breadth-first, so the last cell dequeued is the deepest
+      let done = false;
       for (const s of SIDES) {
-        if (s === cell.entry) continue;
-        const n = neighbour(cell.i, s);
+        const n = neighbour(snap, cur, s);
         if (n < 0) continue;
-        const kind = tiles[n].kind;
-        if (kind === "seller") sells = true;
-        else if (kind === "belt" && !seen.has(n)) {
+        // a seller only takes ore on the side it faces, so the belt must sit at its
+        // mouth (the seller faces back toward this belt), not just touch a side
+        if (tiles[n].kind === "seller" && tiles[n].dir === OPPOSITE[s]) {
+          sellerCell = cur;
+          sellerDir = s;
+          done = true;
+          break;
+        }
+        if (tiles[n].kind === "belt" && !seen.has(n)) {
           seen.add(n);
-          queue.push({ i: n, entry: OPPOSITE[s] });
+          prev.set(n, cur);
+          queue.push(n);
         }
       }
+      if (done) break;
     }
-    for (const { i, entry } of run) result.set(i, { entry, exit: exitSide(i, entry), complete: sells });
+
+    const complete = sellerCell >= 0;
+    const order = [complete ? sellerCell : farthest];
+    let c = order[0];
+    while (c !== start) {
+      c = prev.get(c)!;
+      order.push(c);
+    }
+    order.reverse();
+
+    const steps = order.map((cur, k) => {
+      const entry = k === 0 ? fromExtractor : dirTo(cur, order[k - 1]);
+      const last = k === order.length - 1;
+      const exit = last ? (complete ? sellerDir : OPPOSITE[entry]) : dirTo(cur, order[k + 1]);
+      return { x: cur % w, y: Math.floor(cur / w), entry, exit };
+    });
+    return { steps, complete };
   };
 
-  // Seed from every belt an extractor sits next to, entering from the extractor.
   for (let i = 0; i < tiles.length; i++) {
     if (tiles[i].kind !== "extractor") continue;
-    for (const s of SIDES) {
-      const b = neighbour(i, s);
-      if (b >= 0 && tiles[b].kind === "belt" && !seen.has(b)) flood(b, OPPOSITE[s]);
-    }
+    // ore leaves an extractor only from the side it faces, so the run starts at the
+    // belt at its mouth, not a belt touching a side
+    const out = tiles[i].dir;
+    const b = neighbour(snap, i, out);
+    if (b >= 0 && tiles[b].kind === "belt") runs.push(route(b, OPPOSITE[out]));
   }
+  return runs;
+}
 
-  return result;
+// runKey identifies a run by its ordered cells and the sides ore crosses them,
+// so the ore and arrows can tell a path that is still flowing from a brand new
+// one. The sides matter: two extractors can feed the same belts from different
+// ends, and those runs must not collide.
+export const runKey = (run: FlowRun): string =>
+  run.steps.map((s) => `${s.x},${s.y},${s.entry},${s.exit}`).join(";");
+
+// drainRuns merges this frame's live runs with ones whose belts just went away. A
+// vanished run is stamped with when it was cut and kept flowing until it has had
+// `drainSeconds` to empty out, then dropped. The arrows use this to keep a deleted
+// run's chevrons fading instead of snapping off the instant a belt is gone.
+export function drainRuns<T extends { key: string; death: number | null }>(
+  previous: T[],
+  live: T[],
+  now: number,
+  drainSeconds: number,
+): T[] {
+  const liveKeys = new Set(live.map((r) => r.key));
+  const next = [...live];
+  for (const run of previous) {
+    if (liveKeys.has(run.key)) continue;
+    const death = run.death ?? now;
+    if (now - death <= drainSeconds) next.push({ ...run, death });
+  }
+  return next;
 }

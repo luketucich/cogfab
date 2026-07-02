@@ -1,6 +1,9 @@
 import { Scene } from "./Scene";
 import { Vignette } from "./Vignette";
 import { Hud } from "./Hud";
+import { OreCounter } from "./OreCounter";
+import { UpgradePanel } from "./UpgradePanel";
+import { ResetView } from "./ResetView";
 import { Toolbar } from "./toolbar/Toolbar";
 
 export function App() {
@@ -16,7 +19,10 @@ export function App() {
       <Scene />
       <Vignette />
       <Hud />
+      <OreCounter />
+      <UpgradePanel />
       <Toolbar />
+      <ResetView />
     </div>
   );
 }

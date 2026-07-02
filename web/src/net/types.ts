@@ -13,6 +13,23 @@ export type StateMessage = {
   tiles: TileView[];
 };
 
+// StatsMessage is the economy update: the iron-ore total and production rate.
+// Mirror of wire.StatsMessage in Go.
+export type StatsMessage = {
+  type: "stats";
+  ironOre: number;
+  ratePerSec: number;
+};
+
+// PongMessage answers a ping with the timestamp we sent, so we can measure the
+// round-trip time. Mirror of wire.PongMessage in Go.
+export type PongMessage = {
+  type: "pong";
+  t: number;
+};
+
+export type ServerMessage = StateMessage | StatsMessage | PongMessage;
+
 // PlaceableKind is the tile kinds a player can place (everything but empty).
 // Derived from TileView so the two stay in sync.
 export type PlaceableKind = Exclude<TileView["kind"], "empty">;
