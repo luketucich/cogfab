@@ -44,8 +44,7 @@ func main() {
 }
 
 // demoWorld builds a small complete line as a starting scene, so the grid is not
-// empty on first load: an extractor feeds belts that curve around to a seller, a
-// full source -> belts -> sink that the flow lights up.
+// empty on first load: an extractor feeds belts that curve around to a seller.
 func demoWorld() *engine.World {
 	world := engine.NewWorld(12, 8)
 	world.PlaceExtractor(3, 2, engine.East)
@@ -56,6 +55,6 @@ func demoWorld() *engine.World {
 	world.PlaceBelt(6, 4, engine.West) // corner, turning back
 	world.PlaceBelt(5, 4, engine.West)
 	world.PlaceBelt(4, 4, engine.West)
-	world.PlaceSeller(3, 4, engine.West)
+	world.PlaceSeller(3, 4, engine.East) // mouth faces the belt feeding it from the east
 	return world
 }

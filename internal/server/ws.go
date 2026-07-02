@@ -35,6 +35,11 @@ func (h *Hub) Handler() http.HandlerFunc {
 		h.Register(client)
 		defer h.Unregister(client)
 
+		// pong carries ping timestamps from the reader to the writer. The writer
+		// is the only goroutine that touches the socket and client.send, so the
+		// reader hands echoes across rather than sending them itself.
+		pong := make(chan float64, 4)
+
 		// Reader: decode each frame as a client command and hand it to the hub.
 		// Frames that are not valid commands are skipped; any read error
 		// (including the client closing) tears the connection down.
@@ -45,16 +50,33 @@ func (h *Hub) Handler() http.HandlerFunc {
 					cancel()
 					return
 				}
-				var cmd wire.Command
-				if err := json.Unmarshal(data, &cmd); err != nil {
+				var msg struct {
+					wire.Command
+					T float64 `json:"t"`
+				}
+				if err := json.Unmarshal(data, &msg); err != nil {
 					continue
 				}
-				h.Submit(cmd)
+				if msg.Type == wire.CmdPing {
+					// Hand the timestamp to the writer to echo; a ping never
+					// reaches the hub. Drop it if the writer is backed up.
+					select {
+					case pong <- msg.T:
+					default:
+					}
+					continue
+				}
+				h.Submit(msg.Command)
 			}
 		}()
 
 		// Writer: stream this client's queue to the socket until it closes or the
-		// hub drops it.
+		// hub drops it, echoing pings back as pongs along the way.
+		write := func(b []byte) error {
+			wctx, wcancel := context.WithTimeout(ctx, writeTimeout)
+			defer wcancel()
+			return conn.Write(wctx, websocket.MessageText, b)
+		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -63,10 +85,12 @@ func (h *Hub) Handler() http.HandlerFunc {
 				if !ok {
 					return
 				}
-				wctx, wcancel := context.WithTimeout(ctx, writeTimeout)
-				err := conn.Write(wctx, websocket.MessageText, b)
-				wcancel()
-				if err != nil {
+				if write(b) != nil {
+					return
+				}
+			case t := <-pong:
+				b, _ := json.Marshal(wire.Pong(t)) // fixed struct; marshal can't fail
+				if write(b) != nil {
 					return
 				}
 			}

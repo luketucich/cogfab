@@ -61,43 +61,32 @@ func (w *World) inBounds(x, y int) bool {
 	return x >= 0 && x < w.width && y >= 0 && y < w.height
 }
 
-// index is the spot in the tiles list for (x, y), which must be on the grid.
+// index is where (x, y) sits in the flat tiles list.
 func (w *World) index(x, y int) int { return y*w.width + x }
 
 // At returns the tile at (x, y).
 func (w *World) At(x, y int) Tile { return w.tiles[w.index(x, y)] }
 
-// PlaceBelt puts a belt facing dir at (x, y). Off-grid coordinates are ignored.
-func (w *World) PlaceBelt(x, y int, dir Direction) {
+// set puts t at (x, y). Off-grid coordinates are ignored, so player input can
+// pass straight through.
+func (w *World) set(x, y int, t Tile) {
 	if !w.inBounds(x, y) {
 		return
 	}
-	w.tiles[w.index(x, y)] = Tile{Kind: Belt, Dir: dir}
+	w.tiles[w.index(x, y)] = t
 }
+
+// PlaceBelt puts a belt facing dir at (x, y). Off-grid coordinates are ignored.
+func (w *World) PlaceBelt(x, y int, dir Direction) { w.set(x, y, Tile{Kind: Belt, Dir: dir}) }
 
 // PlaceExtractor puts an extractor facing dir at (x, y). Off-grid coordinates
 // are ignored.
-func (w *World) PlaceExtractor(x, y int, dir Direction) {
-	if !w.inBounds(x, y) {
-		return
-	}
-	w.tiles[w.index(x, y)] = Tile{Kind: Extractor, Dir: dir}
-}
+func (w *World) PlaceExtractor(x, y int, dir Direction) { w.set(x, y, Tile{Kind: Extractor, Dir: dir}) }
 
 // PlaceSeller puts a seller facing dir at (x, y). Off-grid coordinates are
 // ignored.
-func (w *World) PlaceSeller(x, y int, dir Direction) {
-	if !w.inBounds(x, y) {
-		return
-	}
-	w.tiles[w.index(x, y)] = Tile{Kind: Seller, Dir: dir}
-}
+func (w *World) PlaceSeller(x, y int, dir Direction) { w.set(x, y, Tile{Kind: Seller, Dir: dir}) }
 
 // Destroy empties the tile at (x, y), removing any structure on it. Off-grid
 // coordinates are ignored.
-func (w *World) Destroy(x, y int) {
-	if !w.inBounds(x, y) {
-		return
-	}
-	w.tiles[w.index(x, y)] = Tile{}
-}
+func (w *World) Destroy(x, y int) { w.set(x, y, Tile{}) }
