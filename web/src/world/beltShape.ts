@@ -1,27 +1,11 @@
 import type { Dir, StateMessage } from "../net/types";
-import { BELT_ROTATION, cornerRotation, teeRotation } from "./grid";
-
-// Step to the neighbour on each side, in grid coordinates.
-const STEP: Record<Dir, [number, number]> = {
-  north: [0, -1],
-  east: [1, 0],
-  south: [0, 1],
-  west: [-1, 0],
-};
-
-const OPPOSITE: Record<Dir, Dir> = {
-  north: "south",
-  south: "north",
-  east: "west",
-  west: "east",
-};
-
-const SIDES: Dir[] = ["north", "east", "south", "west"];
+import { OPPOSITE, SIDES, STEP } from "./dir";
+import { BELT_ROTATION, cellIndex, cornerRotation, teeRotation } from "./grid";
 
 // isBelt is true when (x, y) is on the grid and holds a belt.
 function isBelt(snap: StateMessage, x: number, y: number): boolean {
-  if (x < 0 || x >= snap.width || y < 0 || y >= snap.height) return false;
-  return snap.tiles[y * snap.width + x].kind === "belt";
+  const i = cellIndex(snap, x, y);
+  return i >= 0 && snap.tiles[i].kind === "belt";
 }
 
 // BeltShape is how a belt should be drawn, with enough info to orient the model:

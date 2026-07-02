@@ -42,7 +42,6 @@ export function Floor() {
   useFrame(() => {
     const target = controls?.target;
     if (!target) return;
-    // Snap to the checker period so the pattern stays welded to the world grid.
     mesh.current.position.x = Math.round(target.x / CHECK_PERIOD) * CHECK_PERIOD;
     mesh.current.position.z = Math.round(target.z / CHECK_PERIOD) * CHECK_PERIOD;
   });

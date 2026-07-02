@@ -1,4 +1,5 @@
 import type { Dir } from "../net/types";
+import { STEP, SIDES } from "./dir";
 
 type GridSize = { width: number; height: number };
 
@@ -31,20 +32,13 @@ export const MACHINE_ROTATION: Record<Dir, number> = {
   west: DIR_ANGLE.west + Math.PI / 2,
 };
 
-// Sum of two edge unit vectors points to the cell corner where they meet, e.g.
-// south+west -> (-1, +1) is the SW corner. Used to orient corner pieces.
-const EDGE_VEC: Record<Dir, [number, number]> = {
-  north: [0, -1],
-  south: [0, 1],
-  east: [1, 0],
-  west: [-1, 0],
-};
-
 // cornerAngle is the Y rotation pointing to the cell corner where `a` and `b`
-// meet. atan2(x, z) measures the same way around +Y as DIR_ANGLE.
+// meet. The sum of their step vectors points at that corner (e.g. south + west
+// -> (-1, +1), the SW corner), and atan2(x, z) measures the same way around +Y
+// as DIR_ANGLE.
 function cornerAngle(a: Dir, b: Dir): number {
-  const x = EDGE_VEC[a][0] + EDGE_VEC[b][0];
-  const z = EDGE_VEC[a][1] + EDGE_VEC[b][1];
+  const x = STEP[a][0] + STEP[b][0];
+  const z = STEP[a][1] + STEP[b][1];
   return Math.atan2(x, z);
 }
 
@@ -67,7 +61,7 @@ const TEE_DEFAULT_MISSING: Dir = "south";
 // the only absent direction is the missing arm, so rotate the model's default
 // missing edge (south) onto the target missing edge.
 export function teeRotation(edges: [Dir, Dir, Dir]): number {
-  const missing = (["north", "east", "south", "west"] as Dir[]).find((d) => !edges.includes(d))!;
+  const missing = SIDES.find((d) => !edges.includes(d))!;
   return DIR_ANGLE[missing] - DIR_ANGLE[TEE_DEFAULT_MISSING];
 }
 
@@ -81,14 +75,23 @@ export function cellOffsets(snap: GridSize): { offX: number; offZ: number } {
   };
 }
 
+// inBounds reports whether (x, y) is on the grid.
+export function inBounds(snap: GridSize, x: number, y: number): boolean {
+  return x >= 0 && x < snap.width && y >= 0 && y < snap.height;
+}
+
+// cellIndex is the tiles index of (x, y), or -1 if off the grid.
+export function cellIndex(snap: GridSize, x: number, y: number): number {
+  return inBounds(snap, x, y) ? y * snap.width + x : -1;
+}
+
 // cellFromWorld maps a world (x, z) point back to a grid cell, or null if it is
 // off the grid. Used for hover and placement.
 export function cellFromWorld(worldX: number, worldZ: number, snap: GridSize): Cell | null {
   const { offX, offZ } = cellOffsets(snap);
   const x = Math.round(worldX + offX);
   const y = Math.round(worldZ + offZ);
-  if (x < 0 || x >= snap.width || y < 0 || y >= snap.height) return null;
-  return { x, y };
+  return inBounds(snap, x, y) ? { x, y } : null;
 }
 
 // dirBetween returns the facing from cell a toward the adjacent cell b.
