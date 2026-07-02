@@ -2,7 +2,8 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { IconType } from "react-icons";
 import { PiCaretDoubleRightFill, PiShovelFill, PiStorefrontFill, PiTrashFill } from "react-icons/pi";
 import { TOOLS, getSelectedId, selectTool, subscribe } from "./tools";
-import { tile, ACCENT } from "../ui";
+import { getStats, spendableOre, subscribeStats } from "../world/economy";
+import { tile, ACCENT, ORE_TEXT } from "../ui";
 
 // One icon per tool, keyed by id.
 const ICONS: Record<string, IconType> = {
@@ -17,6 +18,7 @@ const ICONS: Record<string, IconType> = {
 // selected tool is what Ground places when you click a cell.
 export function Toolbar() {
   const selectedId = useSyncExternalStore(subscribe, getSelectedId);
+  useSyncExternalStore(subscribeStats, getStats); // re-render when the ore moves
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -32,14 +34,16 @@ export function Toolbar() {
       {TOOLS.map((tool) => {
         const Icon = ICONS[tool.id];
         const selected = tool.id === selectedId;
+        const affordable = (tool.cost ?? 0) <= spendableOre();
         return (
           <button
             key={tool.id}
             onClick={() => selectTool(tool.id)}
             aria-pressed={selected}
-            title={`${tool.label} (${tool.hotkey})`}
+            title={`${tool.label} (${tool.hotkey})${tool.cost ? ` · ${tool.cost} ore` : ""}`}
             style={{
               ...tile,
+              ...(!affordable && { opacity: 0.45 }), // too pricey right now
               // base tile is the unselected look; only override when selected
               ...(selected && {
                 borderColor: ACCENT,
@@ -51,6 +55,7 @@ export function Toolbar() {
             }}
           >
             <span style={hotkeyBadge}>{tool.hotkey}</span>
+            {tool.cost && <span style={costBadge}>{tool.cost}</span>}
             <Icon size={26} />
             <span>{tool.label}</span>
           </button>
@@ -66,4 +71,13 @@ const hotkeyBadge: React.CSSProperties = {
   left: 7,
   fontSize: 9,
   opacity: 0.45,
+};
+
+const costBadge: React.CSSProperties = {
+  position: "absolute",
+  top: 4,
+  right: 7,
+  fontSize: 9,
+  fontWeight: 800,
+  color: ORE_TEXT,
 };

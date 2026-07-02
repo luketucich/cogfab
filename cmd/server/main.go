@@ -1,5 +1,5 @@
-// Command server runs the Cogfab game server: it hosts one factory, advances it
-// on a fixed-rate loop, and streams each tick to browsers over WebSocket.
+// Command server runs the Cogfab game server: it hosts one shared factory and
+// streams it to browsers over WebSocket.
 package main
 
 import (
@@ -21,7 +21,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	hub := server.NewHub(demoWorld())
+	// An empty world: players start on a small unlocked region with just enough
+	// ore to build their first extractor-to-seller line.
+	hub := server.NewHub(engine.NewWorld(12, 8))
 	go hub.Run(ctx)
 
 	mux := http.NewServeMux()
@@ -41,20 +43,4 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
-}
-
-// demoWorld builds a small complete line as a starting scene, so the grid is not
-// empty on first load: an extractor feeds belts that curve around to a seller.
-func demoWorld() *engine.World {
-	world := engine.NewWorld(12, 8)
-	world.PlaceExtractor(3, 2, engine.East)
-	world.PlaceBelt(4, 2, engine.East)
-	world.PlaceBelt(5, 2, engine.East)
-	world.PlaceBelt(6, 2, engine.South) // corner, turning down
-	world.PlaceBelt(6, 3, engine.South)
-	world.PlaceBelt(6, 4, engine.West) // corner, turning back
-	world.PlaceBelt(5, 4, engine.West)
-	world.PlaceBelt(4, 4, engine.West)
-	world.PlaceSeller(3, 4, engine.East) // mouth faces the belt feeding it from the east
-	return world
 }

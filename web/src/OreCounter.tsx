@@ -2,21 +2,23 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { getStats, subscribeStats } from "./world/economy";
 import { panel, FONT_DISPLAY } from "./ui";
 
-// OreCounter is the centred resource readout at the top: an "Iron Ore" header with
-// the total counting up below it, and the per-second delivery rate. Only ore that
-// reached a seller is counted.
+// OreCounter is the centred resource readout at the top, two matched lines: the
+// iron-ore total counting up with its per-second rate, then the size of the
+// unlocked grid. Only ore that reached a seller is counted.
 export function OreCounter() {
   const amount = useSmoothOre();
-  const rate = useSyncExternalStore(subscribeStats, () => getStats().ratePerSec);
+  const stats = useSyncExternalStore(subscribeStats, getStats);
 
   return (
-    <div style={{ ...panel, top: 14, left: "50%", transform: "translateX(-50%)", padding: "10px 26px", textAlign: "center" }}>
-      <div style={label}>
+    <div style={{ ...panel, top: 14, left: "50%", transform: "translateX(-50%)", padding: "12px 24px", textAlign: "center" }}>
+      <div style={oreRow} title="Iron ore">
         <span style={oreIcon} />
-        Iron Ore
+        <span style={count}>{amount.toLocaleString()}</span>
+        <span style={perSec}>+{stats.ratePerSec}/s</span>
       </div>
-      <div style={count}>{amount.toLocaleString()}</div>
-      <div style={perSec}>+{rate}/s</div>
+      <div style={gridLabel}>
+        Grid {stats.gridWidth}x{stats.gridHeight}
+      </div>
     </div>
   );
 }
@@ -30,8 +32,9 @@ function useSmoothOre(): number {
     let raf = 0;
     const tick = () => {
       const s = getStats();
-      // Predict at most ~2s ahead, so a dropped connection cannot run the count away.
-      const elapsed = s.receivedAt ? Math.min((performance.now() - s.receivedAt) / 1000, 2) : 0;
+      // Predict just past the next server tick, so the count never runs far
+      // ahead of the total the buy buttons check against.
+      const elapsed = s.receivedAt ? Math.min((performance.now() - s.receivedAt) / 1000, 1.2) : 0;
       const shown = Math.floor(s.ironOre + s.ratePerSec * elapsed);
       setAmount((prev) => (prev === shown ? prev : shown));
       raf = requestAnimationFrame(tick);
@@ -43,26 +46,30 @@ function useSmoothOre(): number {
   return amount;
 }
 
-const label: React.CSSProperties = {
+const oreRow: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  gap: 7,
-  fontSize: 11,
-  letterSpacing: 1.5,
-  textTransform: "uppercase",
-  opacity: 0.7,
+  gap: 9,
 };
 
 const count: React.CSSProperties = {
   fontFamily: FONT_DISPLAY,
-  fontSize: 30,
+  fontSize: 28,
   fontWeight: 800,
-  lineHeight: 1.15,
+  lineHeight: 1.1,
   color: "#f4f6fa",
 };
 
-const perSec: React.CSSProperties = { fontSize: 12, color: "#8fe39a", marginTop: 1 };
+const perSec: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: "#8fe39a" };
+
+const gridLabel: React.CSSProperties = {
+  fontSize: 10,
+  letterSpacing: 1.5,
+  textTransform: "uppercase",
+  opacity: 0.55,
+  marginTop: 3,
+};
 
 // A small metallic chunk standing in for iron ore, matched to the in-world colour.
 const oreIcon: React.CSSProperties = {

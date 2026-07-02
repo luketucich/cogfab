@@ -25,11 +25,11 @@ func tickN(h *Hub, n int) {
 
 func TestOreSimCountsDeliveries(t *testing.T) {
 	_, h := run(3)
-	if h.ironOre != 0 {
-		t.Fatalf("ironOre = %d before any tick, want 0 (ore has not reached the seller yet)", h.ironOre)
+	if h.ironOre != startingOre {
+		t.Fatalf("ironOre = %d before any tick, want the untouched starting ore %d", h.ironOre, startingOre)
 	}
 	tickN(h, 10)
-	if h.ironOre == 0 {
+	if h.ironOre <= startingOre {
 		t.Fatalf("after 10s ore should be landing: ironOre=%d", h.ironOre)
 	}
 	// The constants promise oreSpeed/oreGap = 5 chunks per second at steady state,
@@ -54,6 +54,52 @@ func TestOreSimDownstreamDrainsAfterBreak(t *testing.T) {
 	tickN(h, 5) // ...then it stops once the belt has emptied
 	if h.ironOre != drained {
 		t.Errorf("ironOre kept growing after the drain finished (%d -> %d)", drained, h.ironOre)
+	}
+}
+
+func TestOreSimRateScalesWithExtractorLevel(t *testing.T) {
+	_, h := run(3)
+	h.extractorLevel = maxExtractorLevel
+	tickN(h, 10) // warm up
+	before := h.ironOre
+	tickN(h, 10)
+	got := h.ironOre - before
+	// oreSpeed/emitGap at max level is 17.5/s; the emitter keeps the remainder
+	// between steps, so ten seconds must land ~175, not saturate below it.
+	if got < 170 || got > 180 {
+		t.Fatalf("delivered %d over 10s at max level, want ~175", got)
+	}
+}
+
+func TestTwoExtractorsOnOneBeltAreTwoStreams(t *testing.T) {
+	// Two extractors feed the same mouth belt from different sides. They are two
+	// paying streams (two routes), exactly as the client draws them.
+	w := engine.NewWorld(3, 3)
+	w.PlaceExtractor(0, 1, engine.East)  // west of the belt
+	w.PlaceExtractor(1, 0, engine.South) // north of the belt
+	w.PlaceBelt(1, 1, engine.South)
+	w.PlaceSeller(1, 2, engine.North)
+	h := NewHub(w)
+	if len(h.routes) != 2 {
+		t.Fatalf("routes = %d, want 2 (one per extractor)", len(h.routes))
+	}
+}
+
+func TestMoreExtractorsEarnMore(t *testing.T) {
+	// Both streams above pour into one seller and both pay, so a second
+	// extractor doubles the income.
+	w := engine.NewWorld(3, 3)
+	w.PlaceExtractor(0, 1, engine.East)
+	w.PlaceExtractor(1, 0, engine.South)
+	w.PlaceBelt(1, 1, engine.South)
+	w.PlaceSeller(1, 2, engine.North)
+	h := NewHub(w)
+	tickN(h, 5) // fill the belt
+	before := h.ironOre
+	tickN(h, 10)
+	got := h.ironOre - before
+	if got < 95 || got > 105 {
+		t.Fatalf("two extractors delivered %d ore in 10s, want ~100 (double one line)", got)
 	}
 }
 

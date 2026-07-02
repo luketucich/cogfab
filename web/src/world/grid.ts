@@ -80,6 +80,28 @@ export function inBounds(snap: GridSize, x: number, y: number): boolean {
   return x >= 0 && x < snap.width && y >= 0 && y < snap.height;
 }
 
+// Rect is an inclusive cell rectangle.
+export type Rect = { x0: number; y0: number; x1: number; y1: number };
+
+// unlockedRect centres the gridW x gridH region players have bought so far in
+// the world; the server rejects builds outside it. Mirror of unlockedRect in
+// internal/server/shop.go; keep the centring in step.
+export function unlockedRect(snap: GridSize, gridW: number, gridH: number): Rect {
+  const x0 = Math.max(Math.floor((snap.width - gridW) / 2), 0);
+  const y0 = Math.max(Math.floor((snap.height - gridH) / 2), 0);
+  return {
+    x0,
+    y0,
+    x1: Math.min(x0 + gridW, snap.width) - 1,
+    y1: Math.min(y0 + gridH, snap.height) - 1,
+  };
+}
+
+// isUnlocked reports whether players can build on (x, y).
+export function isUnlocked(rect: Rect, x: number, y: number): boolean {
+  return x >= rect.x0 && x <= rect.x1 && y >= rect.y0 && y <= rect.y1;
+}
+
 // cellIndex is the tiles index of (x, y), or -1 if off the grid.
 export function cellIndex(snap: GridSize, x: number, y: number): number {
   return inBounds(snap, x, y) ? y * snap.width + x : -1;

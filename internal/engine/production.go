@@ -52,9 +52,6 @@ func (w *World) Producers() []Producer {
 	return out
 }
 
-// ProductiveExtractors counts the extractors whose ore reaches a seller.
-func (w *World) ProductiveExtractors() int { return len(w.Producers()) }
-
 // pathToSeller walks belts out from start (an extractor's mouth belt) to the
 // nearest seller mouth, returning the ordered belts on that path, the seller cell,
 // and whether a seller was reached. A seller counts only when it faces the belt

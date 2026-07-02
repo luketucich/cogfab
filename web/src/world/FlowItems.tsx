@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { getLatest, subscribe } from "./store";
+import { getStats } from "./economy";
 import { cellOffsets } from "./grid";
 import { makeCurve, curvePoint, type Curve } from "./beltCurve";
 import { flowPaths, runKey } from "./flow";
@@ -82,11 +83,15 @@ export function FlowItems() {
     }
 
     // Emit a fresh chunk at the head of each live path once the nearest one has
-    // moved a gap ahead, so ore fills out from the extractor at the production rate.
+    // moved a gap ahead, starting it at the overshoot so no spacing is lost.
+    // Each Extractor Rate level adds half the base rate; mirror of emitGap and
+    // emit in economy.go.
+    const gap = GAP / (1 + 0.5 * getStats().extractorLevel);
     for (const route of routes.current.values()) {
       let nearest = Infinity;
       for (const chunk of alive) if (chunk.route === route && chunk.dist < nearest) nearest = chunk.dist;
-      if (nearest >= GAP) alive.push({ route, dist: 0, id: nextId.current++ });
+      if (nearest === Infinity) alive.push({ route, dist: 0, id: nextId.current++ });
+      else if (nearest >= gap) alive.push({ route, dist: nearest - gap, id: nextId.current++ });
     }
     chunks.current = alive;
 

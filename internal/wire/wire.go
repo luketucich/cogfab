@@ -21,17 +21,18 @@ type TileView struct {
 	Dir  string `json:"dir"`  // north, east, south, west
 }
 
-// StatsMessage is the economy update: the authoritative iron-ore total and the
-// current production rate. Item motion is cosmetic and lives on the client.
+// StatsMessage is the economy update: the authoritative iron-ore total, the
+// current production rate, and where the upgrades stand. A cost of 0 means
+// that upgrade is maxed out. Item motion is cosmetic and lives on the client.
 type StatsMessage struct {
-	Type    string `json:"type"`
-	IronOre int    `json:"ironOre"`
-	Rate    int    `json:"ratePerSec"`
-}
-
-// Stats builds a StatsMessage from the current totals.
-func Stats(ironOre, ratePerSec int) StatsMessage {
-	return StatsMessage{Type: "stats", IronOre: ironOre, Rate: ratePerSec}
+	Type           string `json:"type"`
+	IronOre        int    `json:"ironOre"`
+	Rate           int    `json:"ratePerSec"`
+	ExtractorLevel int    `json:"extractorLevel"`
+	ExtractorCost  int    `json:"extractorCost"`
+	GridWidth      int    `json:"gridWidth"` // unlocked region, centred in the world
+	GridHeight     int    `json:"gridHeight"`
+	GridCost       int    `json:"gridCost"`
 }
 
 // PongMessage answers a client ping with its own timestamp, so the client can
