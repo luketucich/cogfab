@@ -9,8 +9,16 @@ import "strconv"
 const (
 	oreSpeed = 2.5 // belts per second a chunk travels
 	oreGap   = 0.5 // belts between chunks; oreSpeed/oreGap = 5 chunks per second
-	subSteps = 10  // sim steps per one-second tick, so a chunk never skips a belt
+	subSteps = 20  // sim steps per one-second tick: a chunk never skips a belt, and
+	// there is room to emit one chunk per step at the highest extractor level
 )
+
+// emitGap is how close together chunks leave the extractors: each Extractor
+// Rate level adds half the base rate, so a maxed line carries 3.5x the ore.
+// Keep in step with FlowItems.tsx.
+func (h *Hub) emitGap() float64 {
+	return oreGap / (1 + 0.5*float64(h.extractorLevel))
+}
 
 // route is one extractor-to-seller path the ore rides: the belts it crosses
 // (extractor mouth first, seller mouth last) and the seller cell at the end. Chunks
@@ -33,7 +41,7 @@ type chunk struct {
 func (h *Hub) recompute() {
 	next := make(map[string]*route)
 	for _, p := range h.world.Producers() {
-		key := routeKey(p.Path)
+		key := routeKey(p.Cell, p.Path)
 		if was, ok := h.routes[key]; ok {
 			was.seller = p.Seller
 			next[key] = was
@@ -46,7 +54,8 @@ func (h *Hub) recompute() {
 
 // tick advances the ore one second in small steps, tallying every chunk that lands
 // in its seller and dropping every chunk whose belt is gone, then tops up each
-// route with fresh chunks from its extractor.
+// route with fresh chunks from its extractor. Every stream that reaches a seller
+// pays, so each extractor you connect adds a full line of income.
 func (h *Hub) tick() {
 	delivered := 0
 	for s := 0; s < subSteps; s++ {
@@ -72,9 +81,12 @@ func (h *Hub) tick() {
 	h.ratePerSec = delivered // chunks that landed this second
 }
 
-// emit adds a chunk at the head of each route once the nearest one has moved a gap
-// ahead, so ore fills out from the extractor at the production rate.
+// emit adds a chunk at the head of each route once the nearest one has moved a
+// gap ahead. The new chunk starts at the overshoot past the gap, not at zero,
+// so no spacing is lost between steps and the long-run rate is exactly
+// oreSpeed/emitGap at every level.
 func (h *Hub) emit() {
+	gap := h.emitGap()
 	for _, rt := range h.routes {
 		nearest := -1.0
 		for _, c := range h.chunks {
@@ -82,15 +94,21 @@ func (h *Hub) emit() {
 				nearest = c.dist
 			}
 		}
-		if nearest < 0 || nearest >= oreGap {
+		if nearest < 0 {
 			h.chunks = append(h.chunks, &chunk{route: rt})
+		} else if nearest >= gap {
+			h.chunks = append(h.chunks, &chunk{route: rt, dist: nearest - gap})
 		}
 	}
 }
 
-// routeKey identifies a route by its ordered belt cells.
-func routeKey(cells []int) string {
-	b := make([]byte, 0, len(cells)*4)
+// routeKey identifies a route by the extractor it starts from and its ordered
+// belt cells. The extractor matters: two extractors feeding the same mouth belt
+// are two paying streams and must stay two routes, just as the client draws them.
+func routeKey(extractor int, cells []int) string {
+	b := make([]byte, 0, (len(cells)+1)*4)
+	b = strconv.AppendInt(b, int64(extractor), 10)
+	b = append(b, ':')
 	for _, c := range cells {
 		b = strconv.AppendInt(b, int64(c), 10)
 		b = append(b, ',')

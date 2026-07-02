@@ -27,8 +27,11 @@ type Client struct {
 type Hub struct {
 	world *engine.World
 
-	ironOre    int // authoritative iron-ore total: only ore that reached a seller
+	ironOre    int // authoritative iron-ore total: earned at the seller, spent on builds
 	ratePerSec int // ore delivered per second right now, shown in the HUD
+
+	extractorLevel int // global Extractor Rate level; higher emits ore denser
+	gridTier       int // index into gridTiers: how much of the world is unlocked
 
 	routes map[string]*route // live extractor-to-seller paths, for emitting ore
 	chunks []*chunk          // ore in flight on the belts
@@ -44,6 +47,7 @@ type Hub struct {
 func NewHub(w *engine.World) *Hub {
 	h := &Hub{
 		world:      w,
+		ironOre:    startingOre,
 		routes:     make(map[string]*route),
 		clients:    make(map[*Client]bool),
 		register:   make(chan *Client),
@@ -72,9 +76,11 @@ func (h *Hub) Run(ctx context.Context) {
 		case c := <-h.unregister:
 			h.removeClient(c)
 		case cmd := <-h.commands:
-			h.apply(cmd)
-			h.broadcast(h.stateBytes())
-			h.recompute()
+			if h.apply(cmd) {
+				h.broadcast(h.stateBytes())
+				h.recompute()
+				h.broadcastStats() // commands move ore (costs, refunds, buys)
+			}
 		case <-ticker.C:
 			if len(h.routes) > 0 || len(h.chunks) > 0 {
 				h.tick()
@@ -111,24 +117,20 @@ func (h *Hub) Submit(cmd wire.Command) {
 	}
 }
 
-// apply changes the world for one client command, ignoring anything it does not
-// recognize. The world ignores off-grid coordinates, so the client's x and y
-// need no checking here.
-func (h *Hub) apply(cmd wire.Command) {
+// apply runs one client command against the world and the ore purse, reporting
+// whether anything changed. A command the players cannot afford, cannot reach,
+// or that makes no sense is ignored: the client greys those out up front, and
+// the server never trusts it. The checks themselves live in shop.go.
+func (h *Hub) apply(cmd wire.Command) bool {
 	switch cmd.Type {
 	case wire.CmdPlace:
-		dir := engine.ParseDirection(cmd.Dir)
-		switch cmd.Kind {
-		case wire.KindBelt:
-			h.world.PlaceBelt(cmd.X, cmd.Y, dir)
-		case wire.KindExtractor:
-			h.world.PlaceExtractor(cmd.X, cmd.Y, dir)
-		case wire.KindSeller:
-			h.world.PlaceSeller(cmd.X, cmd.Y, dir)
-		}
+		return h.applyPlace(cmd)
 	case wire.CmdDestroy:
-		h.world.Destroy(cmd.X, cmd.Y)
+		return h.applyDestroy(cmd)
+	case wire.CmdBuy:
+		return h.applyBuy(cmd)
 	}
+	return false
 }
 
 // stateBytes is the current world as a JSON state message.
@@ -139,7 +141,17 @@ func (h *Hub) stateBytes() []byte {
 
 // statsBytes is the current economy as a JSON stats message.
 func (h *Hub) statsBytes() []byte {
-	b, _ := json.Marshal(wire.Stats(h.ironOre, h.ratePerSec))
+	x0, y0, x1, y1 := h.unlockedRect()
+	b, _ := json.Marshal(wire.StatsMessage{
+		Type:           "stats",
+		IronOre:        h.ironOre,
+		Rate:           h.ratePerSec,
+		ExtractorLevel: h.extractorLevel,
+		ExtractorCost:  h.extractorCost(),
+		GridWidth:      x1 - x0 + 1,
+		GridHeight:     y1 - y0 + 1,
+		GridCost:       h.gridCost(),
+	})
 	return b
 }
 

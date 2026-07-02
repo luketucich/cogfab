@@ -2,14 +2,14 @@ package engine
 
 import "testing"
 
-func TestProductiveExtractors(t *testing.T) {
+func TestProducers(t *testing.T) {
 	t.Run("extractor through belts to a seller is productive", func(t *testing.T) {
 		w := NewWorld(6, 1)
 		w.PlaceExtractor(0, 0, East)
 		w.PlaceBelt(1, 0, East)
 		w.PlaceBelt(2, 0, East)
 		w.PlaceSeller(3, 0, West)
-		if got := w.ProductiveExtractors(); got != 1 {
+		if got := len(w.Producers()); got != 1 {
 			t.Fatalf("got %d, want 1", got)
 		}
 	})
@@ -19,7 +19,7 @@ func TestProductiveExtractors(t *testing.T) {
 		w.PlaceExtractor(0, 0, East)
 		w.PlaceBelt(1, 0, East)
 		w.PlaceBelt(2, 0, East)
-		if got := w.ProductiveExtractors(); got != 0 {
+		if got := len(w.Producers()); got != 0 {
 			t.Fatalf("got %d, want 0", got)
 		}
 	})
@@ -28,7 +28,7 @@ func TestProductiveExtractors(t *testing.T) {
 		w := NewWorld(6, 1)
 		w.PlaceExtractor(0, 0, East)
 		w.PlaceSeller(1, 0, West)
-		if got := w.ProductiveExtractors(); got != 0 {
+		if got := len(w.Producers()); got != 0 {
 			t.Fatalf("got %d, want 0", got)
 		}
 	})
@@ -41,7 +41,7 @@ func TestProductiveExtractors(t *testing.T) {
 		w.PlaceBelt(1, 1, South)
 		w.PlaceBelt(1, 2, East)
 		w.PlaceSeller(2, 1, West)
-		if got := w.ProductiveExtractors(); got != 2 {
+		if got := len(w.Producers()); got != 2 {
 			t.Fatalf("got %d, want 2", got)
 		}
 	})
@@ -52,7 +52,7 @@ func TestProductiveExtractors(t *testing.T) {
 		w.PlaceExtractor(0, 0, South)
 		w.PlaceBelt(1, 0, East)
 		w.PlaceSeller(2, 0, West)
-		if got := w.ProductiveExtractors(); got != 0 {
+		if got := len(w.Producers()); got != 0 {
 			t.Fatalf("got %d, want 0", got)
 		}
 	})
@@ -64,7 +64,7 @@ func TestProductiveExtractors(t *testing.T) {
 		w.PlaceBelt(1, 0, East)
 		w.PlaceBelt(2, 0, East)
 		w.PlaceSeller(2, 1, East)
-		if got := w.ProductiveExtractors(); got != 0 {
+		if got := len(w.Producers()); got != 0 {
 			t.Fatalf("got %d, want 0", got)
 		}
 	})
