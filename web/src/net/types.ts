@@ -22,9 +22,15 @@ export type StatsMessage = {
   ratePerSec: number;
   extractorLevel: number;
   extractorCost: number;
+  beltLevel: number;
+  beltCost: number;
+  valueLevel: number;
+  valueCost: number;
   gridWidth: number; // unlocked region, centred in the world
   gridHeight: number;
   gridCost: number;
+  nextGridWidth: number; // the tier Grid Size buys next, 0 when maxed
+  nextGridHeight: number;
 };
 
 // PongMessage answers a ping with the timestamp we sent, so we can measure the
@@ -58,11 +64,17 @@ export type DestroyCommand = {
   y: number;
 };
 
+export type RotateCommand = {
+  type: "rotate"; // turn the structure at (x, y) a quarter clockwise
+  x: number;
+  y: number;
+};
+
 export type BuyCommand = {
   type: "buy";
-  upgrade: "extractorRate" | "gridSize";
+  upgrade: "extractorRate" | "beltSpeed" | "oreValue" | "gridSize";
 };
 
 // Ping is deliberately not in this union: connection.ts sends it raw and the
 // server answers it in the transport layer, before commands reach the game.
-export type Command = PlaceCommand | DestroyCommand | BuyCommand;
+export type Command = PlaceCommand | DestroyCommand | RotateCommand | BuyCommand;

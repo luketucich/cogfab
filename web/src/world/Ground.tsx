@@ -7,9 +7,11 @@ import { addPendingSpend, getStats, spendableOre } from "./economy";
 import { cellFromWorld, cellIndex, cellOffsets, cellsBetween, dirBetween, dirFromDelta, isUnlocked, unlockedRect, type Cell } from "./grid";
 import { connection } from "../net/connection";
 import { getFacing, getSelectedId, getSelectedTool, rotateFacing, setFacing } from "../toolbar/tools";
-import { setHover } from "./hover";
+import { getHover, setHover } from "./hover";
 import { ACCENT } from "../ui";
-import { chevronGeometry } from "./chevron";
+import { sfx } from "../sfx";
+import { addBurst } from "./burst";
+import { chevronGeometry, CHEVRON_ROT } from "./chevron";
 import type { Dir, StateMessage } from "../net/types";
 
 const BLOCKED = "#e05260"; // preview colour when the build cannot go through
@@ -21,14 +23,6 @@ const ARROW_OPACITY = 0.9;
 const FOLLOW = 30; // how fast the highlight glides between cells: smooth but quick
 const FADE = 14; // how fast it fades in and out
 const AIM_STEP = 0.15; // cursor distance (in cells) before the arrow re-aims
-
-// Y rotation that aims the +x arrow toward each direction.
-const ARROW_ROT: Record<Dir, number> = {
-  east: 0,
-  north: Math.PI / 2,
-  west: Math.PI,
-  south: -Math.PI / 2,
-};
 
 // kindAt is what sits on a cell; cellUnlocked is whether players may build there.
 const kindAt = (snap: StateMessage, cell: Cell) => snap.tiles[cellIndex(snap, cell.x, cell.y)].kind;
@@ -47,6 +41,7 @@ export function Ground() {
   const aimFrom = useRef<{ x: number; z: number } | null>(null); // last point the arrow re-aimed from
   const placed = useRef(false); // false until the highlight has snapped onto a fresh cell
   const shown = useRef(0); // 0..1 presence, drives the fade
+  const shiftLock = useRef(false); // holding Shift freezes the placement direction
 
   const group = useRef<THREE.Group>(null!);
   const tileMat = useRef<THREE.MeshBasicMaterial>(null!);
@@ -75,20 +70,31 @@ export function Ground() {
   }
 
   function send(cell: Cell, dir: Dir) {
-    if (!canApply(cell)) return;
+    const snap = getLatest();
+    if (!snap || !canApply(cell)) return;
     const tool = getSelectedTool();
     connection.send(tool.command(cell.x, cell.y, dir));
     addPendingSpend(tool.cost ?? 0);
+    // A thock and a puff of dust where it landed (debris when tearing down).
+    const { offX, offZ } = cellOffsets(snap);
+    if (tool.id === "destroy") {
+      sfx.destroy();
+      addBurst({ x: cell.x - offX, z: cell.y - offZ, color: "#8a8f9a", count: 10 });
+    } else {
+      sfx.place();
+      addBurst({ x: cell.x - offX, z: cell.y - offZ, color: "#9fc4ff", count: 8 });
+    }
   }
 
-  // extendStroke places every cell the drag just crossed, each facing the next,
-  // and leaves the newest cell to be placed when the drag moves on or ends.
+  // extendStroke places every cell the drag just crossed, each facing the next
+  // (or the frozen direction while Shift is held), and leaves the newest cell to
+  // be placed when the drag moves on or ends.
   function extendStroke(to: Cell) {
     const cells = stroke.current;
     if (!cells) return;
     let prev = cells[cells.length - 1];
     for (const step of cellsBetween(prev, to)) {
-      send(prev, dirBetween(prev, step));
+      send(prev, shiftLock.current ? getFacing() : dirBetween(prev, step));
       cells.push(step);
       prev = step;
     }
@@ -101,21 +107,40 @@ export function Ground() {
     if (!cells) return;
     stroke.current = null;
     const last = cells[cells.length - 1];
-    const dir = cells.length > 1 ? dirBetween(cells[cells.length - 2], last) : getFacing();
-    send(last, dir);
+    const drag = cells.length > 1 && !shiftLock.current;
+    send(last, drag ? dirBetween(cells[cells.length - 2], last) : getFacing());
   }
 
   // aimDir is where the arrow points: the live drag direction, or the rotate
-  // direction while hovering.
+  // direction while hovering or while Shift holds it frozen.
   function aimDir(): Dir {
     const cells = stroke.current;
-    if (cells && cells.length > 1) return dirBetween(cells[cells.length - 2], cells[cells.length - 1]);
+    if (cells && cells.length > 1 && !shiftLock.current) {
+      return dirBetween(cells[cells.length - 2], cells[cells.length - 1]);
+    }
     return getFacing();
   }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "r" || e.key === "R") rotateFacing();
+      if (e.key === "Shift") {
+        shiftLock.current = true;
+        return;
+      }
+      if (e.repeat || (e.key !== "r" && e.key !== "R")) return;
+      // R over a structure spins it in place (free); over empty ground it spins
+      // the placement direction.
+      const snap = getLatest();
+      const cell = getHover();
+      if (snap && cell && cellUnlocked(snap, cell) && kindAt(snap, cell) !== "empty") {
+        connection.send({ type: "rotate", x: cell.x, y: cell.y });
+        sfx.select();
+      } else {
+        rotateFacing();
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Shift") shiftLock.current = false;
     };
     const onUp = (e: PointerEvent) => {
       // Finish the build only when released over the grid. A release over the
@@ -134,11 +159,13 @@ export function Ground() {
       if (e.relatedTarget === null) onLeave(); // pointer left the window entirely
     };
     window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointerout", onOut);
     window.addEventListener("blur", onLeave);
     return () => {
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointerout", onOut);
       window.removeEventListener("blur", onLeave);
@@ -184,7 +211,7 @@ export function Ground() {
 
     // Arrow rides along with the tile and points the aim direction.
     arrow.current.position.set(g.position.x, ARROW_Y, g.position.z);
-    arrow.current.rotation.y = ARROW_ROT[aimDir()];
+    arrow.current.rotation.y = CHEVRON_ROT[aimDir()];
 
     tileMat.current.opacity = TILE_OPACITY * shown.current;
     arrowMat.current.opacity = ARROW_OPACITY * shown.current;
@@ -198,6 +225,14 @@ export function Ground() {
           if (e.nativeEvent.button !== 0) return; // left builds; right is for panning
           const cell = cellAt(e);
           if (!cell) return;
+          // A knock when the click cannot work: locked land, or a build the ore
+          // does not cover. Merely-occupied cells stay silent, since drags often
+          // start on them.
+          const snap = getLatest();
+          const tool = getSelectedTool();
+          if (snap && (!cellUnlocked(snap, cell) || (tool.id !== "destroy" && (tool.cost ?? 0) > spendableOre()))) {
+            sfx.deny();
+          }
           target.current = cell;
           setHover(cell);
           stroke.current = [cell];
@@ -208,7 +243,7 @@ export function Ground() {
           setHover(cell);
           // Aim the arrow by how the cursor moves, fine enough to update within
           // one cell. Re-aim once it has moved a small step so it tracks the
-          // mouse without jittering on tiny moves.
+          // mouse without jittering on tiny moves; Shift holds the aim still.
           const from = aimFrom.current;
           if (!from) {
             aimFrom.current = { x: e.point.x, z: e.point.z };
@@ -216,7 +251,7 @@ export function Ground() {
             const dx = e.point.x - from.x;
             const dz = e.point.z - from.z;
             if (Math.hypot(dx, dz) > AIM_STEP) {
-              setFacing(dirFromDelta(dx, dz));
+              if (!shiftLock.current) setFacing(dirFromDelta(dx, dz));
               aimFrom.current = { x: e.point.x, z: e.point.z };
             }
           }

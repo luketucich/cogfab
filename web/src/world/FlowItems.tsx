@@ -2,14 +2,13 @@ import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { getLatest, subscribe } from "./store";
-import { getStats } from "./economy";
+import { beltMultiplier, getStats, ORE_GAP, ORE_SPEED } from "./economy";
 import { cellOffsets } from "./grid";
 import { makeCurve, curvePoint, type Curve } from "./beltCurve";
 import { flowPaths, runKey } from "./flow";
+import { addBurst } from "./burst";
 
 const MAX_ORE = 8192;
-const GAP = 0.5; // cells between chunks
-const SPEED = 2.5; // cells/sec; a chunk every GAP cells is 5/sec, matching oreSpeed/oreGap in economy.go
 const ORE_Y = 0.5; // sit on the belt surface
 const SIZE = 0.13; // chunk radius
 const ORE = new THREE.Color("#8a7f72"); // iron ore: a warm grey rock
@@ -37,6 +36,7 @@ export function FlowItems() {
   const lastTime = useRef(0);
   const nextId = useRef(0);
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const landing = useMemo(() => new THREE.Vector3(), []); // where a delivered chunk sparkles
   const geometry = useMemo(() => new THREE.IcosahedronGeometry(SIZE, 0), []);
   const material = useMemo(
     () => new THREE.MeshStandardMaterial({ color: ORE, roughness: 0.75, metalness: 0.3, flatShading: true }),
@@ -68,7 +68,9 @@ export function FlowItems() {
 
   useFrame(({ clock }) => {
     const now = clock.elapsedTime;
-    const step = Math.min(now - lastTime.current, MAX_STEP) * SPEED;
+    // Belt Speed levels carry the ore visibly faster; mirror of beltSpeed in
+    // economy.go.
+    const step = Math.min(now - lastTime.current, MAX_STEP) * ORE_SPEED * beltMultiplier(getStats().beltLevel);
     lastTime.current = now;
 
     // Advance every chunk, dropping the ones that reached the seller or whose belt
@@ -77,7 +79,18 @@ export function FlowItems() {
     for (const chunk of chunks.current) {
       chunk.dist += step;
       const cell = Math.floor(chunk.dist);
-      if (cell >= chunk.route.cells.length) continue; // reached the seller: consumed
+      if (cell >= chunk.route.cells.length) {
+        // Consumed. A live route ends at a seller, so sparkle where the ore
+        // vanished; ore on a cut route just rides off with no fanfare.
+        for (const route of routes.current.values()) {
+          if (route === chunk.route) {
+            curvePoint(route.curves[route.curves.length - 1], 1, 0, landing);
+            addBurst({ x: landing.x, z: landing.z, color: "#ffd57a", count: 2 });
+            break;
+          }
+        }
+        continue;
+      }
       if (snap?.tiles[chunk.route.cells[cell]]?.kind !== "belt") continue; // belt gone: fell off
       alive.push(chunk);
     }
@@ -86,7 +99,7 @@ export function FlowItems() {
     // moved a gap ahead, starting it at the overshoot so no spacing is lost.
     // Each Extractor Rate level adds half the base rate; mirror of emitGap and
     // emit in economy.go.
-    const gap = GAP / (1 + 0.5 * getStats().extractorLevel);
+    const gap = ORE_GAP / (1 + 0.5 * getStats().extractorLevel);
     for (const route of routes.current.values()) {
       let nearest = Infinity;
       for (const chunk of alive) if (chunk.route === route && chunk.dist < nearest) nearest = chunk.dist;

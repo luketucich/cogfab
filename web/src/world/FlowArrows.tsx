@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { getLatest, subscribe } from "./store";
+import { beltMultiplier, getStats } from "./economy";
 import { cellOffsets } from "./grid";
 import { chevronGeometry } from "./chevron";
 import { makeCurve, curvePoint, curveHeading, type Curve } from "./beltCurve";
@@ -29,6 +30,7 @@ export function FlowArrows() {
   const mesh = useRef<THREE.InstancedMesh>(null!);
   const runs = useRef<Run[]>([]);
   const clockNow = useRef(0); // latest clock time, to stamp deaths
+  const phase = useRef(0); // accumulated drift, so a speed change never jumps
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const geometry = useMemo(() => chevronGeometry(), []);
   const material = useMemo(
@@ -63,10 +65,13 @@ export function FlowArrows() {
 
   // Drift the chevrons along their curves and face them the way they travel, off a
   // shared clock. A deleted run keeps drifting while it shrinks to nothing.
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const now = clock.elapsedTime;
     clockNow.current = now;
-    const t = (now * SPEED) % 1; // one shared offset, so every chevron drifts together
+    // One shared offset so every chevron drifts together, hurrying up a little
+    // with each Belt Speed level.
+    phase.current = (phase.current + delta * SPEED * beltMultiplier(getStats().beltLevel)) % 1;
+    const t = phase.current;
     let inst = 0;
     for (const { segs, death } of runs.current) {
       const fade = death === null ? 1 : Math.max(0, 1 - (now - death) / FADE);

@@ -4,6 +4,7 @@ import { Hud } from "./Hud";
 import { OreCounter } from "./OreCounter";
 import { UpgradePanel } from "./UpgradePanel";
 import { ResetView } from "./ResetView";
+import { Controls } from "./Controls";
 import { Toolbar } from "./toolbar/Toolbar";
 
 export function App() {
@@ -23,6 +24,7 @@ export function App() {
       <UpgradePanel />
       <Toolbar />
       <ResetView />
+      <Controls />
     </div>
   );
 }
