@@ -2,9 +2,9 @@
 
 > A real-time, multiplayer co-op factory-automation game. Build an automated factory together, live, in the browser.
 
-**Status:** playable early build. Build belt lines, earn ore, buy upgrades and land. Multiplayer rooms and cloud deploy are next.
+**Status:** playable early build with multiplayer. Visiting drops you into a room; the URL is the invite link, and up to four people build one factory together. Persistence and cloud deploy are next.
 
-Cogfab is a browser game where multiple players share one factory grid and build it together in real time. You start on a small unlocked patch with just enough ore for your first extractor-belt-seller line; ore that reaches a seller earns, and earnings buy upgrades and more land. Under the game it is server-authoritative: a Go server owns the world and the economy, applies every player's commands, and streams the results to everyone.
+Cogfab is a browser game where multiple players share one factory grid and build it together in real time. You start on a small unlocked patch with just enough ore for your first extractor-belt-seller line; ore that reaches a seller earns, and earnings buy upgrades and more land. Everyone in a room shares everything (the grid, the ore, the upgrades) and sees where the others are pointing. Under the game it is server-authoritative: a Go server owns each room's world and economy, applies every player's commands, and streams the results to everyone in that room.
 
 ## Why this exists
 
@@ -12,7 +12,7 @@ A portfolio project to demonstrate (and defend in depth) real-time netcode, Go c
 
 ## Architecture in one line
 
-The Go server owns the grid and the economy on a single goroutine (no locks): commands apply instantly, a once-a-second simulation moves ore chunks along the belts and pays out only what lands in a seller, and clients get small snapshots plus a handful of economy numbers. Everything cosmetic (the flowing ore, the direction arrows, the particles) is derived client-side from the layout, so item positions never touch the wire.
+One server process hosts many rooms. Each room is a hub: a single goroutine that owns that room's grid and economy (no locks), applies commands instantly, and runs a once-a-second simulation that moves ore chunks along the belts and pays out only what lands in a seller. Clients get small snapshots plus a handful of economy numbers; everything cosmetic (the flowing ore, the direction arrows, the particles) is derived client-side from the layout, so item positions never touch the wire. Rooms are goroutines, not pods: a room is a few kilobytes ticking in microseconds, so hundreds fit in one process, and scaling out later just means routing each room code to a consistent process.
 
 ## Tech stack
 
@@ -35,7 +35,7 @@ cogfab/
 ├── cmd/server/        game server entrypoint
 ├── internal/
 │   ├── engine/        the pure factory grid (start here)
-│   ├── server/        the hub: world + economy + WebSocket clients
+│   ├── server/        rooms of hubs: world + economy + players per room
 │   └── wire/          the JSON messages both directions
 ├── web/               React + Vite + Three.js client
 └── docs/devlog.md     running development log
