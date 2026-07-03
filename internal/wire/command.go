@@ -12,6 +12,7 @@ const (
 	CmdDestroy = "destroy"
 	CmdRotate  = "rotate" // turn the structure at (X, Y) a quarter clockwise
 	CmdBuy     = "buy"    // purchase an upgrade; Upgrade says which
+	CmdHover   = "hover"  // where this player is pointing, for the other players
 	CmdPing    = "ping"   // a round-trip probe the server echoes back; see ws.go
 )
 
@@ -33,12 +34,14 @@ const (
 
 // Command targets a cell (X, Y) with an action (Type). For a "place", Kind says
 // which structure to place and Dir says which way it faces. For a "buy",
-// Upgrade says which upgrade to purchase.
+// Upgrade says which upgrade to purchase. For a "hover", Hovering says whether
+// the player is pointing at a cell at all.
 type Command struct {
-	Type    string `json:"type"`
-	X       int    `json:"x"`
-	Y       int    `json:"y"`
-	Kind    string `json:"kind"`
-	Dir     string `json:"dir"`
-	Upgrade string `json:"upgrade"`
+	Type     string `json:"type"`
+	X        int    `json:"x"`
+	Y        int    `json:"y"`
+	Kind     string `json:"kind"`
+	Dir      string `json:"dir"`
+	Upgrade  string `json:"upgrade"`
+	Hovering bool   `json:"hovering"`
 }

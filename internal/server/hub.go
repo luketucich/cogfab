@@ -15,10 +15,24 @@ import (
 // treated as too slow and dropped.
 const clientBuffer = 16
 
-// Client is one connected viewer. The hub only knows its outbound queue; the
-// WebSocket plumbing lives in the transport layer.
+// Client is one connected player: its outbound queue, its colour slot, and the
+// cell it is hovering. The WebSocket plumbing lives in the transport layer; the
+// presence fields are read and written only on the hub goroutine, the same
+// no-lock rule as everything else the hub owns.
 type Client struct {
 	send chan []byte
+
+	slot     int // 0-3; doubles as the player's colour (PLAYER_COLORS in ui.ts)
+	hovering bool
+	hoverX   int
+	hoverY   int
+}
+
+// clientCommand is a command plus who sent it. World commands ignore the
+// sender (the factory is shared); hover is about the sender.
+type clientCommand struct {
+	c   *Client
+	cmd wire.Command
 }
 
 // Hub owns the world and fans state out to clients. All access to the world and
@@ -26,6 +40,7 @@ type Client struct {
 // locks and no data races.
 type Hub struct {
 	world *engine.World
+	code  string // the room code players joined with; sent in each welcome
 
 	ironOre    int     // authoritative iron-ore total: earned at the seller, spent on builds
 	orePartial float64 // fractional ore carried between ticks (chunk values go fractional past the sim cap)
@@ -41,7 +56,7 @@ type Hub struct {
 	clients    map[*Client]bool
 	register   chan *Client
 	unregister chan *Client
-	commands   chan wire.Command
+	commands   chan clientCommand
 	done       chan struct{} // closed when Run exits, so the calls above never hang
 }
 
@@ -54,7 +69,7 @@ func NewHub(w *engine.World) *Hub {
 		clients:    make(map[*Client]bool),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
-		commands:   make(chan wire.Command),
+		commands:   make(chan clientCommand),
 		done:       make(chan struct{}),
 	}
 	h.recompute()
@@ -75,11 +90,19 @@ func (h *Hub) Run(ctx context.Context) {
 			return
 		case c := <-h.register:
 			h.addClient(c)
+			h.broadcastPresence()
 		case c := <-h.unregister:
 			h.removeClient(c)
-		case cmd := <-h.commands:
+			h.broadcastPresence()
+		case sub := <-h.commands:
+			if sub.cmd.Type == wire.CmdHover {
+				if h.applyHover(sub.c, sub.cmd) {
+					h.broadcastPresence()
+				}
+				continue
+			}
 			ore, rate := h.ironOre, h.currentRate()
-			if h.apply(cmd) {
+			if h.apply(sub.cmd) {
 				h.broadcast(h.stateBytes())
 				h.recompute()
 				if h.ironOre != ore || h.currentRate() != rate {
@@ -112,9 +135,9 @@ func (h *Hub) Unregister(c *Client) {
 	}
 }
 
-func (h *Hub) Submit(cmd wire.Command) {
+func (h *Hub) Submit(c *Client, cmd wire.Command) {
 	select {
-	case h.commands <- cmd:
+	case h.commands <- clientCommand{c: c, cmd: cmd}:
 	case <-h.done:
 	}
 }
@@ -187,10 +210,13 @@ func (h *Hub) broadcast(b []byte) {
 	}
 }
 
-// addClient adds a client and sends it the current world and economy right away,
-// so it is not blank until something changes.
+// addClient seats a client in the lowest free colour slot and sends it its
+// welcome, then the current world and economy, so it is not blank until
+// something changes. (The caller broadcasts the new roster to everyone.)
 func (h *Hub) addClient(c *Client) {
+	c.slot = h.lowestFreeSlot()
 	h.clients[c] = true
+	h.sendTo(c, h.welcomeBytes(c))
 	h.sendTo(c, h.stateBytes())
 	h.sendTo(c, h.statsBytes())
 }

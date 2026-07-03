@@ -5,6 +5,7 @@ import { OreCounter } from "./OreCounter";
 import { UpgradePanel } from "./UpgradePanel";
 import { ResetView } from "./ResetView";
 import { Controls } from "./Controls";
+import { RoomFull } from "./RoomFull";
 import { Toolbar } from "./toolbar/Toolbar";
 
 export function App() {
@@ -25,6 +26,7 @@ export function App() {
       <Toolbar />
       <ResetView />
       <Controls />
+      <RoomFull />
     </div>
   );
 }

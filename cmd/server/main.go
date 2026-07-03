@@ -21,13 +21,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// An empty world: players start on a small unlocked region with just enough
-	// ore to build their first extractor-to-seller line.
-	hub := server.NewHub(engine.NewWorld(12, 8))
-	go hub.Run(ctx)
+	// Every room starts as an empty world: a small unlocked region and just
+	// enough ore to build a first extractor-to-seller line. Rooms are created
+	// on demand and survive ten minutes after the last player leaves.
+	rooms := server.NewRooms(ctx, 10*time.Minute, func() *engine.World {
+		return engine.NewWorld(12, 8)
+	})
 
 	mux := http.NewServeMux()
-	mux.Handle("/ws", hub.Handler())
+	mux.Handle("/ws", rooms.Handler())
 	srv := &http.Server{Addr: addr, Handler: mux}
 
 	go func() {

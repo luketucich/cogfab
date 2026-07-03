@@ -1,10 +1,22 @@
 import type { Command, ServerMessage } from "./types";
 import { setLatest } from "../world/store";
 import { setStats } from "../world/economy";
+import { setPresence } from "../world/presence";
+import { setRoomFull, setSession } from "./session";
 import { setPing } from "./ping";
 
-const SERVER_URL = "ws://localhost:8080/ws"; // dev only; derive from the host before deploying
 const PING_INTERVAL = 2000; // ms between round-trip probes
+
+// wsUrl is where the game server lives: derived from the page in production,
+// a localhost fallback in dev (Vite serves the page, Go serves the game). The
+// room code rides along from the address bar, and because location is read
+// fresh on every attempt, reconnects follow whatever room the URL names.
+export function wsUrl(loc: Pick<Location, "protocol" | "host" | "search"> = location, dev = import.meta.env.DEV): string {
+  const proto = loc.protocol === "https:" ? "wss:" : "ws:";
+  const host = dev ? "localhost:8080" : loc.host;
+  const room = new URLSearchParams(loc.search).get("room");
+  return `${proto}//${host}/ws${room ? `?room=${room}` : ""}`;
+}
 
 type StatusListener = (connected: boolean) => void;
 
@@ -17,6 +29,7 @@ class Connection {
   private listeners = new Set<StatusListener>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private refused = false; // the room was full; reconnecting would just knock again
 
   // start opens the connection. Safe to call more than once; extra calls are
   // ignored while a socket is open or a reconnect is already pending (React
@@ -43,7 +56,7 @@ class Connection {
   }
 
   private connect(): void {
-    const ws = new WebSocket(SERVER_URL);
+    const ws = new WebSocket(wsUrl());
     this.ws = ws;
 
     ws.onopen = () => {
@@ -55,13 +68,23 @@ class Connection {
       const msg = JSON.parse(e.data as string) as ServerMessage;
       if (msg.type === "state") setLatest(msg);
       else if (msg.type === "stats") setStats(msg);
-      else if (msg.type === "pong") setPing(performance.now() - msg.t);
+      else if (msg.type === "welcome") {
+        setSession(msg.room, msg.slot);
+        // The server's code is authoritative: write it into the address bar so
+        // the URL is the invite link and a reconnect rejoins the same room.
+        history.replaceState(null, "", `${location.pathname}?room=${msg.room}`);
+      } else if (msg.type === "presence") setPresence(msg.players);
+      else if (msg.type === "roomFull") {
+        this.refused = true;
+        setRoomFull();
+      } else if (msg.type === "pong") setPing(performance.now() - msg.t);
     };
     ws.onclose = () => {
       this.stopPinging();
       setPing(null);
       this.emit(false);
       this.ws = null;
+      if (this.refused) return; // full room: stay away until the player picks a new one
       this.scheduleReconnect();
     };
     ws.onerror = () => ws.close();

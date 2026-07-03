@@ -3,6 +3,22 @@
 What I've worked on, newest first.
 
 ## 2026-07-03
+- Multiplayer rooms. Visiting the site drops you straight into a room and the
+  room code lands in the URL, so the address bar is the invite link: anyone who
+  opens it joins your factory (up to four people). Everything is shared per
+  room (grid, ore, upgrades), each player gets a colour, and you see where the
+  others are pointing as a soft tile in their colour. Rooms are goroutines,
+  not pods: one server process hosts hundreds of them (a mutex guards the
+  lookup; each room's world stays lock-free on its own goroutine), and an
+  empty room survives ten minutes so a refresh never loses the factory.
+- Made the upgrades infinite: costs keep doubling, Ore Value doubles what each
+  delivery is worth, and past level five the belts are visually maxed so
+  richer chunks carry the difference. The game never runs out of a next thing
+  to save for.
+- A performance pass ahead of multiplayer: the ore emitter was quadratic in
+  routes times chunks; noting each route's nearest chunk while advancing took
+  a packed 64x64 board from 148ms to 2ms per tick (benchmarks now live in the
+  repo), and the client stopped computing the belt runs twice per change.
 - Juice pass: synthesized sound effects (placing, tearing down, buying, unlocking land), particle bursts for builds and teardowns, and a gold sparkle every time ore lands in a seller. No audio files; every sound is a couple of WebAudio oscillators.
 - Two more upgrades: Belt Speed (ore moves faster, and faster belts genuinely deliver more) and Ore Value (each delivery worth more). Every upgrade card now says exactly what the next level buys, like "5 to 7.5 ore/s per extractor".
 - Camera feel: the wheel glides the zoom toward the cursor, Q/E spin the view a quarter turn, and Reset View flies home instead of snapping.

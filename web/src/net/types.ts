@@ -33,6 +33,38 @@ export type StatsMessage = {
   nextGridHeight: number;
 };
 
+// WelcomeMessage is the first thing we hear after joining: our room's code (the
+// address bar gets rewritten to it, making the URL the invite link) and our
+// player slot, which doubles as our colour. Mirror of wire.WelcomeMessage.
+export type WelcomeMessage = {
+  type: "welcome";
+  room: string;
+  slot: number;
+};
+
+// PresencePlayer is one connected player: its slot and the cell it is hovering,
+// if any. Mirror of wire.PresencePlayer.
+export type PresencePlayer = {
+  slot: number;
+  hovering: boolean;
+  x: number;
+  y: number;
+};
+
+// PresenceMessage is the room's full roster, sent whenever a player joins,
+// leaves, or moves their hover. Mirror of wire.PresenceMessage.
+export type PresenceMessage = {
+  type: "presence";
+  players: PresencePlayer[];
+};
+
+// RoomFullMessage means the room already holds its four players; the server
+// closes right after, and we must not reconnect to this room. Mirror of
+// wire.RoomFullMessage.
+export type RoomFullMessage = {
+  type: "roomFull";
+};
+
 // PongMessage answers a ping with the timestamp we sent, so we can measure the
 // round-trip time. Mirror of wire.PongMessage in Go.
 export type PongMessage = {
@@ -40,7 +72,7 @@ export type PongMessage = {
   t: number;
 };
 
-export type ServerMessage = StateMessage | StatsMessage | PongMessage;
+export type ServerMessage = StateMessage | StatsMessage | WelcomeMessage | PresenceMessage | RoomFullMessage | PongMessage;
 
 // PlaceableKind is the tile kinds a player can place (everything but empty).
 // Derived from TileView so the two stay in sync.
@@ -75,6 +107,13 @@ export type BuyCommand = {
   upgrade: "extractorRate" | "beltSpeed" | "oreValue" | "gridSize";
 };
 
+export type HoverCommand = {
+  type: "hover"; // where this player is pointing, for the other players
+  hovering: boolean;
+  x: number;
+  y: number;
+};
+
 // Ping is deliberately not in this union: connection.ts sends it raw and the
 // server answers it in the transport layer, before commands reach the game.
-export type Command = PlaceCommand | DestroyCommand | RotateCommand | BuyCommand;
+export type Command = PlaceCommand | DestroyCommand | RotateCommand | BuyCommand | HoverCommand;
