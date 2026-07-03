@@ -2,6 +2,30 @@
 
 What I've worked on, newest first.
 
+## 2026-07-03
+- Juice pass: synthesized sound effects (placing, tearing down, buying, unlocking land), particle bursts for builds and teardowns, and a gold sparkle every time ore lands in a seller. No audio files; every sound is a couple of WebAudio oscillators.
+- Two more upgrades: Belt Speed (ore moves faster, and faster belts genuinely deliver more) and Ore Value (each delivery worth more). Every upgrade card now says exactly what the next level buys, like "5 to 7.5 ore/s per extractor".
+- Camera feel: the wheel glides the zoom toward the cursor, Q/E spin the view a quarter turn, and Reset View flies home instead of snapping.
+- Quality of life: R rotates whatever you hover (free), Shift locks the placement direction mid-drag, white arrows over extractors and sellers show which way they face, and a ? button lists the controls.
+- Redesigned the top counter: labelled stats, fixed-width digits so it never jitters, a steady production rate instead of a flickering per-second measurement, and a count-up that never visibly rewinds.
+
+## 2026-07-01
+- Spending: building costs ore and destroying refunds half. The world starts as a bare 3x3 region you grow by buying Grid Size tiers, and Extractor Rate is the first real upgrade. Two rules keep the game unbrickable: upgrades only sell while ore is flowing, and a teardown that stops all income refunds in full.
+- Earning: the server runs the same ore-chunk simulation the client draws, so only ore that actually lands in a seller counts, and just a few numbers cross the wire each second. Plus a proper game HUD: ore counter, real ping bar, upgrade panel, icon hotbar with hotkeys.
+
+## 2026-06-27
+- Belts show their flow live: faint chevrons drift along every run, white when it reaches a seller and red when it dead-ends. Reworked hover feedback too: a soft glow tile with a facing arrow on empty cells, and structures light up under the cursor.
+- Added the seller, the machine that ships material off the grid. Ore now has somewhere to go.
+
+## 2026-06-26
+- Belts auto-tile: joining belts snap into corners, tees, and crosses on their own, derived from which neighbours connect.
+
+## 2026-06-25
+- Drag to lay belt paths: each belt faces the way you drag, and R rotates a single placement.
+
+## 2026-06-24
+- Building works: a toolbar to place and destroy structures, and any player's change shows up for everyone instantly.
+
 ## 2026-06-23
 - Gave the 3D view a proper builder camera: locked isometric angle, drag to pan, zoom toward the cursor, scaled by how many tiles fit on screen.
 - Made the floor an infinite checkerboard that follows the camera, added a soft screen vignette, and fixed a clip bug that dropped the floor when zoomed out.
