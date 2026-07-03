@@ -16,8 +16,9 @@ const MAX_STEP = 0.1; // clamp the frame step so a backgrounded tab does not tel
 
 // A Route is one extractor-to-seller path the ore rides: the curve for each cell
 // and the tile each cell sits on, so a chunk can tell when the belt under it is
-// gone.
-type Route = { curves: Curve[]; cells: number[] };
+// gone. nearest is per-frame scratch: the chunk closest to the extractor, noted
+// while advancing so emission never rescans every chunk.
+type Route = { curves: Curve[]; cells: number[]; nearest: number };
 
 // A Chunk of ore riding a route: how far along it has travelled (in cells) and a
 // fixed id so its tumble stays steady frame to frame.
@@ -59,6 +60,7 @@ export function FlowItems() {
           routes.current.get(key) ?? {
             curves: run.steps.map((s) => makeCurve(s.x - offX, s.y - offZ, s.entry, s.exit)),
             cells: run.steps.map((s) => s.y * snap.width + s.x),
+            nearest: Infinity,
           },
         );
       }
@@ -75,7 +77,9 @@ export function FlowItems() {
     lastTime.current = now;
 
     // Advance every chunk, dropping the ones that reached the seller or whose belt
-    // is gone (a gap, or all belts cleared).
+    // is gone (a gap, or all belts cleared), noting each route's nearest chunk
+    // in passing.
+    for (const route of routes.current.values()) route.nearest = Infinity;
     const alive: Chunk[] = [];
     for (const chunk of chunks.current) {
       chunk.dist += step;
@@ -93,6 +97,7 @@ export function FlowItems() {
         continue;
       }
       if (snap?.tiles[chunk.route.cells[cell]]?.kind !== "belt") continue; // belt gone: fell off
+      if (chunk.dist < chunk.route.nearest) chunk.route.nearest = chunk.dist;
       alive.push(chunk);
     }
 
@@ -102,10 +107,8 @@ export function FlowItems() {
     // emitGap and emit in economy.go.
     const gap = ORE_GAP / (1 + 0.5 * Math.min(getStats().extractorLevel, MAX_SIM_LEVEL));
     for (const route of routes.current.values()) {
-      let nearest = Infinity;
-      for (const chunk of alive) if (chunk.route === route && chunk.dist < nearest) nearest = chunk.dist;
-      if (nearest === Infinity) alive.push({ route, dist: 0, id: nextId.current++ });
-      else if (nearest >= gap) alive.push({ route, dist: nearest - gap, id: nextId.current++ });
+      if (route.nearest === Infinity) alive.push({ route, dist: 0, id: nextId.current++ });
+      else if (route.nearest >= gap) alive.push({ route, dist: route.nearest - gap, id: nextId.current++ });
     }
     chunks.current = alive;
 
