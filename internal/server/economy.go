@@ -72,8 +72,9 @@ func (h *Hub) currentRate() float64 {
 // point at it, so a path rebuilt unchanged keeps the same route and its chunks keep
 // flowing.
 type route struct {
-	cells  []int
-	seller int
+	cells   []int
+	seller  int
+	nearest float64 // scratch: the closest chunk to the extractor this sub-step, for emit
 }
 
 // chunk is one ore in flight: how far along its route it has travelled, in belts.
@@ -108,6 +109,9 @@ func (h *Hub) tick() {
 	speed := h.beltSpeed()
 	value := h.chunkValue()
 	for s := 0; s < subSteps; s++ {
+		for _, rt := range h.routes {
+			rt.nearest = -1
+		}
 		alive := h.chunks[:0]
 		for _, c := range h.chunks {
 			c.dist += speed / subSteps
@@ -120,6 +124,9 @@ func (h *Hub) tick() {
 			}
 			if !h.world.IsBelt(c.route.cells[cell]) {
 				continue // its belt is gone: fell off
+			}
+			if c.route.nearest < 0 || c.dist < c.route.nearest {
+				c.route.nearest = c.dist // noted in passing, so emit never rescans
 			}
 			alive = append(alive, c)
 		}
@@ -135,22 +142,17 @@ func (h *Hub) tick() {
 }
 
 // emit adds a chunk at the head of each route once the nearest one has moved a
-// gap ahead. The new chunk starts at the overshoot past the gap, not at zero,
-// so no spacing is lost between steps and the long-run rate is exactly
-// beltSpeed/emitGap at every level.
+// gap ahead, reading the nearest the advance pass already noted (a rescan here
+// went quadratic on big boards). The new chunk starts at the overshoot past the
+// gap, not at zero, so no spacing is lost between steps and the long-run rate
+// is exactly beltSpeed/emitGap at every level.
 func (h *Hub) emit() {
 	gap := h.emitGap()
 	for _, rt := range h.routes {
-		nearest := -1.0
-		for _, c := range h.chunks {
-			if c.route == rt && (nearest < 0 || c.dist < nearest) {
-				nearest = c.dist
-			}
-		}
-		if nearest < 0 {
+		if rt.nearest < 0 {
 			h.chunks = append(h.chunks, &chunk{route: rt})
-		} else if nearest >= gap {
-			h.chunks = append(h.chunks, &chunk{route: rt, dist: nearest - gap})
+		} else if rt.nearest >= gap {
+			h.chunks = append(h.chunks, &chunk{route: rt, dist: rt.nearest - gap})
 		}
 	}
 }
