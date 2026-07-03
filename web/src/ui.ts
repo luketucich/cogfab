@@ -9,6 +9,10 @@ export const FONT_UI = "'Nunito', system-ui, sans-serif"; // its clean rounded s
 export const ACCENT = "#6ea8ff"; // selected / interactive highlight
 export const ORE_TEXT = "#d9b878"; // ore amounts and prices, a warm metal tone
 
+// PLAYER_COLORS is one colour per player slot: four seats, four hues that read
+// on the dark floor. Mirror of maxPlayers in internal/server/rooms.go.
+export const PLAYER_COLORS = ["#58a6ff", "#f6c453", "#5fd47a", "#e77fd0"];
+
 // panel is the frosted-dark card every HUD piece sits in.
 export const panel: CSSProperties = {
   position: "absolute",

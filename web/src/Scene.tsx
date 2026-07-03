@@ -12,6 +12,7 @@ import { Bursts } from "./world/Bursts";
 import { Ground } from "./world/Ground";
 import { HoverGlow } from "./world/HoverGlow";
 import { MouthMarkers } from "./world/MouthMarkers";
+import { PlayerCursors } from "./world/PlayerCursors";
 import { Region } from "./world/Region";
 
 // Scene is the whole 3D view: a locked isometric camera you pan and zoom like a
@@ -51,6 +52,7 @@ export function Scene() {
       <FlowItems />
       <FlowArrows />
       <MouthMarkers />
+      <PlayerCursors />
       <Bursts />
     </Canvas>
   );
