@@ -66,6 +66,53 @@ func TestBroadcastSendsToAllClients(t *testing.T) {
 	}
 }
 
+func TestClientsGetTheLowestFreeSlot(t *testing.T) {
+	h := NewHub(newTestWorld())
+	a := &Client{send: make(chan []byte, 8)}
+	b := &Client{send: make(chan []byte, 8)}
+	c := &Client{send: make(chan []byte, 8)}
+	h.addClient(a)
+	h.addClient(b)
+	h.addClient(c)
+	if a.slot != 0 || b.slot != 1 || c.slot != 2 {
+		t.Fatalf("slots = %d %d %d, want 0 1 2", a.slot, b.slot, c.slot)
+	}
+
+	// b leaves; the next player takes the hole b left, not slot 3
+	h.removeClient(b)
+	d := &Client{send: make(chan []byte, 8)}
+	h.addClient(d)
+	if d.slot != 1 {
+		t.Fatalf("slot = %d after refilling, want 1", d.slot)
+	}
+}
+
+func TestPresenceRosterTracksHovers(t *testing.T) {
+	h := NewHub(newTestWorld())
+	a := &Client{send: make(chan []byte, 8)}
+	b := &Client{send: make(chan []byte, 8)}
+	h.addClient(a)
+	h.addClient(b)
+
+	if !h.applyHover(b, wire.Command{Type: wire.CmdHover, Hovering: true, X: 2, Y: 0}) {
+		t.Fatal("a fresh hover should count as a change")
+	}
+	if h.applyHover(b, wire.Command{Type: wire.CmdHover, Hovering: true, X: 2, Y: 0}) {
+		t.Fatal("repeating the same hover should not count as a change")
+	}
+
+	var msg wire.PresenceMessage
+	if err := json.Unmarshal(h.presenceBytes(), &msg); err != nil {
+		t.Fatalf("presence bytes are not valid JSON: %v", err)
+	}
+	if len(msg.Players) != 2 {
+		t.Fatalf("roster has %d players, want 2", len(msg.Players))
+	}
+	if p := msg.Players[1]; p.Slot != 1 || !p.Hovering || p.X != 2 || p.Y != 0 {
+		t.Fatalf("player 1 = %+v, want slot 1 hovering (2,0)", p)
+	}
+}
+
 func TestBroadcastDropsSlowClient(t *testing.T) {
 	h := NewHub(newTestWorld())
 	slow := &Client{send: make(chan []byte, 1)}

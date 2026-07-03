@@ -66,7 +66,7 @@ func (h *Hub) Handler() http.HandlerFunc {
 					}
 					continue
 				}
-				h.Submit(msg.Command)
+				h.Submit(client, msg.Command)
 			}
 		}()
 

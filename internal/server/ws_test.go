@@ -31,13 +31,22 @@ func TestEndToEndClientReceivesState(t *testing.T) {
 	}
 	defer conn.CloseNow()
 
+	// The welcome comes first, then the world.
 	readCtx, readCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer readCancel()
 	_, data, err := conn.Read(readCtx)
 	if err != nil {
-		t.Fatalf("read: %v", err)
+		t.Fatalf("read welcome: %v", err)
+	}
+	var welcome wire.WelcomeMessage
+	if err := json.Unmarshal(data, &welcome); err != nil || welcome.Type != "welcome" {
+		t.Fatalf("first message should be a welcome, got %s", data)
 	}
 
+	_, data, err = conn.Read(readCtx)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
 	var msg wire.StateMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		t.Fatalf("payload is not a valid StateMessage: %v; raw=%s", err, data)
