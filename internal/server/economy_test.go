@@ -32,10 +32,16 @@ func TestOreSimCountsDeliveries(t *testing.T) {
 	if h.ironOre <= startingOre {
 		t.Fatalf("after 10s ore should be landing: ironOre=%d", h.ironOre)
 	}
-	// The constants promise oreSpeed/oreGap = 5 chunks per second at steady state,
-	// mirrored by the client's FlowItems. Pin it so the two cannot silently drift.
-	if h.ratePerSec != 5 {
-		t.Fatalf("ratePerSec = %d at steady state, want 5", h.ratePerSec)
+	// The constants promise oreSpeed/oreGap = 5 chunks per second, mirrored by
+	// the client's FlowItems. Pin both the advertised rate and the measured
+	// deliveries so the two cannot silently drift.
+	if h.currentRate() != 5 {
+		t.Fatalf("currentRate = %v at steady state, want 5", h.currentRate())
+	}
+	before := h.ironOre
+	tickN(h, 10)
+	if got := h.ironOre - before; got != 50 {
+		t.Fatalf("delivered %d over 10s at steady state, want 50 (5/s)", got)
 	}
 }
 
@@ -68,6 +74,46 @@ func TestOreSimRateScalesWithExtractorLevel(t *testing.T) {
 	// between steps, so ten seconds must land ~175, not saturate below it.
 	if got < 170 || got > 180 {
 		t.Fatalf("delivered %d over 10s at max level, want ~175", got)
+	}
+}
+
+func TestOreSimBeltSpeedRaisesTheRate(t *testing.T) {
+	_, h := run(3)
+	h.beltLevel = 1 // 25% faster: same spacing arrives more often, 6.25/s
+	tickN(h, 10)    // warm up
+	before := h.ironOre
+	tickN(h, 10)
+	got := h.ironOre - before
+	if got < 60 || got > 66 {
+		t.Fatalf("delivered %d over 10s at belt level 1, want ~62 (6.25/s)", got)
+	}
+}
+
+func TestOreSimOreValueMultipliesEarnings(t *testing.T) {
+	_, h := run(3)
+	h.valueLevel = 1 // each delivery worth 2
+	tickN(h, 10)     // warm up
+	before := h.ironOre
+	tickN(h, 10)
+	got := h.ironOre - before
+	if got != 100 {
+		t.Fatalf("earned %d over 10s at value level 1, want 100 (5 chunks/s worth 2 each)", got)
+	}
+}
+
+func TestOreSimHandlesEverythingMaxed(t *testing.T) {
+	// The most extreme legal economy: ~39.4 chunks/s per line, each worth 6.
+	// subSteps must keep up (one emission per step at most).
+	_, h := run(3)
+	h.extractorLevel = maxExtractorLevel
+	h.beltLevel = maxBeltLevel
+	h.valueLevel = maxValueLevel
+	tickN(h, 10) // warm up
+	before := h.ironOre
+	tickN(h, 10)
+	got := h.ironOre - before
+	if got < 2300 || got > 2400 {
+		t.Fatalf("earned %d over 10s fully maxed, want ~2360 (39.4/s worth 6)", got)
 	}
 }
 

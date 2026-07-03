@@ -4,6 +4,7 @@ import { PiCaretDoubleRightFill, PiShovelFill, PiStorefrontFill, PiTrashFill } f
 import { TOOLS, getSelectedId, selectTool, subscribe } from "./tools";
 import { getStats, spendableOre, subscribeStats } from "../world/economy";
 import { tile, ACCENT, ORE_TEXT } from "../ui";
+import { sfx } from "../sfx";
 
 // One icon per tool, keyed by id.
 const ICONS: Record<string, IconType> = {
@@ -22,8 +23,12 @@ export function Toolbar() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
       const tool = TOOLS.find((t) => t.hotkey === e.key);
-      if (tool) selectTool(tool.id);
+      if (tool) {
+        selectTool(tool.id);
+        sfx.select();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -38,7 +43,10 @@ export function Toolbar() {
         return (
           <button
             key={tool.id}
-            onClick={() => selectTool(tool.id)}
+            onClick={() => {
+              selectTool(tool.id);
+              sfx.select();
+            }}
             aria-pressed={selected}
             title={`${tool.label} (${tool.hotkey})${tool.cost ? ` · ${tool.cost} ore` : ""}`}
             style={{

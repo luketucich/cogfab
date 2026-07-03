@@ -6,14 +6,46 @@ import type { StatsMessage } from "../net/types";
 // outside React like the world store; the OreCounter reads it each animation
 // frame.
 
+// How fast ore moves and how closely it packs, in belts and belts/sec. Mirror
+// of oreSpeed and oreGap in internal/server/economy.go; keep them in step.
+export const ORE_SPEED = 2.5;
+export const ORE_GAP = 0.5;
+
+// fmtNum trims a number for display: whole numbers stay whole, fractions keep
+// up to `decimals` digits with trailing zeros dropped.
+export function fmtNum(n: number, decimals = 2): string {
+  return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(decimals)));
+}
+
+// beltMultiplier is the Belt Speed scale: each level adds a quarter of the base
+// speed. Mirror of beltSpeed in economy.go.
+export function beltMultiplier(beltLevel: number): number {
+  return 1 + 0.25 * beltLevel;
+}
+
+// perExtractorRate is the ore per second one extractor earns at the given
+// upgrade levels: denser emission, faster belts, and a value multiplier on
+// each delivery. Mirror of emitGap, beltSpeed, and oreValue in economy.go,
+// expressed as one rate for the upgrade cards.
+export function perExtractorRate(extractorLevel: number, beltLevel: number, valueLevel: number): number {
+  const chunksPerSec = (ORE_SPEED * beltMultiplier(beltLevel)) / (ORE_GAP / (1 + 0.5 * extractorLevel));
+  return chunksPerSec * (1 + valueLevel);
+}
+
 type Stats = {
   ironOre: number;
   ratePerSec: number;
   extractorLevel: number;
   extractorCost: number; // 0 = maxed
+  beltLevel: number;
+  beltCost: number; // 0 = maxed
+  valueLevel: number;
+  valueCost: number; // 0 = maxed
   gridWidth: number; // unlocked region, centred in the world
   gridHeight: number;
   gridCost: number; // 0 = maxed
+  nextGridWidth: number; // 0 when maxed
+  nextGridHeight: number;
   receivedAt: number;
 };
 
@@ -22,9 +54,15 @@ let stats: Stats = {
   ratePerSec: 0,
   extractorLevel: 0,
   extractorCost: 0,
+  beltLevel: 0,
+  beltCost: 0,
+  valueLevel: 0,
+  valueCost: 0,
   gridWidth: 0,
   gridHeight: 0,
   gridCost: 0,
+  nextGridWidth: 0,
+  nextGridHeight: 0,
   receivedAt: 0,
 };
 const listeners = new Set<() => void>();
@@ -50,9 +88,15 @@ export function setStats(msg: StatsMessage): void {
     ratePerSec: msg.ratePerSec,
     extractorLevel: msg.extractorLevel,
     extractorCost: msg.extractorCost,
+    beltLevel: msg.beltLevel,
+    beltCost: msg.beltCost,
+    valueLevel: msg.valueLevel,
+    valueCost: msg.valueCost,
     gridWidth: msg.gridWidth,
     gridHeight: msg.gridHeight,
     gridCost: msg.gridCost,
+    nextGridWidth: msg.nextGridWidth,
+    nextGridHeight: msg.nextGridHeight,
     receivedAt: performance.now(),
   };
   pendingSpend = 0;

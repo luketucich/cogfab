@@ -6,9 +6,10 @@ import (
 )
 
 // Everything ore buys lives here: placing structures, tearing them down for a
-// partial refund, and the two upgrades (faster extractors, a bigger unlocked
-// region). Keep the build costs in step with web/src/toolbar/tools.ts; the
-// region centring has its own mirror note on unlockedRect below.
+// partial refund, and the four upgrades (denser extractors, faster belts,
+// richer ore, a bigger unlocked region). Keep the build costs in step with
+// web/src/toolbar/tools.ts; the region centring has its own mirror note on
+// unlockedRect below.
 
 // startingOre covers a first extractor, belt, and seller (160 ore) with spare.
 // A line stays affordable forever: upgrades only sell while ore is flowing, and
@@ -28,11 +29,19 @@ var buildCost = map[engine.TileKind]int{
 // so cycling build-and-destroy always loses ore.
 func refund(kind engine.TileKind) int { return buildCost[kind] / 2 }
 
-// Extractor Rate: a global level that makes every extractor emit ore closer
-// together (see emitGap in economy.go). Each level doubles in price.
+// The three rate upgrades, each a global level that doubles in price: Extractor
+// Rate packs ore closer together (emitGap), Belt Speed carries it faster
+// (beltSpeed), and Ore Value makes each delivery worth more (oreValue), all in
+// economy.go.
 const (
 	extractorBaseCost = 150
 	maxExtractorLevel = 5
+
+	beltBaseCost = 200
+	maxBeltLevel = 5
+
+	valueBaseCost = 400
+	maxValueLevel = 5
 )
 
 // gridTiers are the unlockable region sizes, smallest first. Buying Grid Size
@@ -45,13 +54,20 @@ var gridTiers = []struct{ w, h, cost int }{
 	{12, 8, 8000},
 }
 
-// extractorCost is the price of the next extractor level, 0 once maxed.
-func (h *Hub) extractorCost() int {
-	if h.extractorLevel >= maxExtractorLevel {
+// doublingCost is the price of an upgrade's next level: the base, doubling per
+// level, 0 once maxed.
+func doublingCost(level, max, base int) int {
+	if level >= max {
 		return 0
 	}
-	return extractorBaseCost << h.extractorLevel
+	return base << level
 }
+
+func (h *Hub) extractorCost() int {
+	return doublingCost(h.extractorLevel, maxExtractorLevel, extractorBaseCost)
+}
+func (h *Hub) beltCost() int  { return doublingCost(h.beltLevel, maxBeltLevel, beltBaseCost) }
+func (h *Hub) valueCost() int { return doublingCost(h.valueLevel, maxValueLevel, valueBaseCost) }
 
 // gridCost is the price of the next grid tier, 0 once the whole world is open.
 func (h *Hub) gridCost() int {
@@ -136,6 +152,15 @@ func (h *Hub) applyDestroy(cmd wire.Command) bool {
 	return true
 }
 
+// applyRotate turns a structure a quarter clockwise, free of charge.
+func (h *Hub) applyRotate(cmd wire.Command) bool {
+	if !h.unlocked(cmd.X, cmd.Y) || h.world.At(cmd.X, cmd.Y).Kind == engine.Empty {
+		return false
+	}
+	h.world.Rotate(cmd.X, cmd.Y)
+	return true
+}
+
 // applyBuy pays for an upgrade if the ore covers it and it is not maxed out.
 // Upgrades only sell while ore is flowing: with income the purse always
 // recovers, so no purchase can strand the game.
@@ -143,23 +168,24 @@ func (h *Hub) applyBuy(cmd wire.Command) bool {
 	if len(h.routes) == 0 {
 		return false
 	}
+	var cost int
+	var level *int
 	switch cmd.Upgrade {
 	case wire.UpgradeExtractorRate:
-		cost := h.extractorCost()
-		if cost == 0 || cost > h.ironOre {
-			return false
-		}
-		h.ironOre -= cost
-		h.extractorLevel++
-		return true
+		cost, level = h.extractorCost(), &h.extractorLevel
+	case wire.UpgradeBeltSpeed:
+		cost, level = h.beltCost(), &h.beltLevel
+	case wire.UpgradeOreValue:
+		cost, level = h.valueCost(), &h.valueLevel
 	case wire.UpgradeGridSize:
-		cost := h.gridCost()
-		if cost == 0 || cost > h.ironOre {
-			return false
-		}
-		h.ironOre -= cost
-		h.gridTier++
-		return true
+		cost, level = h.gridCost(), &h.gridTier
+	default:
+		return false
 	}
-	return false
+	if cost == 0 || cost > h.ironOre {
+		return false
+	}
+	h.ironOre -= cost
+	*level++
+	return true
 }

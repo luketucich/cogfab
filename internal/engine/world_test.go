@@ -43,3 +43,21 @@ func TestPlaceSeller(t *testing.T) {
 		t.Errorf("placed tile dir = %v, want West", tile.Dir)
 	}
 }
+
+func TestRotateTurnsAQuarterClockwise(t *testing.T) {
+	w := NewWorld(2, 1)
+	w.PlaceBelt(0, 0, North)
+
+	for _, want := range []Direction{East, South, West, North} {
+		w.Rotate(0, 0)
+		if got := w.At(0, 0).Dir; got != want {
+			t.Fatalf("after rotate, dir = %v, want %v", got, want)
+		}
+	}
+
+	w.Rotate(1, 0) // empty: no-op
+	if w.At(1, 0).Kind != Empty {
+		t.Error("rotating an empty cell should change nothing")
+	}
+	w.Rotate(5, 5) // off-grid: no-op, must not panic
+}

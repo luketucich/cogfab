@@ -90,3 +90,16 @@ func (w *World) PlaceSeller(x, y int, dir Direction) { w.set(x, y, Tile{Kind: Se
 // Destroy empties the tile at (x, y), removing any structure on it. Off-grid
 // coordinates are ignored.
 func (w *World) Destroy(x, y int) { w.set(x, y, Tile{}) }
+
+// Rotate turns the structure at (x, y) a quarter clockwise. Empty cells and
+// off-grid coordinates are ignored.
+func (w *World) Rotate(x, y int) {
+	if !w.inBounds(x, y) {
+		return
+	}
+	t := w.At(x, y)
+	if t.Kind == Empty {
+		return
+	}
+	w.set(x, y, Tile{Kind: t.Kind, Dir: (t.Dir + 1) % 4})
+}

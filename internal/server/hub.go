@@ -27,10 +27,11 @@ type Client struct {
 type Hub struct {
 	world *engine.World
 
-	ironOre    int // authoritative iron-ore total: earned at the seller, spent on builds
-	ratePerSec int // ore delivered per second right now, shown in the HUD
+	ironOre int // authoritative iron-ore total: earned at the seller, spent on builds
 
 	extractorLevel int // global Extractor Rate level; higher emits ore denser
+	beltLevel      int // global Belt Speed level; higher carries ore faster
+	valueLevel     int // global Ore Value level; higher makes each delivery worth more
 	gridTier       int // index into gridTiers: how much of the world is unlocked
 
 	routes map[string]*route // live extractor-to-seller paths, for emitting ore
@@ -76,17 +77,17 @@ func (h *Hub) Run(ctx context.Context) {
 		case c := <-h.unregister:
 			h.removeClient(c)
 		case cmd := <-h.commands:
+			ore, rate := h.ironOre, h.currentRate()
 			if h.apply(cmd) {
 				h.broadcast(h.stateBytes())
 				h.recompute()
-				h.broadcastStats() // commands move ore (costs, refunds, buys)
+				if h.ironOre != ore || h.currentRate() != rate {
+					h.broadcastStats() // the command moved ore or changed the rate
+				}
 			}
 		case <-ticker.C:
 			if len(h.routes) > 0 || len(h.chunks) > 0 {
 				h.tick()
-				h.broadcastStats()
-			} else if h.ratePerSec != 0 {
-				h.ratePerSec = 0 // sim went idle: one last update so the HUD stops
 				h.broadcastStats()
 			}
 		}
@@ -127,6 +128,8 @@ func (h *Hub) apply(cmd wire.Command) bool {
 		return h.applyPlace(cmd)
 	case wire.CmdDestroy:
 		return h.applyDestroy(cmd)
+	case wire.CmdRotate:
+		return h.applyRotate(cmd)
 	case wire.CmdBuy:
 		return h.applyBuy(cmd)
 	}
@@ -142,15 +145,26 @@ func (h *Hub) stateBytes() []byte {
 // statsBytes is the current economy as a JSON stats message.
 func (h *Hub) statsBytes() []byte {
 	x0, y0, x1, y1 := h.unlockedRect()
+	var nextW, nextH int
+	if h.gridTier < len(gridTiers)-1 {
+		next := gridTiers[h.gridTier+1]
+		nextW, nextH = next.w, next.h
+	}
 	b, _ := json.Marshal(wire.StatsMessage{
 		Type:           "stats",
 		IronOre:        h.ironOre,
-		Rate:           h.ratePerSec,
+		Rate:           h.currentRate(),
 		ExtractorLevel: h.extractorLevel,
 		ExtractorCost:  h.extractorCost(),
+		BeltLevel:      h.beltLevel,
+		BeltCost:       h.beltCost(),
+		ValueLevel:     h.valueLevel,
+		ValueCost:      h.valueCost(),
 		GridWidth:      x1 - x0 + 1,
 		GridHeight:     y1 - y0 + 1,
 		GridCost:       h.gridCost(),
+		NextGridWidth:  nextW,
+		NextGridHeight: nextH,
 	})
 	return b
 }

@@ -144,6 +144,29 @@ func TestDestroyingNothingGivesNothing(t *testing.T) {
 	}
 }
 
+func TestRotatingIsFreeAndGuarded(t *testing.T) {
+	h := shopHub()
+	h.apply(place(wire.KindExtractor, 4, 2))
+	before := h.ironOre
+
+	if !h.apply(wire.Command{Type: wire.CmdRotate, X: 4, Y: 2}) {
+		t.Fatal("rotating a structure should succeed")
+	}
+	if got := h.world.At(4, 2).Dir; got != engine.South {
+		t.Errorf("dir = %v after rotating an east extractor, want south", got)
+	}
+	if h.ironOre != before {
+		t.Errorf("ironOre = %d after a rotate, want the untouched %d (rotating is free)", h.ironOre, before)
+	}
+
+	if h.apply(wire.Command{Type: wire.CmdRotate, X: 5, Y: 2}) {
+		t.Error("rotating an empty cell should be a rejected no-op")
+	}
+	if h.apply(wire.Command{Type: wire.CmdRotate, X: 0, Y: 0}) {
+		t.Error("rotating outside the unlocked region should be rejected")
+	}
+}
+
 func TestBuyingNeedsIncome(t *testing.T) {
 	h := shopHub() // empty world: nothing earning
 	h.ironOre = 1 << 30
@@ -180,6 +203,39 @@ func TestBuyingExtractorRate(t *testing.T) {
 	h.extractorLevel = maxExtractorLevel
 	if h.apply(buy) {
 		t.Fatal("buying past the max level should be rejected")
+	}
+}
+
+func TestBuyingBeltSpeedAndOreValue(t *testing.T) {
+	h := lineHub()
+
+	h.ironOre = beltBaseCost
+	if !h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeBeltSpeed}) {
+		t.Fatal("the first belt level should be buyable at exact cost")
+	}
+	if h.beltLevel != 1 || h.ironOre != 0 {
+		t.Fatalf("beltLevel=%d ore=%d after buying, want level 1 and 0", h.beltLevel, h.ironOre)
+	}
+	if h.beltSpeed() <= oreSpeed {
+		t.Error("a higher belt level should carry ore faster")
+	}
+
+	h.ironOre = valueBaseCost
+	if !h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeOreValue}) {
+		t.Fatal("the first value level should be buyable at exact cost")
+	}
+	if h.valueLevel != 1 || h.oreValue() != 2 {
+		t.Fatalf("valueLevel=%d worth=%d after buying, want level 1 worth 2", h.valueLevel, h.oreValue())
+	}
+
+	h.ironOre = 1 << 30
+	h.beltLevel = maxBeltLevel
+	h.valueLevel = maxValueLevel
+	if h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeBeltSpeed}) {
+		t.Fatal("buying past the max belt level should be rejected")
+	}
+	if h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeOreValue}) {
+		t.Fatal("buying past the max value level should be rejected")
 	}
 }
 
