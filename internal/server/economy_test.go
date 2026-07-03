@@ -65,15 +65,31 @@ func TestOreSimDownstreamDrainsAfterBreak(t *testing.T) {
 
 func TestOreSimRateScalesWithExtractorLevel(t *testing.T) {
 	_, h := run(3)
-	h.extractorLevel = maxExtractorLevel
+	h.extractorLevel = maxSimLevel
 	tickN(h, 10) // warm up
 	before := h.ironOre
 	tickN(h, 10)
 	got := h.ironOre - before
-	// oreSpeed/emitGap at max level is 17.5/s; the emitter keeps the remainder
-	// between steps, so ten seconds must land ~175, not saturate below it.
+	// oreSpeed/emitGap at the sim cap is 17.5/s; the emitter keeps the
+	// remainder between steps, so ten seconds must land ~175, not saturate.
 	if got < 170 || got > 180 {
-		t.Fatalf("delivered %d over 10s at max level, want ~175", got)
+		t.Fatalf("delivered %d over 10s at the sim cap, want ~175", got)
+	}
+}
+
+func TestOreSimPaysTheTrueRatePastTheSimCap(t *testing.T) {
+	// Way past the sim cap the belts cannot visibly carry more, so richer
+	// chunks make up the difference. Ten seconds must pay ten seconds of the
+	// advertised rate, within a chunk or two of timing slack.
+	_, h := run(3)
+	h.extractorLevel, h.beltLevel, h.valueLevel = 12, 12, 4
+	tickN(h, 10) // warm up
+	before := h.ironOre
+	tickN(h, 10)
+	got := float64(h.ironOre - before)
+	want := h.currentRate() * 10
+	if got < want*0.97 || got > want*1.03 {
+		t.Fatalf("earned %v over 10s at deep levels, want ~%v (the advertised rate)", got, want)
 	}
 }
 
@@ -101,19 +117,19 @@ func TestOreSimOreValueMultipliesEarnings(t *testing.T) {
 	}
 }
 
-func TestOreSimHandlesEverythingMaxed(t *testing.T) {
-	// The most extreme legal economy: ~39.4 chunks/s per line, each worth 6.
-	// subSteps must keep up (one emission per step at most).
+func TestOreSimHandlesTheBusiestVisuals(t *testing.T) {
+	// The busiest the sim ever gets: ~39.4 chunks/s per line at the sim cap,
+	// each worth 2^5. subSteps must keep up (one emission per step at most).
 	_, h := run(3)
-	h.extractorLevel = maxExtractorLevel
-	h.beltLevel = maxBeltLevel
-	h.valueLevel = maxValueLevel
+	h.extractorLevel = maxSimLevel
+	h.beltLevel = maxSimLevel
+	h.valueLevel = maxSimLevel
 	tickN(h, 10) // warm up
 	before := h.ironOre
 	tickN(h, 10)
 	got := h.ironOre - before
-	if got < 2300 || got > 2400 {
-		t.Fatalf("earned %d over 10s fully maxed, want ~2360 (39.4/s worth 6)", got)
+	if got < 12400 || got > 12800 {
+		t.Fatalf("earned %d over 10s at the sim cap, want ~12600 (39.4/s worth 32)", got)
 	}
 }
 

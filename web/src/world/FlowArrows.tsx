@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { getLatest, subscribe } from "./store";
-import { beltMultiplier, getStats } from "./economy";
+import { beltMultiplier, getStats, MAX_SIM_LEVEL } from "./economy";
 import { cellOffsets } from "./grid";
 import { chevronGeometry } from "./chevron";
 import { makeCurve, curvePoint, curveHeading, type Curve } from "./beltCurve";
@@ -69,8 +69,8 @@ export function FlowArrows() {
     const now = clock.elapsedTime;
     clockNow.current = now;
     // One shared offset so every chevron drifts together, hurrying up a little
-    // with each Belt Speed level.
-    phase.current = (phase.current + delta * SPEED * beltMultiplier(getStats().beltLevel)) % 1;
+    // with each Belt Speed level up to the sim cap.
+    phase.current = (phase.current + delta * SPEED * beltMultiplier(Math.min(getStats().beltLevel, MAX_SIM_LEVEL))) % 1;
     const t = phase.current;
     let inst = 0;
     for (const { segs, death } of runs.current) {

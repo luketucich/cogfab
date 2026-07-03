@@ -11,10 +11,15 @@ import type { StatsMessage } from "../net/types";
 export const ORE_SPEED = 2.5;
 export const ORE_GAP = 0.5;
 
+// MAX_SIM_LEVEL is where the visuals stop getting busier: past this the belts
+// are maxed on screen, and the server pays the difference through richer
+// chunks. Mirror of maxSimLevel in economy.go.
+export const MAX_SIM_LEVEL = 5;
+
 // fmtNum trims a number for display: whole numbers stay whole, fractions keep
-// up to `decimals` digits with trailing zeros dropped.
+// up to `decimals` digits, and big values get thousands separators.
 export function fmtNum(n: number, decimals = 2): string {
-  return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(decimals)));
+  return Number(Number.isInteger(n) ? n : n.toFixed(decimals)).toLocaleString();
 }
 
 // beltMultiplier is the Belt Speed scale: each level adds a quarter of the base
@@ -23,13 +28,19 @@ export function beltMultiplier(beltLevel: number): number {
   return 1 + 0.25 * beltLevel;
 }
 
+// oreValue is what one delivery is worth: doubling with every Ore Value level.
+// Mirror of oreValue in economy.go.
+export function oreValue(valueLevel: number): number {
+  return 2 ** valueLevel;
+}
+
 // perExtractorRate is the ore per second one extractor earns at the given
-// upgrade levels: denser emission, faster belts, and a value multiplier on
-// each delivery. Mirror of emitGap, beltSpeed, and oreValue in economy.go,
-// expressed as one rate for the upgrade cards.
+// upgrade levels: denser emission, faster belts, and richer deliveries, with
+// no sim cap (the cap only shapes the visuals). Mirror of currentRate in
+// economy.go, expressed per extractor for the upgrade cards.
 export function perExtractorRate(extractorLevel: number, beltLevel: number, valueLevel: number): number {
   const chunksPerSec = (ORE_SPEED * beltMultiplier(beltLevel)) / (ORE_GAP / (1 + 0.5 * extractorLevel));
-  return chunksPerSec * (1 + valueLevel);
+  return chunksPerSec * oreValue(valueLevel);
 }
 
 type Stats = {

@@ -1,6 +1,9 @@
 package server
 
-import "strconv"
+import (
+	"math"
+	"strconv"
+)
 
 // The ore the client draws and the total the server keeps come from the same
 // idea, run on each side: chunks ride the belts at a shared speed, spaced a
@@ -14,32 +17,54 @@ const (
 	// there is room to emit one chunk per step with every upgrade maxed (~39/sec)
 )
 
+// maxSimLevel is where the simulation stops getting busier: past this the
+// belts are visually maxed out, and each further level pays through richer
+// chunks instead (see chunkValue), so the sim stays bounded while the levels
+// climb forever. Keep in step with MAX_SIM_LEVEL in economy.ts.
+const maxSimLevel = 5
+
 // emitGap is how close together chunks leave the extractors: each Extractor
-// Rate level adds half the base rate, so a maxed line carries 3.5x the ore.
-// Keep in step with FlowItems.tsx.
+// Rate level up to the sim cap adds half the base rate. Keep in step with
+// FlowItems.tsx.
 func (h *Hub) emitGap() float64 {
-	return oreGap / (1 + 0.5*float64(h.extractorLevel))
+	return oreGap / (1 + 0.5*float64(min(h.extractorLevel, maxSimLevel)))
 }
 
-// beltSpeed is how fast chunks travel: each Belt Speed level adds a quarter of
-// the base speed. Faster belts also deliver more often at the same spacing.
-// Keep in step with beltMultiplier in economy.ts.
+// beltSpeed is how fast chunks travel: each Belt Speed level up to the sim cap
+// adds a quarter of the base speed. Faster belts also deliver more often at
+// the same spacing. Keep in step with beltMultiplier in economy.ts.
 func (h *Hub) beltSpeed() float64 {
-	return oreSpeed * (1 + 0.25*float64(h.beltLevel))
+	return oreSpeed * (1 + 0.25*float64(min(h.beltLevel, maxSimLevel)))
 }
 
-// oreValue is what one delivered chunk is worth: 1 ore, plus 1 per Ore Value
-// level.
-func (h *Hub) oreValue() int {
-	return 1 + h.valueLevel
+// oreValue is what one delivery is worth: doubling with every Ore Value level,
+// the upgrade that keeps paying forever.
+func (h *Hub) oreValue() float64 {
+	return math.Pow(2, float64(h.valueLevel))
+}
+
+// chunkValue is the ore one landing chunk pays. Normally just oreValue, but
+// once Extractor Rate or Belt Speed pass the sim cap the belts cannot visibly
+// carry more, so the extra multiplier rides along on each chunk instead.
+func (h *Hub) chunkValue() float64 {
+	v := h.oreValue()
+	if h.extractorLevel > maxSimLevel {
+		v *= (1 + 0.5*float64(h.extractorLevel)) / (1 + 0.5*maxSimLevel)
+	}
+	if h.beltLevel > maxSimLevel {
+		v *= (1 + 0.25*float64(h.beltLevel)) / (1 + 0.25*maxSimLevel)
+	}
+	return v
 }
 
 // currentRate is what the factory produces per second right now: every route
-// carries beltSpeed/emitGap chunks a second, each worth oreValue. Derived from
-// the routes instead of measured, so the HUD reads steady instead of
-// flickering with the sub-second timing of individual deliveries.
+// carries its chunks-per-second, each delivery worth oreValue, with no sim cap
+// applied (the cap only shapes the visuals; chunkValue makes up the rest).
+// Derived from the routes instead of measured, so the HUD reads steady instead
+// of flickering with the sub-second timing of individual deliveries.
 func (h *Hub) currentRate() float64 {
-	return float64(len(h.routes)*h.oreValue()) * h.beltSpeed() / h.emitGap()
+	chunksPerSec := oreSpeed * (1 + 0.25*float64(h.beltLevel)) / (oreGap / (1 + 0.5*float64(h.extractorLevel)))
+	return float64(len(h.routes)) * chunksPerSec * h.oreValue()
 }
 
 // route is one extractor-to-seller path the ore rides: the belts it crosses
@@ -79,9 +104,9 @@ func (h *Hub) recompute() {
 // route with fresh chunks from its extractor. Every stream that reaches a seller
 // pays, so each extractor you connect adds a full line of income.
 func (h *Hub) tick() {
-	earned := 0
+	earned := 0.0
 	speed := h.beltSpeed()
-	value := h.oreValue()
+	value := h.chunkValue()
 	for s := 0; s < subSteps; s++ {
 		alive := h.chunks[:0]
 		for _, c := range h.chunks {
@@ -101,7 +126,12 @@ func (h *Hub) tick() {
 		h.chunks = alive
 		h.emit()
 	}
-	h.ironOre += earned
+	// Chunk values go fractional past the sim cap; bank the whole ore and
+	// carry the remainder into the next second so nothing is ever lost.
+	h.orePartial += earned
+	whole := int(h.orePartial)
+	h.ironOre += whole
+	h.orePartial -= float64(whole)
 }
 
 // emit adds a chunk at the head of each route once the nearest one has moved a
