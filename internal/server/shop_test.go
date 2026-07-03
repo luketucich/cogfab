@@ -198,11 +198,13 @@ func TestBuyingExtractorRate(t *testing.T) {
 	if h.apply(buy) {
 		t.Fatal("buying should be rejected when broke")
 	}
+}
 
-	h.ironOre = 1 << 30
-	h.extractorLevel = maxExtractorLevel
-	if h.apply(buy) {
-		t.Fatal("buying past the max level should be rejected")
+func TestRateUpgradesNeverMaxOut(t *testing.T) {
+	h := lineHub()
+	h.extractorLevel, h.beltLevel, h.valueLevel = 30, 30, 30
+	if h.extractorCost() <= 0 || h.beltCost() <= 0 || h.valueCost() <= 0 {
+		t.Fatalf("deep levels must still price a next level: %d %d %d", h.extractorCost(), h.beltCost(), h.valueCost())
 	}
 }
 
@@ -225,17 +227,7 @@ func TestBuyingBeltSpeedAndOreValue(t *testing.T) {
 		t.Fatal("the first value level should be buyable at exact cost")
 	}
 	if h.valueLevel != 1 || h.oreValue() != 2 {
-		t.Fatalf("valueLevel=%d worth=%d after buying, want level 1 worth 2", h.valueLevel, h.oreValue())
-	}
-
-	h.ironOre = 1 << 30
-	h.beltLevel = maxBeltLevel
-	h.valueLevel = maxValueLevel
-	if h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeBeltSpeed}) {
-		t.Fatal("buying past the max belt level should be rejected")
-	}
-	if h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeOreValue}) {
-		t.Fatal("buying past the max value level should be rejected")
+		t.Fatalf("valueLevel=%d worth=%v after buying, want level 1 worth 2 (doubling)", h.valueLevel, h.oreValue())
 	}
 }
 

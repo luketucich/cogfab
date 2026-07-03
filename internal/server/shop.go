@@ -29,19 +29,14 @@ var buildCost = map[engine.TileKind]int{
 // so cycling build-and-destroy always loses ore.
 func refund(kind engine.TileKind) int { return buildCost[kind] / 2 }
 
-// The three rate upgrades, each a global level that doubles in price: Extractor
-// Rate packs ore closer together (emitGap), Belt Speed carries it faster
-// (beltSpeed), and Ore Value makes each delivery worth more (oreValue), all in
-// economy.go.
+// The three rate upgrades never max out: each level doubles in price, so the
+// climb is exponential both ways. Extractor Rate packs ore closer together
+// (emitGap), Belt Speed carries it faster (beltSpeed), and Ore Value doubles
+// what each delivery is worth (oreValue), all in economy.go.
 const (
 	extractorBaseCost = 150
-	maxExtractorLevel = 5
-
-	beltBaseCost = 200
-	maxBeltLevel = 5
-
-	valueBaseCost = 400
-	maxValueLevel = 5
+	beltBaseCost      = 200
+	valueBaseCost     = 400
 )
 
 // gridTiers are the unlockable region sizes, smallest first. Buying Grid Size
@@ -55,19 +50,15 @@ var gridTiers = []struct{ w, h, cost int }{
 }
 
 // doublingCost is the price of an upgrade's next level: the base, doubling per
-// level, 0 once maxed.
-func doublingCost(level, max, base int) int {
-	if level >= max {
-		return 0
-	}
-	return base << level
+// level. The shift is clamped far past anything a player could ever afford, so
+// it cannot overflow.
+func doublingCost(level, base int) int {
+	return base << min(level, 40)
 }
 
-func (h *Hub) extractorCost() int {
-	return doublingCost(h.extractorLevel, maxExtractorLevel, extractorBaseCost)
-}
-func (h *Hub) beltCost() int  { return doublingCost(h.beltLevel, maxBeltLevel, beltBaseCost) }
-func (h *Hub) valueCost() int { return doublingCost(h.valueLevel, maxValueLevel, valueBaseCost) }
+func (h *Hub) extractorCost() int { return doublingCost(h.extractorLevel, extractorBaseCost) }
+func (h *Hub) beltCost() int      { return doublingCost(h.beltLevel, beltBaseCost) }
+func (h *Hub) valueCost() int     { return doublingCost(h.valueLevel, valueBaseCost) }
 
 // gridCost is the price of the next grid tier, 0 once the whole world is open.
 func (h *Hub) gridCost() int {

@@ -27,7 +27,8 @@ type Client struct {
 type Hub struct {
 	world *engine.World
 
-	ironOre int // authoritative iron-ore total: earned at the seller, spent on builds
+	ironOre    int     // authoritative iron-ore total: earned at the seller, spent on builds
+	orePartial float64 // fractional ore carried between ticks (chunk values go fractional past the sim cap)
 
 	extractorLevel int // global Extractor Rate level; higher emits ore denser
 	beltLevel      int // global Belt Speed level; higher carries ore faster
