@@ -41,6 +41,40 @@ type StatsMessage struct {
 	NextGridHeight int     `json:"nextGridHeight"`
 }
 
+// WelcomeMessage is the first thing a client hears after joining: which room it
+// landed in (the client writes this into the page URL, making the address bar
+// the invite link) and its player slot. The slot doubles as the player's colour
+// and is not persistent: reconnecting may seat you in a different one.
+type WelcomeMessage struct {
+	Type string `json:"type"`
+	Room string `json:"room"`
+	Slot int    `json:"slot"`
+}
+
+// PresencePlayer is one connected player: its slot and the cell it is hovering,
+// if any.
+type PresencePlayer struct {
+	Slot     int  `json:"slot"`
+	Hovering bool `json:"hovering"`
+	X        int  `json:"x"`
+	Y        int  `json:"y"`
+}
+
+// PresenceMessage is a room's full roster, sent to everyone whenever a player
+// joins, leaves, or moves their hover. Four players at most, so sending the
+// whole list every time beats delta bookkeeping.
+type PresenceMessage struct {
+	Type    string           `json:"type"`
+	Players []PresencePlayer `json:"players"`
+}
+
+// RoomFullMessage tells a joiner the room already holds its four players. The
+// server closes right after sending it, and the client must not reconnect to
+// this room.
+type RoomFullMessage struct {
+	Type string `json:"type"`
+}
+
 // PongMessage answers a client ping with its own timestamp, so the client can
 // measure the round-trip time to the server.
 type PongMessage struct {
