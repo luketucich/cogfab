@@ -25,7 +25,21 @@ export type FlowRun = { steps: FlowStep[]; complete: boolean };
 // the farthest belt (broken). Ore leaves an extractor and enters a seller only on
 // the side each faces; between belts facing does not gate flow, so the run is just
 // the connected path the ore travels.
+//
+// The ore and the arrows both ask for the same snapshot's runs on every world
+// change, so the last answer is cached by snapshot: build bursts cost one walk,
+// not two.
+let cachedSnap: StateMessage | null = null;
+let cachedRuns: FlowRun[] = [];
+
 export function flowPaths(snap: StateMessage): FlowRun[] {
+  if (snap === cachedSnap) return cachedRuns;
+  cachedRuns = computeFlowPaths(snap);
+  cachedSnap = snap;
+  return cachedRuns;
+}
+
+function computeFlowPaths(snap: StateMessage): FlowRun[] {
   const w = snap.width;
   const tiles = snap.tiles;
   const runs: FlowRun[] = [];
