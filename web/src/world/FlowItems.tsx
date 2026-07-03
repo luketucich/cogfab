@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { getLatest, subscribe } from "./store";
-import { beltMultiplier, getStats, ORE_GAP, ORE_SPEED } from "./economy";
+import { beltMultiplier, getStats, MAX_SIM_LEVEL, ORE_GAP, ORE_SPEED } from "./economy";
 import { cellOffsets } from "./grid";
 import { makeCurve, curvePoint, type Curve } from "./beltCurve";
 import { flowPaths, runKey } from "./flow";
@@ -68,9 +68,10 @@ export function FlowItems() {
 
   useFrame(({ clock }) => {
     const now = clock.elapsedTime;
-    // Belt Speed levels carry the ore visibly faster; mirror of beltSpeed in
-    // economy.go.
-    const step = Math.min(now - lastTime.current, MAX_STEP) * ORE_SPEED * beltMultiplier(getStats().beltLevel);
+    // Belt Speed levels carry the ore visibly faster, up to the sim cap;
+    // mirror of beltSpeed in economy.go.
+    const step =
+      Math.min(now - lastTime.current, MAX_STEP) * ORE_SPEED * beltMultiplier(Math.min(getStats().beltLevel, MAX_SIM_LEVEL));
     lastTime.current = now;
 
     // Advance every chunk, dropping the ones that reached the seller or whose belt
@@ -97,9 +98,9 @@ export function FlowItems() {
 
     // Emit a fresh chunk at the head of each live path once the nearest one has
     // moved a gap ahead, starting it at the overshoot so no spacing is lost.
-    // Each Extractor Rate level adds half the base rate; mirror of emitGap and
-    // emit in economy.go.
-    const gap = ORE_GAP / (1 + 0.5 * getStats().extractorLevel);
+    // Each Extractor Rate level up to the sim cap packs them tighter; mirror of
+    // emitGap and emit in economy.go.
+    const gap = ORE_GAP / (1 + 0.5 * Math.min(getStats().extractorLevel, MAX_SIM_LEVEL));
     for (const route of routes.current.values()) {
       let nearest = Infinity;
       for (const chunk of alive) if (chunk.route === route && chunk.dist < nearest) nearest = chunk.dist;

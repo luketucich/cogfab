@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { IconType } from "react-icons";
 import { PiShovelFill, PiFastForwardFill, PiCoinsFill, PiArrowsOutFill } from "react-icons/pi";
-import { beltMultiplier, fmtNum as fmt, getStats, perExtractorRate, spendableOre, subscribeStats } from "./world/economy";
+import { beltMultiplier, fmtNum as fmt, getStats, oreValue, perExtractorRate, spendableOre, subscribeStats } from "./world/economy";
 import { connection } from "./net/connection";
 import { sfx } from "./sfx";
 import { panel, ACCENT, ORE_TEXT, FONT_DISPLAY, FONT_UI } from "./ui";
@@ -50,7 +50,7 @@ export function UpgradePanel() {
         <UpgradeCard
           icon={PiCoinsFill}
           name="Ore Value"
-          detail={stats.valueCost > 0 ? `${1 + vl} to ${2 + vl} ore per delivery` : `${1 + vl} ore per delivery`}
+          detail={stats.valueCost > 0 ? `${fmt(oreValue(vl))} to ${fmt(oreValue(vl + 1))} ore per delivery` : `${fmt(oreValue(vl))} ore per delivery`}
           tag={`LV ${vl}`}
           cost={stats.valueCost}
           ironOre={ore}
@@ -111,7 +111,7 @@ function UpgradeCard({ icon: Icon, name, detail, tag, cost, ironOre, earning, on
           title={earning ? undefined : "Get some ore flowing first"}
           style={{ ...buyButton, ...(!buyable && { opacity: 0.45, cursor: "default" }) }}
         >
-          Upgrade <span style={{ color: ORE_TEXT }}>· {cost} ore</span>
+          Upgrade <span style={{ color: ORE_TEXT }}>· {cost.toLocaleString()} ore</span>
         </button>
       )}
     </div>
