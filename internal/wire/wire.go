@@ -25,14 +25,20 @@ type TileView struct {
 // current production rate, and where the upgrades stand. A cost of 0 means
 // that upgrade is maxed out. Item motion is cosmetic and lives on the client.
 type StatsMessage struct {
-	Type           string `json:"type"`
-	IronOre        int    `json:"ironOre"`
-	Rate           int    `json:"ratePerSec"`
-	ExtractorLevel int    `json:"extractorLevel"`
-	ExtractorCost  int    `json:"extractorCost"`
-	GridWidth      int    `json:"gridWidth"` // unlocked region, centred in the world
-	GridHeight     int    `json:"gridHeight"`
-	GridCost       int    `json:"gridCost"`
+	Type           string  `json:"type"`
+	IronOre        int     `json:"ironOre"`
+	Rate           float64 `json:"ratePerSec"` // production rate of the current routes
+	ExtractorLevel int     `json:"extractorLevel"`
+	ExtractorCost  int     `json:"extractorCost"`
+	BeltLevel      int     `json:"beltLevel"`
+	BeltCost       int     `json:"beltCost"`
+	ValueLevel     int     `json:"valueLevel"`
+	ValueCost      int     `json:"valueCost"`
+	GridWidth      int     `json:"gridWidth"` // unlocked region, centred in the world
+	GridHeight     int     `json:"gridHeight"`
+	GridCost       int     `json:"gridCost"`
+	NextGridWidth  int     `json:"nextGridWidth"` // the tier Grid Size buys next, 0 when maxed
+	NextGridHeight int     `json:"nextGridHeight"`
 }
 
 // PongMessage answers a client ping with its own timestamp, so the client can
