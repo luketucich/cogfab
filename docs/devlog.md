@@ -3,6 +3,16 @@
 What I've worked on, newest first.
 
 ## 2026-07-04
+- Big numbers now read at a glance: from a million up, the ore total, rate,
+  and upgrade prices show as 1.25M / 30.2B instead of a wall of digits.
+- Chased the endgame HUD flicker (upgrade buttons strobing between buyable and
+  not, the rate jumping around). The server and the wire came up provably
+  clean: a soak test drives thousands of ticks at deep levels and asserts the
+  stats stream never wobbles, and live captures against a hand-crafted endgame
+  save (a fun side effect of room saves being plain JSON) matched. The real
+  culprit was the old economy: income could outrun the next upgrade's price,
+  so every purchase re-lit the button within a second, and totals past 2^53
+  made the count-up's low digits step oddly. The rebalance removes both.
 - Rebalanced the upgrades after actually playing a long run. Ore Value used to
   double its payout while its price doubled too, so every level paid for
   itself in the same time forever, and the best strategy was one tiny

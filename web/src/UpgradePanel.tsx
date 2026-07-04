@@ -111,7 +111,7 @@ function UpgradeCard({ icon: Icon, name, detail, tag, cost, ironOre, earning, on
           title={earning ? undefined : "Get some ore flowing first"}
           style={{ ...buyButton, ...(!buyable && { opacity: 0.45, cursor: "default" }) }}
         >
-          Upgrade <span style={{ color: ORE_TEXT }}>· {cost.toLocaleString()} ore</span>
+          Upgrade <span style={{ color: ORE_TEXT }}>· {fmt(cost)} ore</span>
         </button>
       )}
     </div>
