@@ -1,54 +1,69 @@
-# Deploying to GKE
+# Deploying cogfab.io
 
-One image, one pod, one disk. The server binary serves the web app and the
-WebSocket on the same origin, so there is nothing else to host.
+Production is one container on one VM in GCP's always-free tier. The binary
+serves the web app, the WebSocket, and its own Let's Encrypt certificate
+(DOMAIN env turns that on), so there is nothing else in the stack. Total cost
+is about $4/month, nearly all of it the static IP.
+
+The GKE manifests in deploy/ are the documented scale-up path for if the game
+ever outgrows one machine; they are not what runs today.
 
 ## One-time setup
 
 ```sh
 gcloud auth login
-gcloud config set project PROJECT_ID
+gcloud config set project cogfab-io
 
 # Where images live
+gcloud services enable artifactregistry.googleapis.com
 gcloud artifacts repositories create cogfab \
   --repository-format=docker --location=us-central1
 gcloud auth configure-docker us-central1-docker.pkg.dev
 
-# The cluster (Autopilot: no nodes to manage, pay per pod)
-gcloud container clusters create-auto cogfab --region=us-central1
-gcloud container clusters get-credentials cogfab --region=us-central1
+# The address DNS points at
+gcloud compute addresses create cogfab-ip --region=us-central1
 
-# The ingress IP that DNS points at (survives recreating the ingress)
-gcloud compute addresses create cogfab-ip --global
-gcloud compute addresses describe cogfab-ip --global --format='value(address)'
+# Let web traffic in
+gcloud compute firewall-rules create allow-web \
+  --allow=tcp:80,tcp:443 --target-tags=web
+
+# The machine (e2-micro in us-central1: always-free tier). The startup
+# script lets the non-root container bind ports 80/443 and hands it a
+# writable /data for saves and certificates.
+gcloud compute instances create-with-container cogfab \
+  --zone=us-central1-a --machine-type=e2-micro --tags=web \
+  --image-family=cos-stable --image-project=cos-cloud \
+  --address=cogfab-ip --scopes=cloud-platform \
+  --container-image=us-central1-docker.pkg.dev/cogfab-io/cogfab/server:v1 \
+  --container-env=DOMAIN=cogfab.io \
+  --container-mount-host-path=mount-path=/data,host-path=/var/lib/cogfab,mode=rw \
+  --metadata=startup-script='#! /bin/bash
+sysctl -w net.ipv4.ip_unprivileged_port_start=0
+mkdir -p /var/lib/cogfab && chown 65532:65532 /var/lib/cogfab'
 ```
 
-Point DNS at that address: an A record for `cogfab.io` and one for
-`www.cogfab.io`. The managed certificate will not issue until DNS resolves.
+Point DNS at the static IP (an A record for `cogfab.io` and one for
+`www.cogfab.io`). The first request after DNS resolves makes the server fetch
+its certificate; give it a minute.
 
 ## Each deploy
 
 ```sh
-docker build -t us-central1-docker.pkg.dev/PROJECT_ID/cogfab/server:v1 .
-docker push us-central1-docker.pkg.dev/PROJECT_ID/cogfab/server:v1
-kubectl apply -f deploy/
+docker build --platform linux/amd64 \
+  -t us-central1-docker.pkg.dev/cogfab-io/cogfab/server:v2 .
+docker push us-central1-docker.pkg.dev/cogfab-io/cogfab/server:v2
+gcloud compute instances update-container cogfab --zone=us-central1-a \
+  --container-image=us-central1-docker.pkg.dev/cogfab-io/cogfab/server:v2
 ```
 
-Bump the tag (v2, v3, ...) each release and update it in
-`deploy/deployment.yaml`; `kubectl apply -f deploy/` rolls it out. The
-strategy is Recreate, so there is a few seconds of downtime while the old pod
-writes its final saves and lets go of the disk; clients reconnect on their
-own.
+Bump the tag each release. The swap takes a few seconds of downtime; the old
+container writes its final room saves on the way down and clients reconnect
+on their own.
 
 ## Checking on it
 
 ```sh
-kubectl get pods                        # Running?
-kubectl logs deploy/cogfab              # server logs (slog)
-kubectl get managedcertificate          # Active once DNS + cert are ready
-kubectl describe ingress cogfab        # the LB's view of the backend
+curl -s https://cogfab.io/healthz                # ok?
+gcloud compute ssh cogfab --zone=us-central1-a   # then: docker ps, docker logs <id>
+ls /var/lib/cogfab                               # on the VM: room saves + certs
 ```
-
-First bring-up is slow: the load balancer takes ~10 minutes and the
-certificate up to an hour after DNS points at the IP. After that,
-https://cogfab.io is the game.

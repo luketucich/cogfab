@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/luketucich/cogfab/internal/engine"
 	"github.com/luketucich/cogfab/internal/server"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 const addr = ":8080"
@@ -65,9 +67,33 @@ func main() {
 
 	srv := &http.Server{Addr: addr, Handler: mux}
 
+	// With DOMAIN set (production), the server is its own TLS stack: it
+	// fetches and renews a Let's Encrypt certificate for the domain, keeps it
+	// next to the room saves, and answers plain HTTP only to redirect to
+	// https and to serve the certificate challenges. Without it (dev), it is
+	// a plain HTTP server on addr.
 	go func() {
-		slog.Info("server listening", "addr", addr, "ws", "ws://localhost"+addr+"/ws")
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		var err error
+		if domain := os.Getenv("DOMAIN"); domain != "" {
+			certs := &autocert.Manager{
+				Prompt:     autocert.AcceptTOS,
+				HostPolicy: autocert.HostWhitelist(domain, "www."+domain),
+				Cache:      autocert.DirCache(filepath.Join(dataDir, "certs")),
+			}
+			srv.Addr = ":443"
+			srv.TLSConfig = certs.TLSConfig()
+			go func() {
+				if err := http.ListenAndServe(":80", certs.HTTPHandler(nil)); err != nil {
+					slog.Error("http redirect listener failed", "err", err)
+				}
+			}()
+			slog.Info("server listening", "domain", domain, "ws", "wss://"+domain+"/ws")
+			err = srv.ListenAndServeTLS("", "")
+		} else {
+			slog.Info("server listening", "addr", addr, "ws", "ws://localhost"+addr+"/ws")
+			err = srv.ListenAndServe()
+		}
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server failed", "err", err)
 			stop()
 		}

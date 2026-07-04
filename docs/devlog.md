@@ -3,6 +3,12 @@
 What I've worked on, newest first.
 
 ## 2026-07-04
+- Right-sized the deploy. A Kubernetes cluster and its load balancer run about
+  $90 a month for a game whose whole server is one goroutine-cheap process, so
+  production is now one container on an always-free e2-micro VM (~$4/month,
+  basically the static IP). The binary fetches and renews its own Let's
+  Encrypt certificate when DOMAIN is set, so the entire stack is the one
+  process. The GKE manifests stay in deploy/ as the documented scale-up path.
 - Containerized the game and wrote the cluster config. The image is a
   three-stage build (web app, Go binary, then a 21MB distroless final that
   runs as non-root), and deploy/ holds the GKE pieces: one pod with the saves
