@@ -44,6 +44,25 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/ws", rooms.Handler())
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	// Serve the built web app from the same process, so production is one
+	// binary on one origin. In dev the directory usually is not built and
+	// Vite serves the page instead; the game works the same either way.
+	webDir := os.Getenv("WEB_DIR")
+	if webDir == "" {
+		webDir = "web/dist"
+	}
+	if _, err := os.Stat(webDir); err == nil {
+		mux.Handle("/", http.FileServer(http.Dir(webDir)))
+		slog.Info("serving web app", "dir", webDir)
+	} else {
+		slog.Info("no web app to serve, WebSocket only", "dir", webDir)
+	}
+
 	srv := &http.Server{Addr: addr, Handler: mux}
 
 	go func() {

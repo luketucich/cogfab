@@ -14,9 +14,14 @@ import (
 // client is considered stuck.
 const writeTimeout = 5 * time.Second
 
-// acceptOptions is shared by every upgrade. Local dev only: the browser console
-// and Vite dev server are other origins. Tighten this before any public deploy.
-var acceptOptions = &websocket.AcceptOptions{OriginPatterns: []string{"*"}}
+// acceptOptions is shared by every upgrade. Only the game's own pages may open
+// sockets: the production site, plus localhost for the Vite dev server (which
+// serves the page on another port than the game). Non-browser clients send no
+// Origin header and are allowed; the check is about strangers' web pages
+// reaching into rooms from a visitor's browser, not about curl.
+var acceptOptions = &websocket.AcceptOptions{
+	OriginPatterns: []string{"cogfab.io", "www.cogfab.io", "localhost:*", "127.0.0.1:*"},
+}
 
 // refuse tells a joiner over a short-lived socket that the room is full, so the
 // browser gets a readable answer instead of a failed connection, then closes.

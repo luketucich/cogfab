@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -57,6 +58,21 @@ func TestRoomsCapAtFourPlayers(t *testing.T) {
 	rs.leave("AAAAAA")
 	if _, ok := rs.join("AAAAAA"); !ok {
 		t.Fatal("a seat freed by a leave should admit the next join")
+	}
+}
+
+func TestRoomCountIsCapped(t *testing.T) {
+	rs := newTestRooms(t)
+	for i := 0; i < maxRooms; i++ {
+		if _, ok := rs.join(fmt.Sprintf("R%05d", i)); !ok {
+			t.Fatalf("room %d of %d should be admitted", i+1, maxRooms)
+		}
+	}
+	if _, ok := rs.join("ONEMOR"); ok {
+		t.Fatal("a room past the cap should be refused")
+	}
+	if _, ok := rs.join("R00042"); !ok {
+		t.Fatal("an existing room should still admit players at the cap")
 	}
 }
 

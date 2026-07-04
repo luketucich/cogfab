@@ -3,6 +3,11 @@
 What I've worked on, newest first.
 
 ## 2026-07-04
+- Deploy prep on the server: it now serves the built web app itself, so
+  production is one binary on one origin (cogfab.io); a /healthz endpoint for
+  the load balancer's probes; WebSocket upgrades only accepted from the
+  game's own pages instead of any origin; and a cap on total rooms so a
+  script hammering the endpoint cannot mint goroutines without bound.
 - A sound pass. Every effect now runs through a lowpass with a rounded attack,
   and impacts get a few percent of random pitch drift, so the board sounds
   soft and physical instead of chiptune (the old square-wave blips are gone).
