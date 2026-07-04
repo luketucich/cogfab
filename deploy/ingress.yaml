@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cogfab
+  annotations:
+    # A reserved global IP named "cogfab-ip" (see docs/deploy.md), so the DNS
+    # record survives recreating the ingress.
+    kubernetes.io/ingress.global-static-ip-name: cogfab-ip
+    networking.gke.io/managed-certificates: cogfab-cert
+spec:
+  defaultBackend:
+    service:
+      name: cogfab
+      port:
+        number: 80
+---
+# Google provisions and renews the TLS certificate itself once DNS for these
+# hosts points at the ingress IP. First issue takes up to an hour.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: cogfab-cert
+spec:
+  domains:
+    - cogfab.io
+    - www.cogfab.io

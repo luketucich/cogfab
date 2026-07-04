@@ -1,0 +1,9 @@
+.git
+data/
+notes/
+assets/kenney-factory-kit/
+web/node_modules/
+web/dist/
+docs/
+*.md
+.claude/
