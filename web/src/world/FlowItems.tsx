@@ -7,6 +7,7 @@ import { cellOffsets } from "./grid";
 import { makeCurve, curvePoint, type Curve } from "./beltCurve";
 import { flowPaths, runKey } from "./flow";
 import { addBurst } from "./burst";
+import { sfx } from "../sfx";
 
 const MAX_ORE = 8192;
 const ORE_Y = 0.5; // sit on the belt surface
@@ -91,6 +92,7 @@ export function FlowItems() {
           if (route === chunk.route) {
             curvePoint(route.curves[route.curves.length - 1], 1, 0, landing);
             addBurst({ x: landing.x, z: landing.z, color: "#ffd57a", count: 2 });
+            sfx.deliver();
             break;
           }
         }

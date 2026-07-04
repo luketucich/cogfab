@@ -3,6 +3,11 @@
 What I've worked on, newest first.
 
 ## 2026-07-04
+- A sound pass. Every effect now runs through a lowpass with a rounded attack,
+  and impacts get a few percent of random pitch drift, so the board sounds
+  soft and physical instead of chiptune (the old square-wave blips are gone).
+  New: a small thud when ore lands in a seller, capped to a handful of plays
+  a second so a busy endgame factory reads as gentle activity, not a drumroll.
 - Big numbers now read at a glance: from a million up, the ore total, rate,
   and upgrade prices show as 1.25M / 30.2B instead of a wall of digits.
 - Chased the endgame HUD flicker (upgrade buttons strobing between buyable and
