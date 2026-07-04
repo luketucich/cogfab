@@ -1,7 +1,8 @@
 // Tiny synthesized sound effects. No audio files: each effect is a couple of
-// oscillators or a noise burst shaped by a gain envelope. The context starts on
-// the first effect, which always happens inside a click or key press, so the
-// browser's autoplay rules are satisfied.
+// oscillators or a noise burst shaped by a gain envelope, and everything runs
+// through a lowpass so cues sound soft and physical instead of chiptune. The
+// context starts on the first effect, which always happens inside a click or
+// key press, so the browser's autoplay rules are satisfied.
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -20,8 +21,15 @@ function ensure(): AudioContext | null {
   return ctx;
 }
 
-// tone plays one note: a frequency glide with a fast attack and a smooth decay.
-function tone(type: OscillatorType, from: number, to: number, delay: number, length: number, peak: number) {
+// jitter nudges a frequency a couple of percent differently every play, so a
+// repeated impact sounds struck each time, not stamped from a mould.
+function jitter(freq: number): number {
+  return freq * (1 + (Math.random() - 0.5) * 0.05);
+}
+
+// tone plays one note: a frequency glide with a rounded attack and a smooth
+// decay, through a lowpass that keeps even bright notes from turning harsh.
+function tone(type: OscillatorType, from: number, to: number, delay: number, length: number, peak: number, cutoff = 2200) {
   const c = ensure();
   if (!c || !master) return;
   const t0 = c.currentTime + delay;
@@ -29,18 +37,23 @@ function tone(type: OscillatorType, from: number, to: number, delay: number, len
   osc.type = type;
   osc.frequency.setValueAtTime(from, t0);
   osc.frequency.exponentialRampToValueAtTime(Math.max(to, 1), t0 + length);
+  const filter = c.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = cutoff;
   const gain = c.createGain();
   gain.gain.setValueAtTime(0, t0);
-  gain.gain.linearRampToValueAtTime(peak, t0 + 0.008);
+  gain.gain.linearRampToValueAtTime(peak, t0 + 0.012);
   gain.gain.exponentialRampToValueAtTime(0.001, t0 + length);
-  osc.connect(gain);
+  osc.connect(filter);
+  filter.connect(gain);
   gain.connect(master);
   osc.start(t0);
   osc.stop(t0 + length + 0.02);
 }
 
-// thud plays a burst of noise through a lowpass, for knocks and breaks.
-function thud(cutoff: number, length: number, peak: number) {
+// rumble plays a burst of noise through a falling lowpass, for knocks and
+// breaks: real impacts lose their brightness first, so the cutoff decays too.
+function rumble(cutoff: number, length: number, peak: number) {
   const c = ensure();
   if (!c || !master) return;
   const t0 = c.currentTime;
@@ -51,7 +64,8 @@ function thud(cutoff: number, length: number, peak: number) {
   src.buffer = buffer;
   const filter = c.createBiquadFilter();
   filter.type = "lowpass";
-  filter.frequency.value = cutoff;
+  filter.frequency.setValueAtTime(cutoff, t0);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(cutoff / 4, 40), t0 + length);
   const gain = c.createGain();
   gain.gain.setValueAtTime(peak, t0);
   gain.gain.exponentialRampToValueAtTime(0.001, t0 + length);
@@ -61,36 +75,53 @@ function thud(cutoff: number, length: number, peak: number) {
   src.start(t0);
 }
 
+// Deliveries can happen dozens of times a second late game, so their thud is
+// capped: at most one every DELIVER_GAP seconds, and quiet enough to read as
+// gentle activity in the background rather than a drumroll.
+const DELIVER_GAP = 0.14;
+let nextDeliverAt = 0;
+
 // The game's sound board. Each is a short, distinct cue for one action.
 export const sfx = {
-  // picking a tool: a quick soft blip
+  // picking a tool: a soft pop
   select(): void {
-    tone("square", 700, 700, 0, 0.05, 0.18);
+    tone("sine", 880, 620, 0, 0.05, 0.25, 1600);
   },
-  // placing a structure: a satisfying low thock
+  // placing a structure: a warm thock
   place(): void {
-    tone("sine", 280, 150, 0, 0.09, 0.8);
-    thud(1400, 0.04, 0.2);
+    tone("sine", jitter(230), 120, 0, 0.1, 0.7, 900);
+    rumble(700, 0.05, 0.18);
   },
   // tearing one down: a crumbly break
   destroy(): void {
-    thud(900, 0.15, 0.7);
-    tone("sine", 160, 60, 0, 0.12, 0.35);
+    rumble(600, 0.18, 0.55);
+    tone("sine", jitter(150), 55, 0, 0.13, 0.35, 500);
   },
-  // clicking somewhere you cannot build: a dull knock
+  // clicking somewhere you cannot build: a muted double knock
   deny(): void {
-    tone("square", 110, 90, 0, 0.09, 0.3);
+    tone("sine", jitter(150), 110, 0, 0.06, 0.3, 600);
+    tone("sine", jitter(135), 100, 0.08, 0.07, 0.25, 600);
   },
-  // buying an upgrade: a rising two-note chime
+  // buying an upgrade: a rising two-note chime, felt more than heard
   buy(): void {
-    tone("triangle", 523, 523, 0, 0.1, 0.5);
-    tone("triangle", 784, 784, 0.08, 0.16, 0.5);
+    tone("sine", 523, 523, 0, 0.14, 0.4, 1500);
+    tone("sine", 784, 784, 0.07, 0.2, 0.35, 1500);
   },
-  // unlocking land: a bigger three-note arpeggio over a low root
+  // unlocking land: a bigger three-note rise over a low root
   expand(): void {
-    tone("sine", 131, 131, 0, 0.5, 0.4);
-    tone("triangle", 523, 523, 0, 0.14, 0.45);
-    tone("triangle", 659, 659, 0.09, 0.16, 0.45);
-    tone("triangle", 784, 784, 0.18, 0.28, 0.45);
+    tone("sine", 131, 131, 0, 0.5, 0.35, 700);
+    tone("triangle", 523, 523, 0, 0.14, 0.3, 1400);
+    tone("triangle", 659, 659, 0.09, 0.16, 0.3, 1400);
+    tone("triangle", 784, 784, 0.18, 0.28, 0.3, 1400);
+  },
+  // one ore landing in a seller: a small thud, felt more than heard, pitched
+  // a little differently each time so a busy factory never sounds mechanical.
+  // Unlike the others it fires from the render loop, not a click, so it waits
+  // for a real interaction to have started the audio rather than starting it.
+  deliver(): void {
+    if (!ctx || ctx.state !== "running" || ctx.currentTime < nextDeliverAt) return;
+    nextDeliverAt = ctx.currentTime + DELIVER_GAP;
+    tone("sine", jitter(115), 50, 0, 0.09, 0.28, 420);
+    rumble(320, 0.04, 0.08);
   },
 };
