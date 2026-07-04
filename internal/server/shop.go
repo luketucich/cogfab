@@ -29,10 +29,12 @@ var buildCost = map[engine.TileKind]int{
 // so cycling build-and-destroy always loses ore.
 func refund(kind engine.TileKind) int { return buildCost[kind] / 2 }
 
-// The three rate upgrades never max out: each level doubles in price, so the
-// climb is exponential both ways. Extractor Rate packs ore closer together
-// (emitGap), Belt Speed carries it faster (beltSpeed), and Ore Value doubles
-// what each delivery is worth (oreValue), all in economy.go.
+// The three rate upgrades never max out, but each level doubles in price while
+// paying a linear step up, so a track slows the deeper you push it. Growing for
+// real means more extractor lines, and lines need land: the upgrades season a
+// run, Grid Size carries it. Extractor Rate packs ore closer together
+// (emitGap), Belt Speed carries it faster (beltSpeed), and Ore Value makes
+// each delivery worth more (oreValue), all in economy.go.
 const (
 	extractorBaseCost = 150
 	beltBaseCost      = 200

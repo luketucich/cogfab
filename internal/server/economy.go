@@ -1,9 +1,6 @@
 package server
 
-import (
-	"math"
-	"strconv"
-)
+import "strconv"
 
 // The ore the client draws and the total the server keeps come from the same
 // idea, run on each side: chunks ride the belts at a shared speed, spaced a
@@ -37,10 +34,13 @@ func (h *Hub) beltSpeed() float64 {
 	return oreSpeed * (1 + 0.25*float64(min(h.beltLevel, maxSimLevel)))
 }
 
-// oreValue is what one delivery is worth: doubling with every Ore Value level,
-// the upgrade that keeps paying forever.
+// oreValue is what one delivery is worth: the base ore plus one more per Ore
+// Value level. Linear on purpose, against a doubling price: every level pays
+// back slower than the one before, so no single upgrade can carry a run, and
+// real growth comes from more extractor lines, which need land. Keep in step
+// with oreValue in economy.ts.
 func (h *Hub) oreValue() float64 {
-	return math.Pow(2, float64(h.valueLevel))
+	return 1 + float64(h.valueLevel)
 }
 
 // chunkValue is the ore one landing chunk pays. Normally just oreValue, but

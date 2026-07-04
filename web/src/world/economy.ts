@@ -28,10 +28,10 @@ export function beltMultiplier(beltLevel: number): number {
   return 1 + 0.25 * beltLevel;
 }
 
-// oreValue is what one delivery is worth: doubling with every Ore Value level.
-// Mirror of oreValue in economy.go.
+// oreValue is what one delivery is worth: the base ore plus one more per Ore
+// Value level. Mirror of oreValue in economy.go.
 export function oreValue(valueLevel: number): number {
-  return 2 ** valueLevel;
+  return 1 + valueLevel;
 }
 
 // perExtractorRate is the ore per second one extractor earns at the given
