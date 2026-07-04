@@ -15,17 +15,23 @@ import (
 // treated as too slow and dropped.
 const clientBuffer = 16
 
-// Client is one connected player: its outbound queue, its colour slot, and the
-// cell it is hovering. The WebSocket plumbing lives in the transport layer; the
-// presence fields are read and written only on the hub goroutine, the same
-// no-lock rule as everything else the hub owns.
+// Client is one connected player: its outbound queue, who it is, and where its
+// mouse is. The WebSocket plumbing lives in the transport layer; the presence
+// fields are read and written only on the hub goroutine, the same no-lock rule
+// as everything else the hub owns.
 type Client struct {
 	send chan []byte
 
-	slot     int // 0-3; doubles as the player's colour (PLAYER_COLORS in ui.ts)
-	hovering bool
-	hoverX   int
-	hoverY   int
+	slot  int    // 0-3; picks the default colour (PLAYER_COLORS in ui.ts)
+	name  string // "Player N" until the player picks one
+	color string // "" until the player picks one; then a #rrggbb
+
+	onScreen bool    // the mouse is somewhere over the page
+	screenX  float64 // mouse position in screen fractions
+	screenY  float64
+	hovering bool    // the mouse is over a grid cell
+	hoverX   float64 // that spot in cell coordinates, fractional
+	hoverY   float64
 }
 
 // clientCommand is a command plus who sent it. World commands ignore the
@@ -95,8 +101,14 @@ func (h *Hub) Run(ctx context.Context) {
 			h.removeClient(c)
 			h.broadcastPresence()
 		case sub := <-h.commands:
-			if sub.cmd.Type == wire.CmdHover {
+			switch sub.cmd.Type {
+			case wire.CmdHover:
 				if h.applyHover(sub.c, sub.cmd) {
+					h.broadcastPresence()
+				}
+				continue
+			case wire.CmdProfile:
+				if h.applyProfile(sub.c, sub.cmd) {
 					h.broadcastPresence()
 				}
 				continue
@@ -215,6 +227,7 @@ func (h *Hub) broadcast(b []byte) {
 // something changes. (The caller broadcasts the new roster to everyone.)
 func (h *Hub) addClient(c *Client) {
 	c.slot = h.lowestFreeSlot()
+	c.name = defaultName(c.slot)
 	h.clients[c] = true
 	h.sendTo(c, h.welcomeBytes(c))
 	h.sendTo(c, h.stateBytes())

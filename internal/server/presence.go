@@ -2,14 +2,20 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/luketucich/cogfab/internal/wire"
 )
 
 // Presence is the little social layer on top of the shared factory: who is in
-// the room (by colour slot) and which cell each player is pointing at. It all
-// runs on the hub goroutine, like everything else the hub owns.
+// the room (name and colour), where each player's mouse is on their screen (for
+// the named cursors), and which grid spot it is over (for the cell markers).
+// It all runs on the hub goroutine, like everything else the hub owns.
+
+// maxNameLength keeps names to nametag size.
+const maxNameLength = 16
 
 // lowestFreeSlot picks the first colour slot no connected player holds. The
 // registry admits at most maxPlayers connections and frees a seat only after
@@ -29,13 +35,50 @@ func (h *Hub) lowestFreeSlot() int {
 	}
 }
 
-// applyHover records where a player is pointing, reporting whether anything
-// changed so an unchanged hover does not re-broadcast the roster.
+// applyHover records where a player's mouse is, reporting whether anything
+// changed so an unchanged cursor does not re-broadcast the roster.
 func (h *Hub) applyHover(c *Client, cmd wire.Command) bool {
-	if c.hovering == cmd.Hovering && c.hoverX == cmd.X && c.hoverY == cmd.Y {
+	if c.onScreen == cmd.On && c.screenX == cmd.SX && c.screenY == cmd.SY &&
+		c.hovering == cmd.Hovering && c.hoverX == cmd.CX && c.hoverY == cmd.CY {
 		return false
 	}
-	c.hovering, c.hoverX, c.hoverY = cmd.Hovering, cmd.X, cmd.Y
+	c.onScreen, c.screenX, c.screenY = cmd.On, cmd.SX, cmd.SY
+	c.hovering, c.hoverX, c.hoverY = cmd.Hovering, cmd.CX, cmd.CY
+	return true
+}
+
+// applyProfile records the name and colour a player picked for itself,
+// reporting whether anything changed. Junk is trimmed rather than rejected: a
+// name is cut to nametag size and a colour that is not #rrggbb is ignored.
+func (h *Hub) applyProfile(c *Client, cmd wire.Command) bool {
+	name := strings.TrimSpace(cmd.Name)
+	if runes := []rune(name); len(runes) > maxNameLength {
+		name = string(runes[:maxNameLength])
+	}
+	color := cmd.Color
+	if !validColor(color) {
+		color = c.color
+	}
+	if name == "" {
+		name = c.name
+	}
+	if name == c.name && color == c.color {
+		return false
+	}
+	c.name, c.color = name, color
+	return true
+}
+
+// validColor reports whether a client-supplied colour is a #rrggbb value.
+func validColor(color string) bool {
+	if len(color) != 7 || color[0] != '#' {
+		return false
+	}
+	for _, r := range color[1:] {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", r) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -50,7 +93,11 @@ func (h *Hub) welcomeBytes(c *Client) []byte {
 func (h *Hub) presenceBytes() []byte {
 	players := make([]wire.PresencePlayer, 0, len(h.clients))
 	for c := range h.clients {
-		players = append(players, wire.PresencePlayer{Slot: c.slot, Hovering: c.hovering, X: c.hoverX, Y: c.hoverY})
+		players = append(players, wire.PresencePlayer{
+			Slot: c.slot, Name: c.name, Color: c.color,
+			On: c.onScreen, SX: c.screenX, SY: c.screenY,
+			Hovering: c.hovering, X: c.hoverX, Y: c.hoverY,
+		})
 	}
 	sort.Slice(players, func(i, j int) bool { return players[i].Slot < players[j].Slot })
 	b, _ := json.Marshal(wire.PresenceMessage{Type: "presence", Players: players})
@@ -59,7 +106,12 @@ func (h *Hub) presenceBytes() []byte {
 
 // broadcastPresence sends the current roster to everyone, sender included: each
 // client filters its own slot for the cursors and uses the full list for the
-// HUD dots.
+// lobby panel.
 func (h *Hub) broadcastPresence() {
 	h.broadcast(h.presenceBytes())
+}
+
+// defaultName is what a player is called until it picks something.
+func defaultName(slot int) string {
+	return fmt.Sprintf("Player %d", slot+1)
 }

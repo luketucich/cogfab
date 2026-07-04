@@ -1,41 +1,65 @@
 import { useState, useSyncExternalStore } from "react";
-import { PiCheckBold, PiCopyFill } from "react-icons/pi";
+import type { CSSProperties } from "react";
+import { PiCheckBold, PiCopyFill, PiPencilSimpleFill } from "react-icons/pi";
 import { useConnection } from "./useConnection";
 import { getPing, subscribePing } from "./net/ping";
-import { getSession, subscribeSession } from "./net/session";
+import { getSession, isRoomCode, subscribeSession, CODE_LENGTH } from "./net/session";
+import { setProfile, NAME_LIMIT } from "./net/profile";
 import { getPresence, subscribePresence } from "./world/presence";
+import type { PresencePlayer } from "./net/types";
 import { sfx } from "./sfx";
-import { panel, FONT_DISPLAY, PLAYER_COLORS } from "./ui";
+import { panel, ACCENT, FONT_DISPLAY, SWATCHES, playerColor } from "./ui";
 
-// Hud is the top-left brand panel: the game title, a signal bar showing the
-// connection, and the room: its code (with a copy-the-invite button, since the
-// page URL is the invite) and one colored dot per player, yours ringed.
+// Hud is the lobby panel in the top left: the game title with the round-trip
+// ping, the room code (click it to type a friend's code and jump rooms, or
+// copy yours for them), and everyone in the lobby. Your own row is yours to
+// dress up: click the name to change it, the pencil for a colour.
 export function Hud() {
   const { connected } = useConnection();
   const ping = useSyncExternalStore(subscribePing, getPing);
   const session = useSyncExternalStore(subscribeSession, getSession);
   const players = useSyncExternalStore(subscribePresence, getPresence);
+  const ms = ping === null ? null : Math.round(ping);
 
   return (
-    <div style={{ ...panel, top: 14, left: 14, padding: "10px 16px", display: "flex", alignItems: "center", gap: 14 }}>
-      <div style={title}>Cogfab.io</div>
-      <PingBar connected={connected} ping={ping} />
+    <div style={{ ...panel, top: 14, left: 14, width: 208, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <div style={title}>Cogfab.io</div>
+        <span style={{ ...pingText, ...(connected ? null : { color: "#e05260", opacity: 1 }) }}>
+          {connected ? (ms === null ? "..." : `${ms}ms`) : "offline"}
+        </span>
+      </div>
       {session.room && (
         <>
-          <div style={dividerLine} />
-          <RoomBadge code={session.room} slots={players.map((p) => p.slot)} mySlot={session.slot} />
+          <div style={divider} />
+          <RoomRow code={session.room} />
+          <div style={divider} />
+          {players.map((p) => (
+            <PlayerRow key={p.slot} player={p} you={p.slot === session.slot} />
+          ))}
         </>
       )}
     </div>
   );
 }
 
-// RoomBadge shows the room code, a copy-invite-link button, and who is here.
-function RoomBadge({ code, slots, mySlot }: { code: string; slots: number[]; mySlot: number }) {
+// RoomRow is the room line: the code doubles as a text box (type a friend's
+// code and press Enter to jump to their room), and the copy button puts the
+// code itself on the clipboard.
+function RoomRow({ code }: { code: string }) {
+  const [draft, setDraft] = useState<string | null>(null); // null = not editing
   const [copied, setCopied] = useState(false);
 
+  const jump = () => {
+    if (draft && isRoomCode(draft) && draft !== code) {
+      location.href = `${location.pathname}?room=${draft}`;
+    } else {
+      setDraft(null); // not a code (or our own): stay put
+    }
+  };
+
   const copy = () => {
-    void navigator.clipboard.writeText(location.href);
+    void navigator.clipboard.writeText(code);
     sfx.select();
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -43,83 +67,120 @@ function RoomBadge({ code, slots, mySlot }: { code: string; slots: number[]; myS
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={roomCode}>{code}</span>
-      <button onClick={copy} title="Copy the invite link" style={copyButton}>
+      <span style={rowLabel}>Room</span>
+      {draft === null ? (
+        <button onClick={() => setDraft(code)} title="Type a code to switch rooms" style={codeButton}>
+          {code}
+        </button>
+      ) : (
+        <input
+          autoFocus
+          value={draft}
+          maxLength={CODE_LENGTH}
+          onChange={(e) => setDraft(e.target.value.toUpperCase())}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") jump();
+            if (e.key === "Escape") setDraft(null);
+          }}
+          onBlur={() => setDraft(null)}
+          style={codeInput}
+        />
+      )}
+      <button onClick={copy} title="Copy the room code" style={iconButton}>
         {copied ? <PiCheckBold size={13} color="#5fd47a" /> : <PiCopyFill size={13} />}
       </button>
-      <div style={{ display: "flex", gap: 4 }}>
-        {slots.map((slot) => (
-          <span
-            key={slot}
-            title={slot === mySlot ? "You" : "Another player"}
-            style={{
-              width: 9,
-              height: 9,
-              borderRadius: "50%",
-              background: PLAYER_COLORS[slot],
-              boxShadow: slot === mySlot ? "0 0 0 2px rgba(255, 255, 255, 0.5)" : "none",
-            }}
-          />
-        ))}
-      </div>
     </div>
   );
 }
 
-const BAR_HEIGHTS = [6, 10, 14, 18];
+// PlayerRow is one lobby member: their cursor colour and name. Your own row
+// edits in place: the name is a button, the pencil opens the colour swatches.
+function PlayerRow({ player, you }: { player: PresencePlayer; you: boolean }) {
+  const [draft, setDraft] = useState<string | null>(null); // null = not editing
+  const [picking, setPicking] = useState(false);
+  const color = playerColor(player);
 
-// signal maps the connection state to how many bars light up and in what colour:
-// more bars and greener for a quicker ping, down to one red bar when offline.
-function signal(connected: boolean, ping: number | null): { bars: number; color: string } {
-  if (!connected) return { bars: 1, color: "#e05260" };
-  if (ping === null) return { bars: 2, color: "#9aa3b2" }; // connected, not measured yet
-  if (ping < 80) return { bars: 4, color: "#46d369" };
-  if (ping < 160) return { bars: 3, color: "#74cf57" };
-  if (ping < 300) return { bars: 2, color: "#e0c14f" };
-  return { bars: 1, color: "#e0795f" };
-}
+  const rename = () => {
+    if (draft && draft.trim()) setProfile(draft, player.color);
+    setDraft(null);
+  };
 
-function PingBar({ connected, ping }: { connected: boolean; ping: number | null }) {
-  const { bars, color } = signal(connected, ping);
-  const ms = ping === null ? null : Math.round(ping);
   return (
-    <div title={connected ? (ms === null ? "connecting" : `${ms}ms`) : "offline"} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 2.5, height: 18 }}>
-        {BAR_HEIGHTS.map((h, i) => (
-          <span
-            key={i}
-            style={{
-              width: 3.5,
-              height: h,
-              borderRadius: 1.5,
-              background: i < bars ? color : "#39404e",
-              transition: "background 250ms",
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ ...colorDot, background: color }} />
+        {!you ? (
+          <span style={nameText}>{player.name}</span>
+        ) : draft === null ? (
+          <button onClick={() => setDraft(player.name)} title="Change your name" style={nameButton}>
+            {player.name}
+            <span style={youTag}>you</span>
+          </button>
+        ) : (
+          <input
+            autoFocus
+            value={draft}
+            maxLength={NAME_LIMIT}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") rename();
+              if (e.key === "Escape") setDraft(null);
             }}
+            onBlur={rename}
+            style={nameInput}
           />
-        ))}
+        )}
+        {you && (
+          <button onClick={() => setPicking((v) => !v)} title="Pick your colour" style={iconButton}>
+            <PiPencilSimpleFill size={12} />
+          </button>
+        )}
       </div>
-      {connected && ms !== null && <span style={pingText}>{ms}ms</span>}
+      {you && picking && (
+        <div style={swatchRow}>
+          {SWATCHES.map((swatch) => (
+            <button
+              key={swatch}
+              onClick={() => {
+                setProfile(player.name, swatch);
+                setPicking(false);
+                sfx.select();
+              }}
+              title={swatch}
+              style={{
+                ...swatchButton,
+                background: swatch,
+                outline: swatch === color ? "2px solid rgba(255, 255, 255, 0.7)" : "none",
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-const title: React.CSSProperties = {
+const title: CSSProperties = {
   fontFamily: FONT_DISPLAY,
-  fontSize: 22,
+  fontSize: 21,
   fontWeight: 800,
   letterSpacing: 0.5,
   color: "#f0f3f8",
 };
 
-const pingText: React.CSSProperties = { fontSize: 10, fontWeight: 700, opacity: 0.55 };
+const pingText: CSSProperties = { fontSize: 10, fontWeight: 700, opacity: 0.55 };
 
-const dividerLine: React.CSSProperties = {
-  width: 1,
-  alignSelf: "stretch",
-  background: "rgba(255, 255, 255, 0.09)",
+const divider: CSSProperties = { height: 1, background: "rgba(255, 255, 255, 0.09)" };
+
+const rowLabel: CSSProperties = {
+  fontSize: 9,
+  fontWeight: 700,
+  letterSpacing: 1,
+  textTransform: "uppercase",
+  opacity: 0.45,
 };
 
-const roomCode: React.CSSProperties = {
+const codeText: CSSProperties = {
   fontFamily: FONT_DISPLAY,
   fontSize: 13,
   fontWeight: 800,
@@ -127,7 +188,27 @@ const roomCode: React.CSSProperties = {
   color: "#cdd3dc",
 };
 
-const copyButton: React.CSSProperties = {
+const codeButton: CSSProperties = {
+  ...codeText,
+  padding: "2px 6px",
+  borderRadius: 6,
+  border: "1px solid transparent",
+  background: "none",
+  cursor: "text",
+};
+
+const codeInput: CSSProperties = {
+  ...codeText,
+  width: 76,
+  padding: "2px 6px",
+  borderRadius: 6,
+  border: `1px solid ${ACCENT}`,
+  background: "rgba(0, 0, 0, 0.35)",
+  outline: "none",
+  textTransform: "uppercase",
+};
+
+const iconButton: CSSProperties = {
   display: "flex",
   alignItems: "center",
   padding: 4,
@@ -136,4 +217,49 @@ const copyButton: React.CSSProperties = {
   background: "rgba(0, 0, 0, 0.25)",
   color: "#cdd3dc",
   cursor: "pointer",
+  marginLeft: "auto",
+};
+
+const colorDot: CSSProperties = { width: 10, height: 10, borderRadius: "50%", flexShrink: 0 };
+
+const nameText: CSSProperties = { fontSize: 12, fontWeight: 700, color: "#cdd3dc" };
+
+const nameButton: CSSProperties = {
+  ...nameText,
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  padding: 0,
+  border: "none",
+  background: "none",
+  cursor: "text",
+};
+
+const youTag: CSSProperties = {
+  fontSize: 8,
+  fontWeight: 800,
+  letterSpacing: 1,
+  textTransform: "uppercase",
+  opacity: 0.4,
+};
+
+const nameInput: CSSProperties = {
+  ...nameText,
+  width: 120,
+  padding: "1px 5px",
+  borderRadius: 6,
+  border: `1px solid ${ACCENT}`,
+  background: "rgba(0, 0, 0, 0.35)",
+  outline: "none",
+};
+
+const swatchRow: CSSProperties = { display: "flex", gap: 6, marginTop: 7, marginLeft: 18 };
+
+const swatchButton: CSSProperties = {
+  width: 15,
+  height: 15,
+  borderRadius: "50%",
+  border: "1px solid rgba(0, 0, 0, 0.4)",
+  cursor: "pointer",
+  padding: 0,
 };

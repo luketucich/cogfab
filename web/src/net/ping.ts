@@ -1,6 +1,6 @@
 // The latest round-trip time to the server in milliseconds, or null when not
-// connected. Kept outside React like the world and economy stores; the HUD's ping
-// bar reads it.
+// connected. Kept outside React like the world and economy stores; the HUD ping
+// readout reads it.
 
 let ping: number | null = null;
 const listeners = new Set<() => void>();

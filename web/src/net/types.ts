@@ -42,11 +42,18 @@ export type WelcomeMessage = {
   slot: number;
 };
 
-// PresencePlayer is one connected player: its slot and the cell it is hovering,
-// if any. Mirror of wire.PresencePlayer.
+// PresencePlayer is one connected player: who it is (name and colour, "" colour
+// means the slot's default) and where its mouse is, twice over: sx/sy on the
+// screen in fractions (for the named pointer), x/y on the grid in cell
+// coordinates like 3.4 (for the cell marker). Mirror of wire.PresencePlayer.
 export type PresencePlayer = {
   slot: number;
-  hovering: boolean;
+  name: string;
+  color: string;
+  on: boolean; // the mouse is somewhere over their page
+  sx: number;
+  sy: number;
+  hovering: boolean; // the mouse is over a grid cell
   x: number;
   y: number;
 };
@@ -108,12 +115,21 @@ export type BuyCommand = {
 };
 
 export type HoverCommand = {
-  type: "hover"; // where this player is pointing, for the other players
-  hovering: boolean;
-  x: number;
-  y: number;
+  type: "hover"; // where this player's mouse is, for the other players
+  on: boolean; // over the page at all
+  sx: number; // screen fractions: 0.5, 0.5 is dead centre
+  sy: number;
+  hovering: boolean; // over a grid cell
+  cx: number; // that spot in cell coordinates, fractional
+  cy: number;
+};
+
+export type ProfileCommand = {
+  type: "profile"; // the name and colour this player picked
+  name: string;
+  color: string;
 };
 
 // Ping is deliberately not in this union: connection.ts sends it raw and the
 // server answers it in the transport layer, before commands reach the game.
-export type Command = PlaceCommand | DestroyCommand | RotateCommand | BuyCommand | HoverCommand;
+export type Command = PlaceCommand | DestroyCommand | RotateCommand | BuyCommand | HoverCommand | ProfileCommand;

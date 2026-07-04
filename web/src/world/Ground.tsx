@@ -8,7 +8,7 @@ import { cellFromWorld, cellIndex, cellOffsets, cellsBetween, dirBetween, dirFro
 import { connection } from "../net/connection";
 import { getFacing, getSelectedId, getSelectedTool, rotateFacing, setFacing } from "../toolbar/tools";
 import { getHover, setHover } from "./hover";
-import { ACCENT } from "../ui";
+import { ACCENT, isTyping } from "../ui";
 import { sfx } from "../sfx";
 import { addBurst } from "./burst";
 import { chevronGeometry, CHEVRON_ROT } from "./chevron";
@@ -49,12 +49,17 @@ export function Ground() {
   const arrowMat = useRef<THREE.MeshBasicMaterial>(null!);
   const arrowGeo = useMemo(() => chevronGeometry(), []);
 
-  // cellAt returns the grid cell under a pointer event, or null if it is off the
-  // world.
-  function cellAt(e: ThreeEvent<PointerEvent>): Cell | null {
+  // pointerAt reads a pointer event as grid positions: the cell under it (null
+  // when it is off the world) and its exact spot in cell coordinates, for the
+  // live cursor the other players see.
+  function pointerAt(e: ThreeEvent<PointerEvent>): { cell: Cell | null; spot?: { x: number; y: number } } {
     const snap = getLatest();
-    if (!snap) return null;
-    return cellFromWorld(e.point.x, e.point.z, snap);
+    if (!snap) return { cell: null };
+    const { offX, offZ } = cellOffsets(snap);
+    return {
+      cell: cellFromWorld(e.point.x, e.point.z, snap),
+      spot: { x: e.point.x + offX, y: e.point.z + offZ },
+    };
   }
 
   // canApply mirrors the server's checks so we never send a command it would
@@ -123,6 +128,7 @@ export function Ground() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (isTyping(e)) return;
       if (e.key === "Shift") {
         shiftLock.current = true;
         return;
@@ -223,7 +229,7 @@ export function Ground() {
         rotation={[-Math.PI / 2, 0, 0]}
         onPointerDown={(e) => {
           if (e.nativeEvent.button !== 0) return; // left builds; right is for panning
-          const cell = cellAt(e);
+          const { cell, spot } = pointerAt(e);
           if (!cell) return;
           // A knock when the click cannot work: locked land, or a build the ore
           // does not cover. Merely-occupied cells stay silent, since drags often
@@ -234,13 +240,13 @@ export function Ground() {
             sfx.deny();
           }
           target.current = cell;
-          setHover(cell);
+          setHover(cell, spot);
           stroke.current = [cell];
         }}
         onPointerMove={(e) => {
-          const cell = cellAt(e);
+          const { cell, spot } = pointerAt(e);
           target.current = cell;
-          setHover(cell);
+          setHover(cell, spot);
           // Aim the arrow by how the cursor moves, fine enough to update within
           // one cell. Re-aim once it has moved a small step so it tracks the
           // mouse without jittering on tiny moves; Shift holds the aim still.

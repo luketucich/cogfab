@@ -6,8 +6,11 @@ What I've worked on, newest first.
 - Multiplayer rooms. Visiting the site drops you straight into a room and the
   room code lands in the URL, so the address bar is the invite link: anyone who
   opens it joins your factory (up to four people). Everything is shared per
-  room (grid, ore, upgrades), each player gets a colour, and you see where the
-  others are pointing as a soft tile in their colour. Rooms are goroutines,
+  room (grid, ore, upgrades), and you watch the others' cursors glide around
+  live: a named pointer at the exact spot plus a soft tile on the cell it snaps
+  to, in their colour. Everyone can pick a name and colour in the lobby panel,
+  which also copies the room code and lets you type a friend's code to jump to
+  their room. Rooms are goroutines,
   not pods: one server process hosts hundreds of them (a mutex guards the
   lookup; each room's world stays lock-free on its own goroutine), and an
   empty room survives ten minutes so a refresh never loses the factory.

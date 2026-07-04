@@ -10,10 +10,11 @@ package wire
 const (
 	CmdPlace   = "place"
 	CmdDestroy = "destroy"
-	CmdRotate  = "rotate" // turn the structure at (X, Y) a quarter clockwise
-	CmdBuy     = "buy"    // purchase an upgrade; Upgrade says which
-	CmdHover   = "hover"  // where this player is pointing, for the other players
-	CmdPing    = "ping"   // a round-trip probe the server echoes back; see ws.go
+	CmdRotate  = "rotate"  // turn the structure at (X, Y) a quarter clockwise
+	CmdBuy     = "buy"     // purchase an upgrade; Upgrade says which
+	CmdHover   = "hover"   // where this player's cursor is, for the other players
+	CmdProfile = "profile" // the player's chosen name and colour
+	CmdPing    = "ping"    // a round-trip probe the server echoes back; see ws.go
 )
 
 // Place kinds: the "kind" a place command carries. Mirrors the placeable tile
@@ -34,14 +35,24 @@ const (
 
 // Command targets a cell (X, Y) with an action (Type). For a "place", Kind says
 // which structure to place and Dir says which way it faces. For a "buy",
-// Upgrade says which upgrade to purchase. For a "hover", Hovering says whether
-// the player is pointing at a cell at all.
+// Upgrade says which upgrade to purchase. For a "hover": SX/SY are the mouse in
+// screen fractions (0.5, 0.5 is dead centre) with On saying whether it is over
+// the page at all, and Hovering plus CX/CY say which grid spot it is over, in
+// cell coordinates (3.4 is 40% into cell 3). For a "profile", Name and Color
+// carry what the player picked for itself.
 type Command struct {
-	Type     string `json:"type"`
-	X        int    `json:"x"`
-	Y        int    `json:"y"`
-	Kind     string `json:"kind"`
-	Dir      string `json:"dir"`
-	Upgrade  string `json:"upgrade"`
-	Hovering bool   `json:"hovering"`
+	Type     string  `json:"type"`
+	X        int     `json:"x"`
+	Y        int     `json:"y"`
+	Kind     string  `json:"kind"`
+	Dir      string  `json:"dir"`
+	Upgrade  string  `json:"upgrade"`
+	Hovering bool    `json:"hovering"`
+	CX       float64 `json:"cx"`
+	CY       float64 `json:"cy"`
+	SX       float64 `json:"sx"`
+	SY       float64 `json:"sy"`
+	On       bool    `json:"on"`
+	Name     string  `json:"name"`
+	Color    string  `json:"color"`
 }
