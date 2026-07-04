@@ -2,6 +2,15 @@
 
 What I've worked on, newest first.
 
+## 2026-07-04
+- Rooms now survive restarts. Each room saves itself to a small JSON file (the
+  grid, the ore, the upgrade levels) every thirty seconds and on the way down,
+  and joining a code with a save on disk picks up right where it left off. The
+  save happens on the room's own goroutine, so the no-locks rule holds, and
+  writes go through a temp file and rename so a crash can never leave a
+  half-written room. No database yet on purpose: a room is one tiny file, and
+  swapping the file store for one is a small, contained change.
+
 ## 2026-07-03
 - Multiplayer rooms. Visiting the site drops you straight into a room and the
   room code lands in the URL, so the address bar is the invite link: anyone who

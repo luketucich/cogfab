@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	"github.com/luketucich/cogfab/internal/engine"
@@ -47,6 +48,7 @@ type clientCommand struct {
 type Hub struct {
 	world *engine.World
 	code  string // the room code players joined with; sent in each welcome
+	saves *Saves // where the room persists to; nil keeps it in memory only
 
 	ironOre    int     // authoritative iron-ore total: earned at the seller, spent on builds
 	orePartial float64 // fractional ore carried between ticks (chunk values go fractional past the sim cap)
@@ -82,16 +84,24 @@ func NewHub(w *engine.World) *Hub {
 	return h
 }
 
+// saveEvery is how often a live room writes itself to disk. A crash loses at
+// most this much progress; a clean teardown loses none (Run saves on the way
+// out).
+const saveEvery = 30 * time.Second
+
 // Run is the hub's event loop: it applies and broadcasts each command right away
 // (so a placement shows up at once) and accrues ore once a second. On ctx cancel
-// it disconnects everyone.
+// it saves the room and disconnects everyone.
 func (h *Hub) Run(ctx context.Context) {
 	defer close(h.done)
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
+	saver := time.NewTicker(saveEvery)
+	defer saver.Stop()
 	for {
 		select {
 		case <-ctx.Done():
+			h.persist()
 			h.closeAll()
 			return
 		case c := <-h.register:
@@ -126,7 +136,17 @@ func (h *Hub) Run(ctx context.Context) {
 				h.tick()
 				h.broadcastStats()
 			}
+		case <-saver.C:
+			h.persist()
 		}
+	}
+}
+
+// persist writes the room to disk. Losing one save is no disaster (the next
+// one lands within saveEvery), so a write error is logged, not fatal.
+func (h *Hub) persist() {
+	if err := h.saves.save(h.code, h.snapshot()); err != nil {
+		slog.Warn("saving room failed", "room", h.code, "err", err)
 	}
 }
 

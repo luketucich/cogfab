@@ -18,7 +18,7 @@ func newTestServer(t *testing.T) string {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	rooms := NewRooms(ctx, time.Minute, newTestWorld)
+	rooms := NewRooms(ctx, time.Minute, newTestWorld, nil)
 	srv := httptest.NewServer(rooms.Handler())
 	t.Cleanup(srv.Close)
 	return "ws" + strings.TrimPrefix(srv.URL, "http")

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -21,12 +22,25 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Rooms save to disk (DATA_DIR, ./data by default), so a factory survives
+	// restarts. If the directory cannot be opened the game still runs, just
+	// in memory only, like before.
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		dataDir = "data"
+	}
+	saves, err := server.NewSaves(dataDir)
+	if err != nil {
+		slog.Warn("saves disabled: rooms will not survive restarts", "dir", dataDir, "err", err)
+	}
+
 	// Every room starts as an empty world: a small unlocked region and just
 	// enough ore to build a first extractor-to-seller line. Rooms are created
-	// on demand and survive ten minutes after the last player leaves.
+	// on demand, survive ten minutes after the last player leaves, and come
+	// back from their save when someone returns later.
 	rooms := server.NewRooms(ctx, 10*time.Minute, func() *engine.World {
 		return engine.NewWorld(12, 8)
-	})
+	}, saves)
 
 	mux := http.NewServeMux()
 	mux.Handle("/ws", rooms.Handler())
@@ -45,4 +59,5 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
+	rooms.Shutdown() // every room saves on the way out
 }

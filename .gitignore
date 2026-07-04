@@ -18,6 +18,9 @@ node_modules/
 web/dist/
 *.tsbuildinfo
 
+# Room saves (one JSON file per room; see DATA_DIR in cmd/server/main.go)
+/data/
+
 # Environment / secrets
 .env
 .env.*
