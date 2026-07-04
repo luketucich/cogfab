@@ -14,6 +14,13 @@ import (
 // colour, so this matches PLAYER_COLORS in web/src/ui.ts.
 const maxPlayers = 4
 
+// maxRooms caps how many rooms one process hosts at once. Rooms are cheap
+// (a goroutine and a few kilobytes), so this is far above real use; it exists
+// so a script hammering the endpoint cannot mint goroutines and save files
+// without bound. A joiner refused by the cap gets the same full answer as a
+// fifth player.
+const maxRooms = 1000
+
 // room is one live game: a hub plus the bookkeeping the registry needs. Every
 // field here is guarded by Rooms.mu; the hub itself runs on its own goroutine
 // and is never touched under the lock.
@@ -73,6 +80,9 @@ func (rs *Rooms) join(code string) (*Hub, bool) {
 	defer rs.mu.Unlock()
 	rm := rs.rooms[code]
 	if rm == nil {
+		if len(rs.rooms) >= maxRooms {
+			return nil, false
+		}
 		var hub *Hub
 		if snap, ok := rs.saves.load(code); ok {
 			hub = hubFromSnapshot(snap)
