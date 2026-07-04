@@ -8,7 +8,7 @@ import { setProfile, NAME_LIMIT } from "./net/profile";
 import { getPresence, subscribePresence } from "./world/presence";
 import type { PresencePlayer } from "./net/types";
 import { sfx } from "./sfx";
-import { panel, ACCENT, FONT_DISPLAY, SWATCHES, playerColor } from "./ui";
+import { panel, ACCENT, DANGER, FONT_DISPLAY, SWATCHES, playerColor } from "./ui";
 
 // Hud is the lobby panel in the top left: the game title with the round-trip
 // ping, the room code (click it to type a friend's code and jump rooms, or
@@ -25,7 +25,7 @@ export function Hud() {
     <div style={{ ...panel, top: 14, left: 14, width: 208, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <div style={title}>Cogfab.io</div>
-        <span style={{ ...pingText, ...(connected ? null : { color: "#e05260", opacity: 1 }) }}>
+        <span style={{ ...pingText, ...(connected ? null : { color: DANGER, opacity: 1 }) }}>
           {connected ? (ms === null ? "..." : `${ms}ms`) : "offline"}
         </span>
       </div>

@@ -37,9 +37,15 @@ export function fmtNum(n: number, decimals = 2): string {
 }
 
 // beltMultiplier is the Belt Speed scale: each level adds a quarter of the base
-// speed. Mirror of beltSpeed in economy.go.
+// speed. Mirror of beltMult in economy.go.
 export function beltMultiplier(beltLevel: number): number {
   return 1 + 0.25 * beltLevel;
+}
+
+// emissionMultiplier is the Extractor Rate scale: each level packs chunks half
+// the base rate closer together. Mirror of extractorMult in economy.go.
+export function emissionMultiplier(extractorLevel: number): number {
+  return 1 + 0.5 * extractorLevel;
 }
 
 // oreValue is what one delivery is worth: the base ore plus one more per Ore
@@ -53,7 +59,7 @@ export function oreValue(valueLevel: number): number {
 // no sim cap (the cap only shapes the visuals). Mirror of currentRate in
 // economy.go, expressed per extractor for the upgrade cards.
 export function perExtractorRate(extractorLevel: number, beltLevel: number, valueLevel: number): number {
-  const chunksPerSec = (ORE_SPEED * beltMultiplier(beltLevel)) / (ORE_GAP / (1 + 0.5 * extractorLevel));
+  const chunksPerSec = (ORE_SPEED * beltMultiplier(beltLevel)) / (ORE_GAP / emissionMultiplier(extractorLevel));
   return chunksPerSec * oreValue(valueLevel);
 }
 

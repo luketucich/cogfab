@@ -36,7 +36,7 @@ type Client struct {
 }
 
 // clientCommand is a command plus who sent it. World commands ignore the
-// sender (the factory is shared); hover is about the sender.
+// sender (the factory is shared); hover and profile are about the sender.
 type clientCommand struct {
 	c   *Client
 	cmd wire.Command
@@ -271,6 +271,7 @@ func (h *Hub) removeClient(c *Client) {
 	}
 }
 
+// closeAll drops every remaining client on shutdown.
 func (h *Hub) closeAll() {
 	for c := range h.clients {
 		h.removeClient(c)

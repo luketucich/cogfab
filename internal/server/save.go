@@ -41,18 +41,18 @@ type savedTile struct {
 
 // snapshot captures the hub's saveable state. Run-goroutine only.
 func (h *Hub) snapshot() snapshot {
-	w, hgt := h.world.Width(), h.world.Height()
-	tiles := make([]savedTile, 0, w*hgt)
-	for y := 0; y < hgt; y++ {
-		for x := 0; x < w; x++ {
+	width, height := h.world.Width(), h.world.Height()
+	tiles := make([]savedTile, 0, width*height)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
 			t := h.world.At(x, y)
 			tiles = append(tiles, savedTile{K: uint8(t.Kind), D: uint8(t.Dir)})
 		}
 	}
 	return snapshot{
 		Version:        snapshotVersion,
-		Width:          w,
-		Height:         hgt,
+		Width:          width,
+		Height:         height,
 		Tiles:          tiles,
 		IronOre:        h.ironOre,
 		ExtractorLevel: h.extractorLevel,
@@ -92,8 +92,8 @@ func hubFromSnapshot(s snapshot) *Hub {
 }
 
 // Saves is the on-disk store, one file per room code. A nil *Saves is a valid
-// store that keeps nothing, so tests and a server without a writable disk run
-// exactly as before.
+// store that keeps nothing, so tests and a server without a writable disk just
+// run without saving.
 type Saves struct {
 	dir string
 }

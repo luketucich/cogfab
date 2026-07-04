@@ -8,6 +8,7 @@ export const FONT_UI = "'Nunito', system-ui, sans-serif"; // its clean rounded s
 
 export const ACCENT = "#6ea8ff"; // selected / interactive highlight
 export const ORE_TEXT = "#d9b878"; // ore amounts and prices, a warm metal tone
+export const DANGER = "#e05260"; // blocked actions and offline states
 
 // PLAYER_COLORS is the default colour per player slot: four seats, four hues
 // that read on the dark floor. Mirror of maxPlayers in internal/server/rooms.go.

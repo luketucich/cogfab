@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { getLatest, subscribe } from "./store";
-import { beltMultiplier, getStats, MAX_SIM_LEVEL, ORE_GAP, ORE_SPEED } from "./economy";
+import { beltMultiplier, emissionMultiplier, getStats, MAX_SIM_LEVEL, ORE_GAP, ORE_SPEED } from "./economy";
 import { cellOffsets } from "./grid";
 import { makeCurve, curvePoint, type Curve } from "./beltCurve";
 import { flowPaths, runKey } from "./flow";
@@ -35,6 +35,7 @@ export function FlowItems() {
   const mesh = useRef<THREE.InstancedMesh>(null!);
   const chunks = useRef<Chunk[]>([]);
   const routes = useRef<Map<string, Route>>(new Map()); // live paths to emit onto
+  const live = useRef<Set<Route>>(new Set()); // same routes, for O(1) is-it-alive checks
   const lastTime = useRef(0);
   const nextId = useRef(0);
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -67,6 +68,7 @@ export function FlowItems() {
       }
     }
     routes.current = next;
+    live.current = new Set(next.values());
   }, [snap]);
 
   useFrame(({ clock }) => {
@@ -88,13 +90,10 @@ export function FlowItems() {
       if (cell >= chunk.route.cells.length) {
         // Consumed. A live route ends at a seller, so sparkle where the ore
         // vanished; ore on a cut route just rides off with no fanfare.
-        for (const route of routes.current.values()) {
-          if (route === chunk.route) {
-            curvePoint(route.curves[route.curves.length - 1], 1, 0, landing);
-            addBurst({ x: landing.x, z: landing.z, color: "#ffd57a", count: 2 });
-            sfx.deliver();
-            break;
-          }
+        if (live.current.has(chunk.route)) {
+          curvePoint(chunk.route.curves[chunk.route.curves.length - 1], 1, 0, landing);
+          addBurst({ x: landing.x, z: landing.z, color: "#ffd57a", count: 2 });
+          sfx.deliver();
         }
         continue;
       }
@@ -107,7 +106,7 @@ export function FlowItems() {
     // moved a gap ahead, starting it at the overshoot so no spacing is lost.
     // Each Extractor Rate level up to the sim cap packs them tighter; mirror of
     // emitGap and emit in economy.go.
-    const gap = ORE_GAP / (1 + 0.5 * Math.min(getStats().extractorLevel, MAX_SIM_LEVEL));
+    const gap = ORE_GAP / emissionMultiplier(Math.min(getStats().extractorLevel, MAX_SIM_LEVEL));
     for (const route of routes.current.values()) {
       if (route.nearest === Infinity) alive.push({ route, dist: 0, id: nextId.current++ });
       else if (route.nearest >= gap) alive.push({ route, dist: route.nearest - gap, id: nextId.current++ });

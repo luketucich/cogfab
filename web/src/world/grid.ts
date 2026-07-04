@@ -75,8 +75,12 @@ export function cellOffsets(snap: GridSize): { offX: number; offZ: number } {
   };
 }
 
+// CURSOR_TILE is the footprint of the glowing cursor tiles (the build preview
+// and the other players' cell markers): a hair inside the cell, so edges show.
+export const CURSOR_TILE = 0.96;
+
 // inBounds reports whether (x, y) is on the grid.
-export function inBounds(snap: GridSize, x: number, y: number): boolean {
+function inBounds(snap: GridSize, x: number, y: number): boolean {
   return x >= 0 && x < snap.width && y >= 0 && y < snap.height;
 }
 

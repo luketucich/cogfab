@@ -10,9 +10,18 @@ import "strconv"
 const (
 	oreSpeed = 2.5 // belts per second a chunk travels, before Belt Speed levels
 	oreGap   = 0.5 // belts between chunks; oreSpeed/oreGap = 5 chunks per second
-	subSteps = 40  // sim steps per one-second tick: a chunk never skips a belt, and
-	// there is room to emit one chunk per step with every upgrade maxed (~39/sec)
+
+	// subSteps is the sim steps per one-second tick: enough that a chunk never
+	// skips a belt, with room to emit one chunk per step at the sim cap (~39/sec).
+	subSteps = 40
 )
+
+// extractorMult and beltMult are the level multipliers the two rate upgrades
+// apply: each Extractor Rate level adds half the base emission rate, each Belt
+// Speed level a quarter of the base speed. Everything that moves or prices ore
+// derives from these two. Keep in step with economy.ts.
+func extractorMult(level int) float64 { return 1 + 0.5*float64(level) }
+func beltMult(level int) float64      { return 1 + 0.25*float64(level) }
 
 // maxSimLevel is where the simulation stops getting busier: past this the
 // belts are visually maxed out, and each further level pays through richer
@@ -20,18 +29,16 @@ const (
 // climb forever. Keep in step with MAX_SIM_LEVEL in economy.ts.
 const maxSimLevel = 5
 
-// emitGap is how close together chunks leave the extractors: each Extractor
-// Rate level up to the sim cap adds half the base rate. Keep in step with
-// FlowItems.tsx.
+// emitGap is how close together chunks leave the extractors, capped at the sim
+// cap. Keep in step with FlowItems.tsx.
 func (h *Hub) emitGap() float64 {
-	return oreGap / (1 + 0.5*float64(min(h.extractorLevel, maxSimLevel)))
+	return oreGap / extractorMult(min(h.extractorLevel, maxSimLevel))
 }
 
-// beltSpeed is how fast chunks travel: each Belt Speed level up to the sim cap
-// adds a quarter of the base speed. Faster belts also deliver more often at
-// the same spacing. Keep in step with beltMultiplier in economy.ts.
+// beltSpeed is how fast chunks travel, capped at the sim cap. Faster belts
+// also deliver more often at the same spacing.
 func (h *Hub) beltSpeed() float64 {
-	return oreSpeed * (1 + 0.25*float64(min(h.beltLevel, maxSimLevel)))
+	return oreSpeed * beltMult(min(h.beltLevel, maxSimLevel))
 }
 
 // oreValue is what one delivery is worth: the base ore plus one more per Ore
@@ -49,10 +56,10 @@ func (h *Hub) oreValue() float64 {
 func (h *Hub) chunkValue() float64 {
 	v := h.oreValue()
 	if h.extractorLevel > maxSimLevel {
-		v *= (1 + 0.5*float64(h.extractorLevel)) / (1 + 0.5*maxSimLevel)
+		v *= extractorMult(h.extractorLevel) / extractorMult(maxSimLevel)
 	}
 	if h.beltLevel > maxSimLevel {
-		v *= (1 + 0.25*float64(h.beltLevel)) / (1 + 0.25*maxSimLevel)
+		v *= beltMult(h.beltLevel) / beltMult(maxSimLevel)
 	}
 	return v
 }
@@ -63,7 +70,7 @@ func (h *Hub) chunkValue() float64 {
 // Derived from the routes instead of measured, so the HUD reads steady instead
 // of flickering with the sub-second timing of individual deliveries.
 func (h *Hub) currentRate() float64 {
-	chunksPerSec := oreSpeed * (1 + 0.25*float64(h.beltLevel)) / (oreGap / (1 + 0.5*float64(h.extractorLevel)))
+	chunksPerSec := oreSpeed * beltMult(h.beltLevel) / (oreGap / extractorMult(h.extractorLevel))
 	return float64(len(h.routes)) * chunksPerSec * h.oreValue()
 }
 

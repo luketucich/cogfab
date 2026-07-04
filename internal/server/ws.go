@@ -18,7 +18,8 @@ const writeTimeout = 5 * time.Second
 // sockets: the production site, plus localhost for the Vite dev server (which
 // serves the page on another port than the game). Non-browser clients send no
 // Origin header and are allowed; the check is about strangers' web pages
-// reaching into rooms from a visitor's browser, not about curl.
+// reaching into rooms from a visitor's browser, not about curl. Keep in step
+// with the DOMAIN env in docs/deploy.md.
 var acceptOptions = &websocket.AcceptOptions{
 	OriginPatterns: []string{"cogfab.io", "www.cogfab.io", "localhost:*", "127.0.0.1:*"},
 }
@@ -54,8 +55,8 @@ func (h *Hub) serve(w http.ResponseWriter, r *http.Request) {
 	defer h.Unregister(client)
 
 	// pong carries ping timestamps from the reader to the writer. The writer
-	// is the only goroutine that touches the socket and client.send, so the
-	// reader hands echoes across rather than sending them itself.
+	// is the only goroutine that writes to the socket, so the reader hands
+	// echoes across rather than sending them itself.
 	pong := make(chan float64, 4)
 
 	// Reader: decode each frame as a client command and hand it to the hub.

@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
+import type { CSSProperties } from "react";
 import type { IconType } from "react-icons";
 import { PiCaretDoubleRightFill, PiShovelFill, PiStorefrontFill, PiTrashFill } from "react-icons/pi";
 import { TOOLS, getSelectedId, selectTool, subscribe } from "./tools";
@@ -73,7 +74,7 @@ export function Toolbar() {
   );
 }
 
-const hotkeyBadge: React.CSSProperties = {
+const hotkeyBadge: CSSProperties = {
   position: "absolute",
   top: 4,
   left: 7,
@@ -81,7 +82,7 @@ const hotkeyBadge: React.CSSProperties = {
   opacity: 0.45,
 };
 
-const costBadge: React.CSSProperties = {
+const costBadge: CSSProperties = {
   position: "absolute",
   top: 4,
   right: 7,
