@@ -3,6 +3,14 @@
 What I've worked on, newest first.
 
 ## 2026-07-04
+- Rebalanced the upgrades after actually playing a long run. Ore Value used to
+  double its payout while its price doubled too, so every level paid for
+  itself in the same time forever, and the best strategy was one tiny
+  extractor-belt-seller line plus that one button. No reason to expand, no
+  reason to build. Now prices still double but each level adds a flat step, so
+  every upgrade track slows down the deeper you push it, and the real way to
+  grow is building more extractor lines, which take land. The grid purchases
+  went from pointless to the backbone of a run.
 - Rooms now survive restarts. Each room saves itself to a small JSON file (the
   grid, the ore, the upgrade levels) every thirty seconds and on the way down,
   and joining a code with a save on disk picks up right where it left off. The

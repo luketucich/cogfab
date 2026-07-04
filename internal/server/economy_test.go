@@ -119,7 +119,7 @@ func TestOreSimOreValueMultipliesEarnings(t *testing.T) {
 
 func TestOreSimHandlesTheBusiestVisuals(t *testing.T) {
 	// The busiest the sim ever gets: ~39.4 chunks/s per line at the sim cap,
-	// each worth 2^5. subSteps must keep up (one emission per step at most).
+	// each worth 6. subSteps must keep up (one emission per step at most).
 	_, h := run(3)
 	h.extractorLevel = maxSimLevel
 	h.beltLevel = maxSimLevel
@@ -128,8 +128,8 @@ func TestOreSimHandlesTheBusiestVisuals(t *testing.T) {
 	before := h.ironOre
 	tickN(h, 10)
 	got := h.ironOre - before
-	if got < 12400 || got > 12800 {
-		t.Fatalf("earned %d over 10s at the sim cap, want ~12600 (39.4/s worth 32)", got)
+	if got < 2320 || got > 2400 {
+		t.Fatalf("earned %d over 10s at the sim cap, want ~2360 (39.4/s worth 6)", got)
 	}
 }
 

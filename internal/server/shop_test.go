@@ -200,6 +200,25 @@ func TestBuyingExtractorRate(t *testing.T) {
 	}
 }
 
+func TestOreValuePaybackSlowsEveryLevel(t *testing.T) {
+	// The heart of the rebalance: prices double but payouts step up linearly,
+	// so each Ore Value level takes longer to pay for itself than the last.
+	// (When payout doubled too, every level paid back in the same time, and
+	// one tiny line plus this one button was the whole game.)
+	h := lineHub()
+	var last float64
+	for level := 0; level < 12; level++ {
+		h.valueLevel = level
+		cost, before := float64(h.valueCost()), h.currentRate()
+		h.valueLevel = level + 1
+		payback := cost / (h.currentRate() - before)
+		if payback <= last {
+			t.Fatalf("level %d pays back in %.0fs, no slower than level %d's %.0fs", level+1, payback, level, last)
+		}
+		last = payback
+	}
+}
+
 func TestRateUpgradesNeverMaxOut(t *testing.T) {
 	h := lineHub()
 	h.extractorLevel, h.beltLevel, h.valueLevel = 30, 30, 30
@@ -227,7 +246,7 @@ func TestBuyingBeltSpeedAndOreValue(t *testing.T) {
 		t.Fatal("the first value level should be buyable at exact cost")
 	}
 	if h.valueLevel != 1 || h.oreValue() != 2 {
-		t.Fatalf("valueLevel=%d worth=%v after buying, want level 1 worth 2 (doubling)", h.valueLevel, h.oreValue())
+		t.Fatalf("valueLevel=%d worth=%v after buying, want level 1 worth 2 (base plus one per level)", h.valueLevel, h.oreValue())
 	}
 }
 
