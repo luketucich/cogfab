@@ -3,6 +3,13 @@
 What I've worked on, newest first.
 
 ## 2026-07-04
+- Containerized the game and wrote the cluster config. The image is a
+  three-stage build (web app, Go binary, then a 21MB distroless final that
+  runs as non-root), and deploy/ holds the GKE pieces: one pod with the saves
+  on a persistent disk, health probes, a load balancer that will not cut
+  WebSockets at its default 30-second idle timeout, and a Google-managed
+  certificate for cogfab.io. docs/deploy.md is the runbook, from empty GCP
+  project to live game.
 - Deploy prep on the server: it now serves the built web app itself, so
   production is one binary on one origin (cogfab.io); a /healthz endpoint for
   the load balancer's probes; WebSocket upgrades only accepted from the

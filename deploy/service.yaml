@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cogfab
+  annotations:
+    cloud.google.com/backend-config: '{"default": "cogfab-backend"}'
+spec:
+  type: ClusterIP
+  selector:
+    app: cogfab
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+# The load balancer drops idle connections after 30 seconds by default, which
+# would cut every WebSocket mid-game. An hour covers a long session; the
+# client reconnects with backoff if it is ever cut.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: cogfab-backend
+spec:
+  timeoutSec: 3600

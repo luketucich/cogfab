@@ -1,0 +1,65 @@
+# The game server: one pod on purpose. Rooms live in that process's memory,
+# so a second replica would split players joining the same code into two
+# different worlds. Scaling out later means routing each room code to a
+# consistent process, not turning this dial up.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cogfab
+spec:
+  replicas: 1
+  # Recreate, not rolling: the saves disk is single-writer, so the old pod
+  # must let go (and write its final saves) before the new one starts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: cogfab
+  template:
+    metadata:
+      labels:
+        app: cogfab
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532 # distroless nonroot; makes /data writable for it
+      containers:
+        - name: server
+          # Replace PROJECT_ID after creating the Artifact Registry repo; see
+          # docs/deploy.md for the build-and-push commands.
+          image: us-central1-docker.pkg.dev/PROJECT_ID/cogfab/server:v1
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: cogfab-data
+---
+# Room saves: one small JSON file per room, so 1Gi is years of headroom.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cogfab-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
