@@ -16,9 +16,23 @@ export const ORE_GAP = 0.5;
 // chunks. Mirror of maxSimLevel in economy.go.
 export const MAX_SIM_LEVEL = 5;
 
+// Suffixes for big numbers, one per thousand step past a million.
+const SUFFIXES = ["M", "B", "T", "Q"];
+
 // fmtNum trims a number for display: whole numbers stay whole, fractions keep
-// up to `decimals` digits, and big values get thousands separators.
+// up to `decimals` digits, and big values get thousands separators. From a
+// million up it switches to three-figure suffixes (1.25M, 30.2B), so an
+// endgame purse reads at a glance instead of as a wall of digits.
 export function fmtNum(n: number, decimals = 2): string {
+  if (n >= 1_000_000) {
+    let value = n / 1_000_000;
+    let i = 0;
+    while (value >= 1000 && i < SUFFIXES.length - 1) {
+      value /= 1000;
+      i++;
+    }
+    return (value >= 100 ? Math.round(value).toString() : value.toFixed(value >= 10 ? 1 : 2)) + SUFFIXES[i];
+  }
   return Number(Number.isInteger(n) ? n : n.toFixed(decimals)).toLocaleString();
 }
 

@@ -13,7 +13,7 @@ export function OreCounter() {
   return (
     <div style={{ ...panel, top: 14, left: "50%", transform: "translateX(-50%)", padding: "9px 22px", minWidth: 170, textAlign: "center" }}>
       <div style={statLabel}>Iron Ore</div>
-      <div style={count}>{amount.toLocaleString()}</div>
+      <div style={count}>{fmtNum(amount)}</div>
       <div style={subRow}>
         <span>
           <span style={statLabel}>Rate</span> <span style={rateValue}>+{fmtNum(stats.ratePerSec, 1)}/s</span>
