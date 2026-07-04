@@ -122,18 +122,18 @@ func TestPlayersShareARoomAndSeeEachOthersHover(t *testing.T) {
 
 	wctx, wcancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer wcancel()
-	if err := connA.Write(wctx, websocket.MessageText, []byte(`{"type":"hover","hovering":true,"x":1,"y":0}`)); err != nil {
+	if err := connA.Write(wctx, websocket.MessageText, []byte(`{"type":"hover","hovering":true,"cx":1.5,"cy":0.5}`)); err != nil {
 		t.Fatalf("write hover: %v", err)
 	}
 
-	// B reads until the roster shows A pointing at (1,0).
+	// B reads until the roster shows A's cursor at (1.5, 0.5).
 	for i := 0; i < 10; i++ {
 		var msg wire.PresenceMessage
 		if data := readB(); json.Unmarshal(data, &msg) != nil || msg.Type != "presence" {
 			continue
 		} else {
 			for _, p := range msg.Players {
-				if p.Slot == 0 && p.Hovering && p.X == 1 && p.Y == 0 {
+				if p.Slot == 0 && p.Hovering && p.X == 1.5 && p.Y == 0.5 {
 					return
 				}
 			}

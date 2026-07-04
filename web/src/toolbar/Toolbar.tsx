@@ -3,7 +3,7 @@ import type { IconType } from "react-icons";
 import { PiCaretDoubleRightFill, PiShovelFill, PiStorefrontFill, PiTrashFill } from "react-icons/pi";
 import { TOOLS, getSelectedId, selectTool, subscribe } from "./tools";
 import { getStats, spendableOre, subscribeStats } from "../world/economy";
-import { tile, ACCENT, ORE_TEXT } from "../ui";
+import { tile, ACCENT, ORE_TEXT, isTyping } from "../ui";
 import { sfx } from "../sfx";
 
 // One icon per tool, keyed by id.
@@ -23,7 +23,7 @@ export function Toolbar() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.repeat) return;
+      if (e.repeat || isTyping(e)) return;
       const tool = TOOLS.find((t) => t.hotkey === e.key);
       if (tool) {
         selectTool(tool.id);
@@ -54,7 +54,7 @@ export function Toolbar() {
               ...(!affordable && { opacity: 0.45 }), // too pricey right now
               // base tile is the unselected look; only override when selected
               ...(selected && {
-                borderColor: ACCENT,
+                border: `1px solid ${ACCENT}`,
                 background: "rgba(43, 60, 92, 0.92)",
                 color: "#ffffff",
                 transform: "translateY(-3px)",

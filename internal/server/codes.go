@@ -6,9 +6,7 @@ import (
 )
 
 // Room codes: six characters from an alphabet with no lookalikes (no I, L, O,
-// 0, or 1), so a code read aloud or typed by hand survives the trip. The
-// alphabet has 32 letters on purpose: 256 divides evenly by 32, so picking
-// bytes modulo 32 introduces no bias.
+// 0, or 1), so a code read aloud or typed by hand survives the trip.
 const (
 	codeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 	codeLength   = 6
@@ -16,16 +14,23 @@ const (
 
 // newCode mints a random room code. crypto/rand makes codes unguessable, so
 // knowing a code is what admits you to a room; nobody can enumerate their way
-// into a stranger's game.
+// into a stranger's game. Bytes past the largest multiple of the alphabet size
+// are thrown away, so every letter is exactly equally likely.
 func newCode() string {
-	b := make([]byte, codeLength)
-	if _, err := rand.Read(b); err != nil {
-		panic(err) // the OS random source failing is not a state we can play through
+	limit := byte(256 - 256%len(codeAlphabet))
+	code := make([]byte, 0, codeLength)
+	buf := make([]byte, 16)
+	for len(code) < codeLength {
+		if _, err := rand.Read(buf); err != nil {
+			panic(err) // the OS random source failing is not a state we can play through
+		}
+		for _, v := range buf {
+			if v < limit && len(code) < codeLength {
+				code = append(code, codeAlphabet[int(v)%len(codeAlphabet)])
+			}
+		}
 	}
-	for i, v := range b {
-		b[i] = codeAlphabet[int(v)%len(codeAlphabet)]
-	}
-	return string(b)
+	return string(code)
 }
 
 // validCode reports whether a client-supplied code is one we could have minted.

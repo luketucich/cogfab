@@ -51,13 +51,21 @@ type WelcomeMessage struct {
 	Slot int    `json:"slot"`
 }
 
-// PresencePlayer is one connected player: its slot and the cell it is hovering,
-// if any.
+// PresencePlayer is one connected player: who it is (name and colour, or the
+// slot defaults when it never picked) and where its mouse is, twice over. SX/SY
+// place the cursor on the screen in fractions (for the named pointer everyone
+// sees), and X/Y place it on the grid in cell coordinates like 3.4 (for the
+// cell marker), with On and Hovering saying whether each applies right now.
 type PresencePlayer struct {
-	Slot     int  `json:"slot"`
-	Hovering bool `json:"hovering"`
-	X        int  `json:"x"`
-	Y        int  `json:"y"`
+	Slot     int     `json:"slot"`
+	Name     string  `json:"name"`
+	Color    string  `json:"color"` // "" means use the slot's default colour
+	On       bool    `json:"on"`
+	SX       float64 `json:"sx"`
+	SY       float64 `json:"sy"`
+	Hovering bool    `json:"hovering"`
+	X        float64 `json:"x"`
+	Y        float64 `json:"y"`
 }
 
 // PresenceMessage is a room's full roster, sent to everyone whenever a player

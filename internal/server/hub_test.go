@@ -94,10 +94,10 @@ func TestPresenceRosterTracksHovers(t *testing.T) {
 	h.addClient(a)
 	h.addClient(b)
 
-	if !h.applyHover(b, wire.Command{Type: wire.CmdHover, Hovering: true, X: 2, Y: 0}) {
+	if !h.applyHover(b, wire.Command{Type: wire.CmdHover, Hovering: true, CX: 2.5, CY: 0.25}) {
 		t.Fatal("a fresh hover should count as a change")
 	}
-	if h.applyHover(b, wire.Command{Type: wire.CmdHover, Hovering: true, X: 2, Y: 0}) {
+	if h.applyHover(b, wire.Command{Type: wire.CmdHover, Hovering: true, CX: 2.5, CY: 0.25}) {
 		t.Fatal("repeating the same hover should not count as a change")
 	}
 
@@ -108,8 +108,34 @@ func TestPresenceRosterTracksHovers(t *testing.T) {
 	if len(msg.Players) != 2 {
 		t.Fatalf("roster has %d players, want 2", len(msg.Players))
 	}
-	if p := msg.Players[1]; p.Slot != 1 || !p.Hovering || p.X != 2 || p.Y != 0 {
-		t.Fatalf("player 1 = %+v, want slot 1 hovering (2,0)", p)
+	if p := msg.Players[1]; p.Slot != 1 || !p.Hovering || p.X != 2.5 || p.Y != 0.25 {
+		t.Fatalf("player 1 = %+v, want slot 1 hovering at (2.5, 0.25)", p)
+	}
+}
+
+func TestProfilesAreSanitizedNotRejected(t *testing.T) {
+	h := NewHub(newTestWorld())
+	c := &Client{send: make(chan []byte, 8)}
+	h.addClient(c)
+	if c.name != "Player 1" {
+		t.Fatalf("default name = %q, want Player 1", c.name)
+	}
+
+	if !h.applyProfile(c, wire.Command{Type: wire.CmdProfile, Name: "  Luke  ", Color: "#5fd47a"}) {
+		t.Fatal("a real profile change should count as a change")
+	}
+	if c.name != "Luke" || c.color != "#5fd47a" {
+		t.Fatalf("profile = %q %q, want Luke #5fd47a", c.name, c.color)
+	}
+
+	// Junk trims instead of erroring: a too-long name is cut, a bad colour and
+	// an empty name keep what was there.
+	h.applyProfile(c, wire.Command{Type: wire.CmdProfile, Name: "abcdefghijklmnopqrstuvwxyz", Color: "not-a-colour"})
+	if c.name != "abcdefghijklmnop" || c.color != "#5fd47a" {
+		t.Fatalf("after junk, profile = %q %q, want the name cut to 16 and the colour kept", c.name, c.color)
+	}
+	if h.applyProfile(c, wire.Command{Type: wire.CmdProfile, Name: "", Color: "zz"}) {
+		t.Fatal("all-junk profile should change nothing")
 	}
 }
 

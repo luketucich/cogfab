@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { CAMERA_POS, DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, onResetCamera } from "./camera";
+import { isTyping } from "./ui";
 
 const WHEEL_FEEL = 0.0028; // how much one wheel notch changes the zoom target
 const ZOOM_DAMP = 9; // how quickly the camera glides to that target
@@ -73,6 +74,7 @@ export function CameraRig() {
     // Q and E orbit the view a quarter turn around the pan target. Pressing
     // again mid-turn chains smoothly onto the next quarter.
     const onKey = (e: KeyboardEvent) => {
+      if (isTyping(e)) return;
       const left = e.key === "q" || e.key === "Q";
       const right = e.key === "e" || e.key === "E";
       if ((!left && !right) || !controls) return;

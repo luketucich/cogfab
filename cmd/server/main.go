@@ -1,5 +1,5 @@
-// Command server runs the Cogfab game server: it hosts one shared factory and
-// streams it to browsers over WebSocket.
+// Command server runs the Cogfab game server: it hosts rooms of shared
+// factories and streams each to its players over WebSocket.
 package main
 
 import (
