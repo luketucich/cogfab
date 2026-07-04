@@ -26,7 +26,7 @@ func main() {
 
 	// Rooms save to disk (DATA_DIR, ./data by default), so a factory survives
 	// restarts. If the directory cannot be opened the game still runs, just
-	// in memory only, like before.
+	// in memory only.
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
 		dataDir = "data"

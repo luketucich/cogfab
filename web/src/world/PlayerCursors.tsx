@@ -4,10 +4,10 @@ import * as THREE from "three";
 import { getLatest, subscribe } from "./store";
 import { getPresence } from "./presence";
 import { getSession } from "../net/session";
-import { cellOffsets } from "./grid";
+import { cellOffsets, CURSOR_TILE } from "./grid";
 import { PLAYER_COLORS, playerColor } from "../ui";
 
-const TILE = 0.96; // match the build cursor's footprint
+const TILE = CURSOR_TILE;
 const TILE_Y = 0.03; // a hair above the build preview, so both can show
 const OPACITY = 0.3;
 const FOLLOW = 14; // glide speed between cells: visibly smooth, never laggy

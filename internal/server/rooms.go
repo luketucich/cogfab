@@ -35,7 +35,7 @@ type room struct {
 // Rooms is the registry: it hands out rooms by code, caps how many players
 // each holds, and tears a room down a grace period after it empties. Lookup is
 // the cold path, so one mutex guards it; each room's world stays lock-free on
-// its own goroutine, exactly as before.
+// its own goroutine.
 type Rooms struct {
 	ctx      context.Context      // parent of every hub; ends them all on shutdown
 	grace    time.Duration        // how long an empty room survives

@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
+import type { CSSProperties } from "react";
 import type { IconType } from "react-icons";
 import { PiShovelFill, PiFastForwardFill, PiCoinsFill, PiArrowsOutFill } from "react-icons/pi";
-import { beltMultiplier, fmtNum as fmt, getStats, oreValue, perExtractorRate, spendableOre, subscribeStats } from "./world/economy";
+import { beltMultiplier, fmtNum, getStats, oreValue, perExtractorRate, spendableOre, subscribeStats } from "./world/economy";
 import { connection } from "./net/connection";
 import { sfx } from "./sfx";
 import { panel, ACCENT, ORE_TEXT, FONT_DISPLAY, FONT_UI } from "./ui";
@@ -15,7 +16,7 @@ export function UpgradePanel() {
   const earning = stats.ratePerSec > 0;
   const ore = spendableOre();
   const { extractorLevel: el, beltLevel: bl, valueLevel: vl } = stats;
-  const rate = (extractor: number, belt: number, value: number) => fmt(perExtractorRate(extractor, belt, value));
+  const rate = (extractor: number, belt: number, value: number) => fmtNum(perExtractorRate(extractor, belt, value));
 
   return (
     <div style={{ ...panel, top: 14, right: 14, width: 196, padding: 16 }}>
@@ -37,7 +38,7 @@ export function UpgradePanel() {
         <UpgradeCard
           icon={PiFastForwardFill}
           name="Belt Speed"
-          detail={stats.beltCost > 0 ? `x${fmt(beltMultiplier(bl))} to x${fmt(beltMultiplier(bl + 1))} speed` : `x${fmt(beltMultiplier(bl))} speed`}
+          detail={stats.beltCost > 0 ? `x${fmtNum(beltMultiplier(bl))} to x${fmtNum(beltMultiplier(bl + 1))} speed` : `x${fmtNum(beltMultiplier(bl))} speed`}
           tag={`LV ${bl}`}
           cost={stats.beltCost}
           ironOre={ore}
@@ -50,7 +51,7 @@ export function UpgradePanel() {
         <UpgradeCard
           icon={PiCoinsFill}
           name="Ore Value"
-          detail={stats.valueCost > 0 ? `${fmt(oreValue(vl))} to ${fmt(oreValue(vl + 1))} ore per delivery` : `${fmt(oreValue(vl))} ore per delivery`}
+          detail={stats.valueCost > 0 ? `${fmtNum(oreValue(vl))} to ${fmtNum(oreValue(vl + 1))} ore per delivery` : `${fmtNum(oreValue(vl))} ore per delivery`}
           tag={`LV ${vl}`}
           cost={stats.valueCost}
           ironOre={ore}
@@ -111,28 +112,28 @@ function UpgradeCard({ icon: Icon, name, detail, tag, cost, ironOre, earning, on
           title={earning ? undefined : "Get some ore flowing first"}
           style={{ ...buyButton, ...(!buyable && { opacity: 0.45, cursor: "default" }) }}
         >
-          Upgrade <span style={{ color: ORE_TEXT }}>· {fmt(cost)} ore</span>
+          Upgrade <span style={{ color: ORE_TEXT }}>· {fmtNum(cost)} ore</span>
         </button>
       )}
     </div>
   );
 }
 
-const heading: React.CSSProperties = {
+const heading: CSSProperties = {
   fontFamily: FONT_DISPLAY,
   fontSize: 16,
   fontWeight: 800,
   letterSpacing: 0.5,
 };
 
-const card: React.CSSProperties = {
+const card: CSSProperties = {
   padding: 12,
   borderRadius: 10,
   background: "rgba(0, 0, 0, 0.22)",
   border: "1px solid rgba(255, 255, 255, 0.06)",
 };
 
-const tagChip: React.CSSProperties = {
+const tagChip: CSSProperties = {
   marginLeft: 4,
   fontSize: 9,
   fontWeight: 800,
@@ -140,7 +141,7 @@ const tagChip: React.CSSProperties = {
   color: ACCENT,
 };
 
-const buyButton: React.CSSProperties = {
+const buyButton: CSSProperties = {
   marginTop: 11,
   width: "100%",
   padding: "8px 0",
@@ -153,7 +154,7 @@ const buyButton: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const mutedTag: React.CSSProperties = {
+const mutedTag: CSSProperties = {
   marginTop: 11,
   textAlign: "center",
   fontSize: 11,

@@ -95,6 +95,8 @@ export function CameraRig() {
       el.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKey);
     };
+    // The handlers read refs and stable three.js objects; re-binding them on
+    // every render would drop in-flight gestures for nothing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gl, camera, controls]);
 

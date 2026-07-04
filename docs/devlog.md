@@ -3,6 +3,15 @@
 What I've worked on, newest first.
 
 ## 2026-07-04
+- LAUNCHED. https://cogfab.io is live: DNS pointed at the VM, the server
+  minted its own certificate on the first request, and the whole stack
+  (page, WebSocket, room saves) verified end to end from the outside.
+- A final polish pass for launch: recorded a two-player demo GIF for the
+  README (two scripted players join a real room over the WebSocket and build
+  lines while the browser records), brought the README's tech-stack table in
+  line with what actually runs, and swept the comments for anything stale.
+  Pulled the upgrade multipliers into one place on each side of the wire
+  while at it; they were inlined four times on the server.
 - Right-sized the deploy. A Kubernetes cluster and its load balancer run about
   $90 a month for a game whose whole server is one goroutine-cheap process, so
   production is now one container on an always-free e2-micro VM (~$4/month,

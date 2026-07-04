@@ -76,19 +76,16 @@ func (w *World) set(x, y int, t Tile) {
 	w.tiles[w.index(x, y)] = t
 }
 
-// PlaceBelt puts a belt facing dir at (x, y). Off-grid coordinates are ignored.
+// PlaceBelt puts a belt facing dir at (x, y).
 func (w *World) PlaceBelt(x, y int, dir Direction) { w.set(x, y, Tile{Kind: Belt, Dir: dir}) }
 
-// PlaceExtractor puts an extractor facing dir at (x, y). Off-grid coordinates
-// are ignored.
+// PlaceExtractor puts an extractor facing dir at (x, y).
 func (w *World) PlaceExtractor(x, y int, dir Direction) { w.set(x, y, Tile{Kind: Extractor, Dir: dir}) }
 
-// PlaceSeller puts a seller facing dir at (x, y). Off-grid coordinates are
-// ignored.
+// PlaceSeller puts a seller facing dir at (x, y).
 func (w *World) PlaceSeller(x, y int, dir Direction) { w.set(x, y, Tile{Kind: Seller, Dir: dir}) }
 
-// Destroy empties the tile at (x, y), removing any structure on it. Off-grid
-// coordinates are ignored.
+// Destroy empties the tile at (x, y), removing any structure on it.
 func (w *World) Destroy(x, y int) { w.set(x, y, Tile{}) }
 
 // Rotate turns the structure at (x, y) a quarter clockwise. Empty cells and

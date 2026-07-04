@@ -1,14 +1,16 @@
 # Cogfab
 
-> A real-time, multiplayer co-op factory-automation game. Build an automated factory together, live, in the browser.
+> A real-time, multiplayer co-op factory game. Build an automated factory together, live, in the browser.
 
-**Status:** playable early build with multiplayer. Visiting drops you into a room; the URL is the invite link, and up to four people build one factory together. Rooms persist across server restarts; cloud deploy is next.
+**Play it: [cogfab.io](https://cogfab.io)** — the URL is the invite link. Visiting drops you into a room; share the address and up to four people build one factory together.
 
-Cogfab is a browser game where multiple players share one factory grid and build it together in real time. You start on a small unlocked patch with just enough ore for your first extractor-belt-seller line; ore that reaches a seller earns, and earnings buy upgrades and more land. Everyone in a room shares everything (the grid, the ore, the upgrades) and sees where the others are pointing. Under the game it is server-authoritative: a Go server owns each room's world and economy, applies every player's commands, and streams the results to everyone in that room.
+![Two players building a factory together, live cursors and all](docs/demo.gif)
+
+You start on a small patch of land with just enough ore for a first extractor-belt-seller line. Ore that reaches a seller earns; earnings buy upgrades and more land; more land holds more lines. Everyone in a room shares everything: the grid, the ore, the upgrades, and you watch each other's cursors glide around the board as you build.
 
 ## Why this exists
 
-A portfolio project to demonstrate (and defend in depth) real-time netcode, Go concurrency, performance engineering, full-stack development, production observability, and cloud deployment, in one cohesive system.
+A portfolio project to demonstrate (and defend in depth) real-time netcode, Go concurrency, performance engineering, full-stack development, and cloud deployment, in one cohesive system.
 
 ## Architecture in one line
 
@@ -20,36 +22,40 @@ One server process hosts many rooms. Each room is a hub: a single goroutine that
 | --- | --- |
 | Simulation + server | Go (pure grid engine; hub + ore sim; WebSocket server) |
 | Transport | WebSockets (`coder/websocket`) |
-| Wire format | JSON, moving to Protocol Buffers on the hot path |
+| Wire format | JSON (snapshots are small enough that nothing hotter is needed) |
 | Client | React + TypeScript + Vite |
 | Rendering | Three.js via React Three Fiber |
 | Audio | WebAudio, synthesized in code (no audio files) |
 | Persistence | JSON snapshots on disk, one file per room (a database when scale demands one) |
-| Observability | OpenTelemetry, Prometheus, Grafana, slog (planned) |
-| Deploy | Docker to GKE with GitHub Actions CI/CD (planned) |
+| TLS | the server fetches its own Let's Encrypt certificate |
+| Deploy | 21MB distroless Docker image on one GCP free-tier VM; GKE manifests in `deploy/` as the scale-up path |
+| CI | GitHub Actions: gofmt, vet, race-enabled tests, typecheck, vitest, build |
 
 ## Repository layout
 
 ```
 cogfab/
-├── cmd/server/        game server entrypoint
+├── cmd/server/        game server entrypoint (also serves the built web app)
 ├── internal/
 │   ├── engine/        the pure factory grid (start here)
 │   ├── server/        rooms of hubs: world + economy + players per room
 │   └── wire/          the JSON messages both directions
 ├── web/               React + Vite + Three.js client
-└── docs/devlog.md     running development log
+├── deploy/            GKE manifests, the scale-up path
+├── Dockerfile         three-stage build to a small distroless image
+└── docs/              devlog and the deploy runbook
 ```
+
+Good places to read: `internal/server/hub.go` (one goroutine per room, no locks), `internal/server/economy.go` (the ore simulation and why it stays off the wire), `internal/server/save.go` (persistence with atomic writes), and `internal/server/bench_test.go` (the benchmark behind a 148ms-to-2ms tick fix).
 
 ## Development
 
-Run the Go tests:
-
 ```bash
-go test ./...
+go test ./...           # server tests (race-safe; CI runs them with -race)
+cd web && npm test      # client tests (vitest)
 ```
 
-Run the server and the web client (two terminals):
+Run the game locally (two terminals):
 
 ```bash
 go run ./cmd/server     # game server on :8080

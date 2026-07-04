@@ -1,10 +1,10 @@
 package wire
 
-// A Command is something a client asks the server to do: place a structure,
-// destroy one, rotate one, or buy an upgrade. The server decodes the JSON, looks at Type,
-// and applies the matching action to the world. Keep this in sync by hand with
-// the client types in web/src/net/types.ts; the two languages cannot share a
-// file.
+// A Command is something a client asks the server to do: change the world
+// (place, destroy, rotate, buy) or share presence (hover, profile, ping). The
+// server decodes the JSON, looks at Type, and applies the matching action.
+// Keep this in sync by hand with the client types in web/src/net/types.ts;
+// the two languages cannot share a file.
 
 // Command types: the "type" string the client sends.
 const (

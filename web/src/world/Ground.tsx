@@ -4,18 +4,17 @@ import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { getLatest } from "./store";
 import { addPendingSpend, getStats, spendableOre } from "./economy";
-import { cellFromWorld, cellIndex, cellOffsets, cellsBetween, dirBetween, dirFromDelta, isUnlocked, unlockedRect, type Cell } from "./grid";
+import { cellFromWorld, cellIndex, cellOffsets, cellsBetween, dirBetween, dirFromDelta, isUnlocked, unlockedRect, CURSOR_TILE, type Cell } from "./grid";
 import { connection } from "../net/connection";
 import { getFacing, getSelectedId, getSelectedTool, rotateFacing, setFacing } from "../toolbar/tools";
 import { getHover, setHover } from "./hover";
-import { ACCENT, isTyping } from "../ui";
+import { ACCENT, DANGER, isTyping } from "../ui";
 import { sfx } from "../sfx";
 import { addBurst } from "./burst";
 import { chevronGeometry, CHEVRON_ROT } from "./chevron";
 import type { Dir, StateMessage } from "../net/types";
 
-const BLOCKED = "#e05260"; // preview colour when the build cannot go through
-const TILE = 0.96; // footprint, a hair inside the cell
+const TILE = CURSOR_TILE;
 const TILE_Y = 0.02; // sit just above the floor
 const TILE_OPACITY = 0.28; // a soft glow, not a hard outline
 const ARROW_Y = 0.08; // height of the facing arrow above the floor
@@ -188,8 +187,8 @@ export function Ground() {
       !!snap && !!cell && kindAt(snap, cell) === "empty" && getSelectedId() !== "destroy" && cellUnlocked(snap, cell);
     // The preview turns red when the ore does not cover the selected tool.
     const affordable = (getSelectedTool().cost ?? 0) <= spendableOre();
-    tileMat.current.color.set(affordable ? ACCENT : BLOCKED);
-    arrowMat.current.color.set(affordable ? ACCENT : BLOCKED);
+    tileMat.current.color.set(affordable ? ACCENT : DANGER);
+    arrowMat.current.color.set(affordable ? ACCENT : DANGER);
 
     shown.current = THREE.MathUtils.damp(shown.current, active ? 1 : 0, FADE, delta);
     g.visible = shown.current > 0.001;

@@ -76,7 +76,8 @@ type PresenceMessage struct {
 	Players []PresencePlayer `json:"players"`
 }
 
-// RoomFullMessage tells a joiner the room already holds its four players. The
+// RoomFullMessage tells a joiner there is no seat: the room holds its four
+// players already, or the server is at its room cap. The
 // server closes right after sending it, and the client must not reconnect to
 // this room.
 type RoomFullMessage struct {

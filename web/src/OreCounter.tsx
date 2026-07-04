@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
+import type { CSSProperties } from "react";
 import { fmtNum, getStats, subscribeStats } from "./world/economy";
 import { panel, FONT_DISPLAY } from "./ui";
 
@@ -57,7 +58,7 @@ function useSmoothOre(): number {
   return amount;
 }
 
-const statLabel: React.CSSProperties = {
+const statLabel: CSSProperties = {
   fontSize: 9,
   fontWeight: 700,
   letterSpacing: 1,
@@ -65,7 +66,7 @@ const statLabel: React.CSSProperties = {
   opacity: 0.45,
 };
 
-const count: React.CSSProperties = {
+const count: CSSProperties = {
   fontFamily: FONT_DISPLAY,
   fontSize: 26,
   fontWeight: 800,
@@ -74,7 +75,7 @@ const count: React.CSSProperties = {
   fontVariantNumeric: "tabular-nums", // every digit the same width: no wobble
 };
 
-const subRow: React.CSSProperties = {
+const subRow: CSSProperties = {
   display: "flex",
   alignItems: "baseline",
   justifyContent: "center",
@@ -82,7 +83,7 @@ const subRow: React.CSSProperties = {
   marginTop: 2,
 };
 
-const rateValue: React.CSSProperties = {
+const rateValue: CSSProperties = {
   fontFamily: FONT_DISPLAY,
   fontSize: 13,
   fontWeight: 800,
@@ -90,11 +91,11 @@ const rateValue: React.CSSProperties = {
   fontVariantNumeric: "tabular-nums",
 };
 
-const gridValue: React.CSSProperties = {
+const gridValue: CSSProperties = {
   fontFamily: FONT_DISPLAY,
   fontSize: 13,
   fontWeight: 800,
   color: "#cdd3dc",
 };
 
-const dot: React.CSSProperties = { fontSize: 10, opacity: 0.35 };
+const dot: CSSProperties = { fontSize: 10, opacity: 0.35 };

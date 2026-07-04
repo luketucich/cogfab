@@ -15,7 +15,7 @@ export type Tool = {
 const place = (kind: PlaceableKind, x: number, y: number, dir: Dir): Command => ({ type: "place", x, y, kind, dir });
 
 // The tools. Costs mirror buildCost in internal/server/shop.go; keep them in
-// step. Add a tool here and nothing else changes.
+// step. Add a tool here and give it an icon in Toolbar.tsx.
 export const TOOLS: Tool[] = [
   { id: "belt", label: "Belt", hotkey: "1", cost: 10, command: (x, y, dir) => place("belt", x, y, dir) },
   { id: "extractor", label: "Extractor", hotkey: "2", cost: 75, command: (x, y, dir) => place("extractor", x, y, dir) },
