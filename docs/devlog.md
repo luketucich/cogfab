@@ -3,6 +3,13 @@
 What I've worked on, newest first.
 
 ## 2026-07-04
+- README round two. Re-shot the demo as a real two-player session: the
+  recording browser is a player now (Luke, green), with the mouse driven by a
+  script, while Bert (pink) joins over the WebSocket and builds the second
+  line. Shorter, denser, and the lobby shows exactly the two of them. Also
+  drew a proper architecture diagram with the actual tech logos instead of a
+  wall of table rows, and rewrote the top so the play link is the first thing
+  you see.
 - LAUNCHED. https://cogfab.io is live: DNS pointed at the VM, the server
   minted its own certificate on the first request, and the whole stack
   (page, WebSocket, room saves) verified end to end from the outside.

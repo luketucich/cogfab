@@ -1,35 +1,24 @@
 # Cogfab
 
-> A real-time, multiplayer co-op factory game. Build an automated factory together, live, in the browser.
+> Build an automated factory with your friends, live in the browser.
 
-**Play it: [cogfab.io](https://cogfab.io)** — the URL is the invite link. Visiting drops you into a room; share the address and up to four people build one factory together.
+## [Play it at cogfab.io](https://cogfab.io)
 
-![Two players building a factory together, live cursors and all](docs/demo.gif)
+No account, no install. Opening the link drops you into your own room, and the URL in the address bar is the invite: send it to up to three friends and you all build the same factory together, watching each other's cursors move around the board.
 
-You start on a small patch of land with just enough ore for a first extractor-belt-seller line. Ore that reaches a seller earns; earnings buy upgrades and more land; more land holds more lines. Everyone in a room shares everything: the grid, the ore, the upgrades, and you watch each other's cursors glide around the board as you build.
+![Two players building factory lines together](docs/demo.gif)
+
+You start with just enough ore for a first extractor-belt-seller line. Ore that reaches a seller earns, earnings buy upgrades and more land, and more land holds more lines. Everything in a room is shared: the grid, the ore, the upgrades.
 
 ## Why this exists
 
 A portfolio project to demonstrate (and defend in depth) real-time netcode, Go concurrency, performance engineering, full-stack development, and cloud deployment, in one cohesive system.
 
-## Architecture in one line
+## Architecture
+
+![Architecture: React client, WebSocket wire, Go game server, deployed in Docker on a GCP VM](docs/architecture.png)
 
 One server process hosts many rooms. Each room is a hub: a single goroutine that owns that room's grid and economy (no locks), applies commands instantly, and runs a once-a-second simulation that moves ore chunks along the belts and pays out only what lands in a seller. Clients get small snapshots plus a handful of economy numbers; everything cosmetic (the flowing ore, the direction arrows, the particles) is derived client-side from the layout, so item positions never touch the wire. Rooms are goroutines, not pods: a room is a few kilobytes ticking in microseconds, so hundreds fit in one process, and scaling out later just means routing each room code to a consistent process.
-
-## Tech stack
-
-| Layer | Choice |
-| --- | --- |
-| Simulation + server | Go (pure grid engine; hub + ore sim; WebSocket server) |
-| Transport | WebSockets (`coder/websocket`) |
-| Wire format | JSON (snapshots are small enough that nothing hotter is needed) |
-| Client | React + TypeScript + Vite |
-| Rendering | Three.js via React Three Fiber |
-| Audio | WebAudio, synthesized in code (no audio files) |
-| Persistence | JSON snapshots on disk, one file per room (a database when scale demands one) |
-| TLS | the server fetches its own Let's Encrypt certificate |
-| Deploy | 21MB distroless Docker image on one GCP free-tier VM; GKE manifests in `deploy/` as the scale-up path |
-| CI | GitHub Actions: gofmt, vet, race-enabled tests, typecheck, vitest, build |
 
 ## Repository layout
 
@@ -51,7 +40,7 @@ Good places to read: `internal/server/hub.go` (one goroutine per room, no locks)
 ## Development
 
 ```bash
-go test ./...           # server tests (race-safe; CI runs them with -race)
+go test ./...           # server tests (CI also runs them with -race)
 cd web && npm test      # client tests (vitest)
 ```
 
@@ -61,6 +50,8 @@ Run the game locally (two terminals):
 go run ./cmd/server     # game server on :8080
 npm run dev             # in web/, opens the client (usually :5173)
 ```
+
+CI runs gofmt, vet, race-enabled tests, the TypeScript typecheck, vitest, and a production build on every push.
 
 **Commit conventions:** [Conventional Commits](https://www.conventionalcommits.org/). Types: `feat fix docs test refactor perf build ci chore`; scopes such as `engine net web deploy docs`. A message template is wired up via `git config commit.template .gitmessage`.
 
