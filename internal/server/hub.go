@@ -38,17 +38,19 @@ type Client struct {
 // clientCommand is a command plus who sent it. World commands ignore the
 // sender (the factory is shared); hover and profile are about the sender.
 type clientCommand struct {
-	c   *Client
-	cmd wire.Command
+	c           *Client
+	cmd         wire.Command
+	submittedAt time.Time // set only when metrics are enabled
 }
 
 // Hub owns the world and fans state out to clients. All access to the world and
 // the client set happens on the single goroutine running Run, so there are no
 // locks and no data races.
 type Hub struct {
-	world *engine.World
-	code  string // the room code players joined with; sent in each welcome
-	saves *Saves // where the room persists to; nil keeps it in memory only
+	world   *engine.World
+	code    string   // the room code players joined with; sent in each welcome
+	saves   *Saves   // where the room persists to; nil keeps it in memory only
+	metrics *Metrics // nil when operational metrics are disabled
 
 	ironOre    int     // authoritative iron-ore total: earned at the seller, spent on builds
 	orePartial float64 // fractional ore carried between ticks (chunk values go fractional past the sim cap)
@@ -111,30 +113,13 @@ func (h *Hub) Run(ctx context.Context) {
 			h.removeClient(c)
 			h.broadcastPresence()
 		case sub := <-h.commands:
-			switch sub.cmd.Type {
-			case wire.CmdHover:
-				if h.applyHover(sub.c, sub.cmd) {
-					h.broadcastPresence()
-				}
-				continue
-			case wire.CmdProfile:
-				if h.applyProfile(sub.c, sub.cmd) {
-					h.broadcastPresence()
-				}
-				continue
-			}
-			ore, rate := h.ironOre, h.currentRate()
-			if h.apply(sub.cmd) {
-				h.broadcast(h.stateBytes())
-				h.recompute()
-				if h.ironOre != ore || h.currentRate() != rate {
-					h.broadcastStats() // the command moved ore or changed the rate
-				}
+			applied := h.handleCommand(sub)
+			if !sub.submittedAt.IsZero() {
+				h.metrics.commandProcessed(sub.cmd.Type, applied, time.Since(sub.submittedAt))
 			}
 		case <-ticker.C:
 			if len(h.routes) > 0 || len(h.chunks) > 0 {
-				h.tick()
-				h.broadcastStats()
+				h.runEconomyTick()
 			}
 		case <-saver.C:
 			h.persist()
@@ -142,10 +127,64 @@ func (h *Hub) Run(ctx context.Context) {
 	}
 }
 
+// runEconomyTick advances one active room and queues its updated stats.
+func (h *Hub) runEconomyTick() {
+	var started time.Time
+	if h.metrics != nil {
+		started = time.Now()
+	}
+	h.tick()
+	h.broadcastStats()
+	if !started.IsZero() {
+		h.metrics.economyTick(time.Since(started))
+	}
+}
+
+// handleCommand applies one decoded room command and queues any state it
+// changes. It reports whether the command produced a visible change.
+func (h *Hub) handleCommand(sub clientCommand) bool {
+	switch sub.cmd.Type {
+	case wire.CmdHover:
+		changed := h.applyHover(sub.c, sub.cmd)
+		if changed {
+			h.broadcastPresence()
+		}
+		return changed
+	case wire.CmdProfile:
+		changed := h.applyProfile(sub.c, sub.cmd)
+		if changed {
+			h.broadcastPresence()
+		}
+		return changed
+	}
+
+	ore, rate := h.ironOre, h.currentRate()
+	if !h.apply(sub.cmd) {
+		return false
+	}
+	h.broadcast(h.stateBytes())
+	h.recompute()
+	if h.ironOre != ore || h.currentRate() != rate {
+		h.broadcastStats() // the command moved ore or changed the rate
+	}
+	return true
+}
+
 // persist writes the room to disk. Losing one save is no disaster (the next
 // one lands within saveEvery), so a write error is logged, not fatal.
 func (h *Hub) persist() {
-	if err := h.saves.save(h.code, h.snapshot()); err != nil {
+	if h.saves == nil {
+		return
+	}
+	var started time.Time
+	if h.metrics != nil {
+		started = time.Now()
+	}
+	err := h.saves.save(h.code, h.snapshot())
+	if !started.IsZero() {
+		h.metrics.saveFinished(time.Since(started), err)
+	}
+	if err != nil {
 		slog.Warn("saving room failed", "room", h.code, "err", err)
 	}
 }
@@ -168,8 +207,12 @@ func (h *Hub) Unregister(c *Client) {
 }
 
 func (h *Hub) Submit(c *Client, cmd wire.Command) {
+	sub := clientCommand{c: c, cmd: cmd}
+	if h.metrics != nil {
+		sub.submittedAt = time.Now()
+	}
 	select {
-	case h.commands <- clientCommand{c: c, cmd: cmd}:
+	case h.commands <- sub:
 	case <-h.done:
 	}
 }
@@ -237,6 +280,7 @@ func (h *Hub) broadcast(b []byte) {
 		select {
 		case c.send <- b:
 		default:
+			h.metrics.slowClientDisconnected()
 			h.removeClient(c)
 		}
 	}
@@ -249,6 +293,7 @@ func (h *Hub) addClient(c *Client) {
 	c.slot = h.lowestFreeSlot()
 	c.name = defaultName(c.slot)
 	h.clients[c] = true
+	h.metrics.playerConnected()
 	h.sendTo(c, h.welcomeBytes(c))
 	h.sendTo(c, h.stateBytes())
 	h.sendTo(c, h.statsBytes())
@@ -268,6 +313,7 @@ func (h *Hub) removeClient(c *Client) {
 	if h.clients[c] {
 		delete(h.clients, c)
 		close(c.send)
+		h.metrics.playerDisconnected()
 	}
 }
 

@@ -41,14 +41,15 @@ type Rooms struct {
 	grace    time.Duration        // how long an empty room survives
 	newWorld func() *engine.World // main decides what a fresh factory looks like
 	saves    *Saves               // rooms restore from and save to here; nil = memory only
+	metrics  *Metrics             // nil when operational metrics are disabled
 
 	mu    sync.Mutex
 	rooms map[string]*room
 }
 
 // NewRooms creates an empty registry.
-func NewRooms(ctx context.Context, grace time.Duration, newWorld func() *engine.World, saves *Saves) *Rooms {
-	return &Rooms{ctx: ctx, grace: grace, newWorld: newWorld, saves: saves, rooms: make(map[string]*room)}
+func NewRooms(ctx context.Context, grace time.Duration, newWorld func() *engine.World, saves *Saves, metrics *Metrics) *Rooms {
+	return &Rooms{ctx: ctx, grace: grace, newWorld: newWorld, saves: saves, metrics: metrics, rooms: make(map[string]*room)}
 }
 
 // Handler turns each request into a game connection: it reads the room code
@@ -91,10 +92,12 @@ func (rs *Rooms) join(code string) (*Hub, bool) {
 		}
 		hub.code = code
 		hub.saves = rs.saves
+		hub.metrics = rs.metrics
 		ctx, cancel := context.WithCancel(rs.ctx)
 		go hub.Run(ctx)
 		rm = &room{hub: hub, cancel: cancel}
 		rs.rooms[code] = rm
+		rs.metrics.roomCreated()
 	}
 	if rm.players == maxPlayers {
 		return nil, false
@@ -141,6 +144,7 @@ func (rs *Rooms) expire(code string, gen int) {
 	rm.cancel()
 	<-rm.hub.done
 	delete(rs.rooms, code)
+	rs.metrics.roomExpired()
 }
 
 // Shutdown waits for every room to save and stop. Call it once the parent
@@ -148,8 +152,10 @@ func (rs *Rooms) expire(code string, gen int) {
 func (rs *Rooms) Shutdown() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	for _, rm := range rs.rooms {
+	for code, rm := range rs.rooms {
 		rm.cancel()
 		<-rm.hub.done
+		delete(rs.rooms, code)
+		rs.metrics.roomClosed()
 	}
 }

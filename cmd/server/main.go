@@ -36,13 +36,30 @@ func main() {
 		slog.Warn("saves disabled: rooms will not survive restarts", "dir", dataDir, "err", err)
 	}
 
+	// Operational metrics are opt-in and use their own listener, so production
+	// can keep them on a private address instead of the public game server.
+	var metrics *server.Metrics
+	var metricsSrv *http.Server
+	if metricsAddr := os.Getenv("METRICS_ADDR"); metricsAddr != "" {
+		metrics = server.NewMetrics()
+		metricsMux := http.NewServeMux()
+		metricsMux.Handle("/metrics", metrics.Handler())
+		metricsSrv = &http.Server{Addr: metricsAddr, Handler: metricsMux}
+		go func() {
+			slog.Info("metrics listening", "addr", metricsAddr)
+			if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				slog.Error("metrics listener failed", "addr", metricsAddr, "err", err)
+			}
+		}()
+	}
+
 	// Every room starts as an empty world: a small unlocked region and just
 	// enough ore to build a first extractor-to-seller line. Rooms are created
 	// on demand, survive ten minutes after the last player leaves, and come
 	// back from their save when someone returns later.
 	rooms := server.NewRooms(ctx, 10*time.Minute, func() *engine.World {
 		return engine.NewWorld(12, 8)
-	}, saves)
+	}, saves, metrics)
 
 	mux := http.NewServeMux()
 	mux.Handle("/ws", rooms.Handler())
@@ -105,4 +122,7 @@ func main() {
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
 	rooms.Shutdown() // every room saves on the way out
+	if metricsSrv != nil {
+		_ = metricsSrv.Shutdown(shutdownCtx)
+	}
 }

@@ -1,0 +1,173 @@
+package server
+
+import (
+	"context"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/luketucich/cogfab/internal/engine"
+	"github.com/luketucich/cogfab/internal/wire"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+)
+
+func scrapeMetrics(t *testing.T, metrics *Metrics) string {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest("GET", "/metrics", nil)
+	metrics.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != 200 {
+		t.Fatalf("metrics status = %d, want 200", recorder.Code)
+	}
+	return recorder.Body.String()
+}
+
+func TestMetricsEndpointUsesBoundedLabels(t *testing.T) {
+	metrics := NewMetrics()
+	metrics.commandProcessed("a-client-invented-this", false, time.Millisecond)
+	body := scrapeMetrics(t, metrics)
+
+	for _, want := range []string{
+		`cogfab_commands_total{command="unknown",outcome="ignored"} 1`,
+		"cogfab_rooms_active 0",
+		"go_goroutines",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics output does not contain %q", want)
+		}
+	}
+	if strings.Contains(body, "a-client-invented-this") {
+		t.Error("metrics output contains an unbounded client-supplied label")
+	}
+}
+
+func TestMetricsTrackRoomLifecycle(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	metrics := NewMetrics()
+	rooms := NewRooms(ctx, 20*time.Millisecond, newTestWorld, nil, metrics)
+	t.Cleanup(rooms.Shutdown)
+
+	first, _ := rooms.join("AAAAAA")
+	rooms.join("AAAAAA")
+	if got := testutil.ToFloat64(metrics.activeRooms); got != 1 {
+		t.Fatalf("active rooms = %v after two joins to one room, want 1", got)
+	}
+	if got := testutil.ToFloat64(metrics.roomsCreated); got != 1 {
+		t.Fatalf("rooms created = %v after two joins to one room, want 1", got)
+	}
+
+	rooms.leave("AAAAAA")
+	rooms.leave("AAAAAA")
+	waitTornDown(t, first)
+	// The hub closes just before expire removes it. Taking the same lock waits
+	// for that final registry update without sleeping and hoping.
+	rooms.mu.Lock()
+	_, stillLive := rooms.rooms["AAAAAA"]
+	rooms.mu.Unlock()
+	if stillLive {
+		t.Fatal("expired room is still in the registry")
+	}
+	if got := testutil.ToFloat64(metrics.activeRooms); got != 0 {
+		t.Fatalf("active rooms = %v after expiry, want 0", got)
+	}
+	if got := testutil.ToFloat64(metrics.roomsExpired); got != 1 {
+		t.Fatalf("rooms expired = %v, want 1", got)
+	}
+
+	rooms.join("AAAAAA")
+	if got := testutil.ToFloat64(metrics.roomsCreated); got != 2 {
+		t.Fatalf("rooms created = %v after recreating the room, want 2", got)
+	}
+	rooms.Shutdown()
+	if got := testutil.ToFloat64(metrics.activeRooms); got != 0 {
+		t.Fatalf("active rooms = %v after shutdown, want 0", got)
+	}
+}
+
+func TestMetricsTrackPlayersAndSlowClients(t *testing.T) {
+	metrics := NewMetrics()
+	hub := NewHub(newTestWorld())
+	hub.metrics = metrics
+	slow := &Client{send: make(chan []byte, 4)}
+
+	hub.addClient(slow)            // welcome, state, and stats occupy three slots
+	slow.send <- []byte("backlog") // the fourth slot makes the client fall behind
+	hub.broadcast([]byte("next"))  // a full queue disconnects it
+	hub.removeClient(slow)         // a later unregister must not count it twice
+
+	checks := []struct {
+		name string
+		got  float64
+		want float64
+	}{
+		{"active players", testutil.ToFloat64(metrics.activePlayers), 0},
+		{"connections", testutil.ToFloat64(metrics.playerConnections), 1},
+		{"disconnections", testutil.ToFloat64(metrics.playerDisconnections), 1},
+		{"slow-client disconnections", testutil.ToFloat64(metrics.slowClientDisconnections), 1},
+	}
+	for _, check := range checks {
+		if check.got != check.want {
+			t.Errorf("%s = %v, want %v", check.name, check.got, check.want)
+		}
+	}
+}
+
+func TestMetricsTrackCommandResults(t *testing.T) {
+	metrics := NewMetrics()
+	hub := NewHub(engine.NewWorld(2, 1))
+	hub.metrics = metrics
+	ctx, cancel := context.WithCancel(context.Background())
+	go hub.Run(ctx)
+
+	client := &Client{send: make(chan []byte, 16)}
+	hub.Register(client)
+	command := wire.Command{Type: wire.CmdPlace, X: 0, Y: 0, Kind: wire.KindBelt, Dir: "east"}
+	hub.Submit(client, command)
+	hub.Submit(client, command) // the occupied cell makes the second command a no-op
+	cancel()
+	waitTornDown(t, hub)
+
+	if got := testutil.ToFloat64(metrics.commands.WithLabelValues(wire.CmdPlace, "applied")); got != 1 {
+		t.Errorf("applied place commands = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(metrics.commands.WithLabelValues(wire.CmdPlace, "ignored")); got != 1 {
+		t.Errorf("ignored place commands = %v, want 1", got)
+	}
+	if body := scrapeMetrics(t, metrics); !strings.Contains(body, `cogfab_command_processing_duration_seconds_count{command="place"} 2`) {
+		t.Error("command-duration histogram did not observe both commands")
+	}
+}
+
+func TestMetricsTrackEconomyTicks(t *testing.T) {
+	metrics := NewMetrics()
+	_, hub := run(3)
+	hub.metrics = metrics
+	hub.runEconomyTick()
+
+	if body := scrapeMetrics(t, metrics); !strings.Contains(body, "cogfab_economy_tick_duration_seconds_count 1") {
+		t.Error("economy-tick histogram did not observe the tick")
+	}
+}
+
+func TestMetricsTrackSaveFailures(t *testing.T) {
+	metrics := NewMetrics()
+	hub := NewHub(newTestWorld())
+	hub.code = "AAAAAA"
+	hub.metrics = metrics
+	hub.saves = newTestSaves(t)
+	hub.persist()
+
+	// A missing parent makes the next write fail deterministically.
+	hub.saves = &Saves{dir: filepath.Join(t.TempDir(), "missing")}
+	hub.persist()
+
+	if got := testutil.ToFloat64(metrics.saveFailures); got != 1 {
+		t.Errorf("save failures = %v, want 1", got)
+	}
+	if body := scrapeMetrics(t, metrics); !strings.Contains(body, "cogfab_save_duration_seconds_count 2") {
+		t.Error("save-duration histogram did not observe both save attempts")
+	}
+}

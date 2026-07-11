@@ -67,3 +67,8 @@ curl -s https://cogfab.io/healthz                # ok?
 gcloud compute ssh cogfab --zone=us-central1-a   # then: docker ps, docker logs <id>
 ls /var/lib/cogfab                               # on the VM: room saves + certs
 ```
+
+Operational metrics are off unless `METRICS_ADDR` is set. For a local check,
+use `127.0.0.1:9090` and read `http://127.0.0.1:9090/metrics`. In production,
+bind the listener only to a private address your scraper can reach. Do not
+expose this port to the public internet.
