@@ -17,10 +17,10 @@ func (w *World) faceCell(i int, d Direction) int {
 	return w.index(nx, ny)
 }
 
-// IsBelt reports whether cell i holds a belt, IsSeller whether it holds a seller.
-// The server's ore sim uses these to drop a chunk whose belt is gone and to tally
-// one that lands in a seller.
-func (w *World) IsBelt(i int) bool   { return i >= 0 && i < len(w.tiles) && w.tiles[i].Kind == Belt }
+// IsBelt reports whether cell i holds a belt.
+func (w *World) IsBelt(i int) bool { return i >= 0 && i < len(w.tiles) && w.tiles[i].Kind == Belt }
+
+// IsSeller reports whether cell i holds a seller.
 func (w *World) IsSeller(i int) bool { return i >= 0 && i < len(w.tiles) && w.tiles[i].Kind == Seller }
 
 // Producer is one productive extractor: the belts its ore crosses (extractor mouth

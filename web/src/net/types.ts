@@ -65,8 +65,8 @@ export type PresenceMessage = {
   players: PresencePlayer[];
 };
 
-// RoomFullMessage means the room already holds its four players; the server
-// closes right after, and we must not reconnect to this room. Mirror of
+// RoomFullMessage means the server refused the join because the room or process
+// is full. It closes next, and we must not reconnect. Mirror of
 // wire.RoomFullMessage.
 export type RoomFullMessage = {
   type: "roomFull";

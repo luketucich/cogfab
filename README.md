@@ -45,7 +45,7 @@ not change.
 | Persistence | JSON snapshots on disk, one file per room |
 | Observability | Prometheus metrics on a private listener, with container logs in Cloud Logging |
 | TLS | the server fetches its own Let's Encrypt certificate |
-| Deploy | Small distroless Docker image on one GCP free-tier COS VM; GKE manifests in `deploy/` as the scale-up path |
+| Deploy | Small distroless Docker image on one GCP free-tier COS VM; reference GKE manifests in `deploy/` |
 | CI | GitHub Actions: ShellCheck, gofmt, vet, race-enabled tests, typecheck, vitest, build |
 
 ## Repository layout
@@ -58,7 +58,7 @@ cogfab/
 │   ├── server/        rooms of hubs: world + economy + players per room
 │   └── wire/          the JSON messages both directions
 ├── web/               React + Vite + Three.js client
-├── deploy/            COS startup script plus GKE scale-up manifests
+├── deploy/            COS startup script plus reference GKE manifests
 ├── Dockerfile         three-stage build to a small distroless image
 └── docs/              devlog and the deploy runbook
 ```

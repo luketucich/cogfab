@@ -1,10 +1,6 @@
 package wire
 
-// A Command is something a client asks the server to do: change the world
-// (place, destroy, rotate, buy) or share presence (hover, profile, ping). The
-// server decodes the JSON, looks at Type, and applies the matching action.
-// Keep this in sync by hand with the client types in web/src/net/types.ts;
-// the two languages cannot share a file.
+// Keep command constants and fields in sync with web/src/net/types.ts.
 
 // Command types: the "type" string the client sends.
 const (
@@ -33,13 +29,9 @@ const (
 	UpgradeGridSize      = "gridSize"
 )
 
-// Command targets a cell (X, Y) with an action (Type). For a "place", Kind says
-// which structure to place and Dir says which way it faces. For a "buy",
-// Upgrade says which upgrade to purchase. For a "hover": SX/SY are the mouse in
-// screen fractions (0.5, 0.5 is dead centre) with On saying whether it is over
-// the page at all, and Hovering plus CX/CY say which grid spot it is over, in
-// cell coordinates (3.4 is 40% into cell 3). For a "profile", Name and Color
-// carry what the player picked for itself.
+// Command is a client request selected by Type. Place uses X, Y, Kind, and Dir;
+// buy uses Upgrade; hover uses On with SX/SY for the screen and Hovering with
+// CX/CY for the grid; profile uses Name and Color.
 type Command struct {
 	Type     string  `json:"type"`
 	X        int     `json:"x"`

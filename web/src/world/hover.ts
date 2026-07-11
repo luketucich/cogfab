@@ -17,9 +17,8 @@ let screenY = 0;
 
 export const getHover = (): Cell | null => hovered;
 
-// Sharing the mouse: at most one message every 50ms with a trailing send, and
-// only when it actually moved, so waving it around costs a handful of tiny
-// messages a second instead of hundreds.
+// Share the mouse at most once every 50ms, with a trailing send, and only when
+// it moved far enough to matter.
 const SEND_EVERY = 50; // ms
 const MOVED = 0.002; // screen fractions; below this the mouse counts as still
 let sent = { on: false, sx: 0, sy: 0, hovering: false };

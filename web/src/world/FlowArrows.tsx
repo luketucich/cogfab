@@ -10,8 +10,8 @@ import { flowPaths, runKey, drainRuns } from "./flow";
 
 const MAX_CHEVRONS = 8192;
 const CHEVRON_Y = 0.46; // ride just above the belt surface
-const SPEED = 0.6; // cells per second; purely cosmetic, a calm drift along the path
-const OPACITY = 0.3; // faint, a whisper of direction rather than cargo
+const SPEED = 0.6; // visual cells per second
+const OPACITY = 0.3; // subtle directional cue
 const FADE = 0.4; // seconds a deleted run's arrows take to shrink away
 const COMPLETE = new THREE.Color("#ffffff"); // a run that reaches a seller
 const BROKEN = new THREE.Color("#ff6b6b"); // a run that dead-ends before one

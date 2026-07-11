@@ -51,11 +51,9 @@ type WelcomeMessage struct {
 	Slot int    `json:"slot"`
 }
 
-// PresencePlayer is one connected player: who it is (name and colour, or the
-// slot defaults when it never picked) and where its mouse is, twice over. SX/SY
-// place the cursor on the screen in fractions (for the named pointer everyone
-// sees), and X/Y place it on the grid in cell coordinates like 3.4 (for the
-// cell marker), with On and Hovering saying whether each applies right now.
+// PresencePlayer describes one connected player and their cursor. SX/SY are
+// screen fractions and X/Y are grid coordinates. On marks the screen position
+// valid; Hovering marks the grid position valid.
 type PresencePlayer struct {
 	Slot     int     `json:"slot"`
 	Name     string  `json:"name"`
@@ -77,9 +75,8 @@ type PresenceMessage struct {
 }
 
 // RoomFullMessage tells a joiner there is no seat: the room holds its four
-// players already, or the server is at its room cap. The
-// server closes right after sending it, and the client must not reconnect to
-// this room.
+// players already, or the server is at its room cap. The server closes after
+// sending it, and the client must not reconnect to this room.
 type RoomFullMessage struct {
 	Type string `json:"type"`
 }

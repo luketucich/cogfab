@@ -3,8 +3,8 @@ kind: Ingress
 metadata:
   name: cogfab
   annotations:
-    # A reserved global IP named "cogfab-ip" (see docs/deploy.md), so the DNS
-    # record survives recreating the ingress.
+    # GKE Ingress needs a global address with this name. It is separate from
+    # the regional address used by the production VM.
     kubernetes.io/ingress.global-static-ip-name: cogfab-ip
     networking.gke.io/managed-certificates: cogfab-cert
 spec:

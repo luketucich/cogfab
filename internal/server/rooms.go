@@ -29,7 +29,7 @@ type room struct {
 	cancel  context.CancelFunc // stops the hub's Run loop
 	players int                // seats taken: connections admitted and not yet gone
 	empty   *time.Timer        // counting down to teardown while players == 0
-	gen     int                // bumps whenever the timer changes, so only the current one can expire the room
+	gen     int                // generation used to reject stale expiry timers
 }
 
 // Rooms is the registry: it hands out rooms by code, caps how many players
@@ -55,7 +55,7 @@ func NewRooms(ctx context.Context, grace time.Duration, newWorld func() *engine.
 // Handler turns each request into a game connection: it reads the room code
 // from the URL (minting one when absent or malformed), joins that room, and
 // serves the WebSocket against the room's hub. Joining an unknown code creates
-// a fresh room under it, so a shared link keeps working forever.
+// a fresh room under that code.
 func (rs *Rooms) Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		code := strings.ToUpper(r.URL.Query().Get("room"))
@@ -132,8 +132,8 @@ func (rs *Rooms) leave(code string) {
 // the lock are the race guard: a joiner who slipped in makes players nonzero,
 // and a leave-rejoin-leave makes the generation move on, so a stale timer that
 // fired while parked on the mutex does nothing either way. Waiting for the hub
-// to finish (it saves on the way out) before dropping the code means a rejoin
-// can only ever load the completed save.
+// to finish before dropping the code prevents a rejoin from racing its final
+// save attempt.
 func (rs *Rooms) expire(code string, gen int) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -147,8 +147,8 @@ func (rs *Rooms) expire(code string, gen int) {
 	rs.metrics.roomExpired()
 }
 
-// Shutdown waits for every room to save and stop. Call it once the parent
-// context is cancelled and the HTTP server no longer accepts joins.
+// Shutdown waits for every room to attempt a final save and stop. Call it once
+// the parent context is cancelled and the HTTP server no longer accepts joins.
 func (rs *Rooms) Shutdown() {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()

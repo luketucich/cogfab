@@ -203,8 +203,6 @@ func TestBuyingExtractorRate(t *testing.T) {
 func TestOreValuePaybackSlowsEveryLevel(t *testing.T) {
 	// The heart of the rebalance: prices double but payouts step up linearly,
 	// so each Ore Value level takes longer to pay for itself than the last.
-	// (When payout doubled too, every level paid back in the same time, and
-	// one tiny line plus this one button was the whole game.)
 	h := lineHub()
 	var last float64
 	for level := 0; level < 12; level++ {

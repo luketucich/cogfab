@@ -1,7 +1,7 @@
 // This player's seat in the world: which room we are in, which slot (and so
-// which default colour) we hold, and whether we were turned away because the
-// room was full. Same module-store pattern as the rest; connection.ts writes it, the
-// HUD and the room-full overlay read it.
+// which default colour) we hold, and whether the server refused the join. Same
+// module-store pattern as the rest: connection.ts writes it, and the HUD and
+// room-full overlay read it.
 
 // Room codes are six characters from this alphabet (no lookalike letters).
 // Mirror of codeAlphabet and codeLength in internal/server/codes.go; the HUD

@@ -3,11 +3,11 @@ import type { CSSProperties } from "react";
 // Shared look for the on-screen HUD: a game font for headline numbers and a
 // frosted-dark card the panels sit in, so every overlay matches.
 
-export const FONT_DISPLAY = "'Baloo 2', ui-rounded, system-ui, sans-serif"; // the fun game font
-export const FONT_UI = "'Nunito', system-ui, sans-serif"; // its clean rounded sidekick for labels
+export const FONT_DISPLAY = "'Baloo 2', ui-rounded, system-ui, sans-serif"; // headings and large numbers
+export const FONT_UI = "'Nunito', system-ui, sans-serif"; // labels and body text
 
 export const ACCENT = "#6ea8ff"; // selected / interactive highlight
-export const ORE_TEXT = "#d9b878"; // ore amounts and prices, a warm metal tone
+export const ORE_TEXT = "#d9b878"; // ore amounts and prices
 export const DANGER = "#e05260"; // blocked actions and offline states
 
 // PLAYER_COLORS is the default colour per player slot: four seats, four hues

@@ -12,10 +12,8 @@ const (
 	codeLength   = 6
 )
 
-// newCode mints a random room code. crypto/rand makes codes unguessable, so
-// knowing a code is what admits you to a room; nobody can enumerate their way
-// into a stranger's game. Bytes past the largest multiple of the alphabet size
-// are thrown away, so every letter is exactly equally likely.
+// newCode mints an unpredictable room code. Knowing the code grants room access,
+// so crypto/rand prevents enumeration; rejection sampling keeps characters uniform.
 func newCode() string {
 	limit := byte(256 - 256%len(codeAlphabet))
 	code := make([]byte, 0, codeLength)

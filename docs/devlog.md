@@ -2,6 +2,14 @@
 
 What I've worked on, newest first.
 
+## 2026-07-11
+- Added private Prometheus metrics for room, player, command, tick, and save
+  activity. They bind to VM loopback; the public server still returns `404`.
+- Replaced GCE's deprecated container startup agent with a checked-in COS
+  startup script. Releases now use versioned images, candidate health checks,
+  automatic rollback, and a dedicated VM service account. A saved two-player
+  room survived the cutover intact.
+
 ## 2026-07-04
 - LAUNCHED. https://cogfab.io is live: DNS pointed at the VM, the server
   minted its own certificate on the first request, and the whole stack
@@ -17,7 +25,7 @@ What I've worked on, newest first.
   production is now one container on an always-free e2-micro VM (~$4/month,
   basically the static IP). The binary fetches and renews its own Let's
   Encrypt certificate when DOMAIN is set, so the entire stack is the one
-  process. The GKE manifests stay in deploy/ as the documented scale-up path.
+  process. The GKE manifests stay in deploy/ as a reference deployment.
 - Containerized the game and wrote the cluster config. The image is a
   three-stage build (web app, Go binary, then a 21MB distroless final that
   runs as non-root), and deploy/ holds the GKE pieces: one pod with the saves

@@ -42,12 +42,11 @@ const layer: CSSProperties = {
   position: "absolute",
   inset: 0,
   overflow: "hidden",
-  pointerEvents: "none", // cursors are ghosts: nothing under them is blocked
+  pointerEvents: "none", // let the page receive input beneath the cursors
 };
 
-// The pointer is drawn twice: a dark rounded outline underneath, the player's
-// colour on top. The fat round-joined strokes are what soften the corners, so
-// it reads plump and friendly like the rest of the UI, not like a needle.
+// Draw a dark outline under the player colour for contrast. Round joins match
+// the rest of the interface.
 const POINTER = "M5.5 3.5 L18.5 11 L12.4 12.6 L9 18.5 Z";
 
 const cursor: CSSProperties = {

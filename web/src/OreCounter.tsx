@@ -6,7 +6,7 @@ import { panel, FONT_DISPLAY } from "./ui";
 // OreCounter is the centred readout at the top: the iron-ore total as the big
 // headline, with the rate and grid size tucked on one line beneath. The panel
 // keeps a fixed floor width and fixed-width digits so the fast-changing number
-// never makes it jitter. Only ore that reached a seller is counted.
+// never makes it jitter. The server owns the displayed purse.
 export function OreCounter() {
   const amount = useSmoothOre();
   const stats = useSyncExternalStore(subscribeStats, getStats);
@@ -29,10 +29,9 @@ export function OreCounter() {
 }
 
 // useSmoothOre counts the total up smoothly between the ~1/sec server updates,
-// predicting from the last total and the rate. The display never steps
-// backward unless the server total itself dropped (a purchase or a teardown
-// refund); a prediction that ran slightly ahead just holds until the real
-// total catches up.
+// predicting from the last total and the rate. It steps backward only when the
+// server total drops after spending; an overshot prediction waits for the real
+// total to catch up.
 function useSmoothOre(): number {
   const [amount, setAmount] = useState(0);
 
