@@ -28,8 +28,8 @@ One server process hosts many rooms. Each room is a hub: a single goroutine that
 | Audio | WebAudio, synthesized in code (no audio files) |
 | Persistence | JSON snapshots on disk, one file per room (a database when scale demands one) |
 | TLS | the server fetches its own Let's Encrypt certificate |
-| Deploy | 21MB distroless Docker image on one GCP free-tier VM; GKE manifests in `deploy/` as the scale-up path |
-| CI | GitHub Actions: gofmt, vet, race-enabled tests, typecheck, vitest, build |
+| Deploy | Small distroless Docker image on one GCP free-tier COS VM; GKE manifests in `deploy/` as the scale-up path |
+| CI | GitHub Actions: ShellCheck, gofmt, vet, race-enabled tests, typecheck, vitest, build |
 
 ## Repository layout
 
@@ -41,7 +41,7 @@ cogfab/
 │   ├── server/        rooms of hubs: world + economy + players per room
 │   └── wire/          the JSON messages both directions
 ├── web/               React + Vite + Three.js client
-├── deploy/            GKE manifests, the scale-up path
+├── deploy/            COS startup script plus GKE scale-up manifests
 ├── Dockerfile         three-stage build to a small distroless image
 └── docs/              devlog and the deploy runbook
 ```
