@@ -5,7 +5,7 @@
 **Play it: [cogfab.io](https://cogfab.io).** The URL is the invite link. Open a
 room, share the address, and up to four people can build one factory together.
 
-![Two players building a factory together, live cursors and all](docs/demo.gif)
+![Animated demo of Luke and Bert connecting a shared belt line, moving ore, and upgrading the extractor](docs/demo.gif)
 
 You start with enough ore to build an extractor, a belt, and a seller. Delivered
 ore pays for upgrades and more land. Everyone in a room shares the same grid and
