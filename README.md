@@ -2,19 +2,35 @@
 
 > A real-time, multiplayer co-op factory game. Build an automated factory together, live, in the browser.
 
-**Play it: [cogfab.io](https://cogfab.io)** — the URL is the invite link. Visiting drops you into a room; share the address and up to four people build one factory together.
+**Play it: [cogfab.io](https://cogfab.io).** The URL is the invite link. Open a
+room, share the address, and up to four people can build one factory together.
 
 ![Two players building a factory together, live cursors and all](docs/demo.gif)
 
-You start on a small patch of land with just enough ore for a first extractor-belt-seller line. Ore that reaches a seller earns; earnings buy upgrades and more land; more land holds more lines. Everyone in a room shares everything: the grid, the ore, the upgrades, and you watch each other's cursors glide around the board as you build.
+You start with enough ore to build an extractor, a belt, and a seller. Delivered
+ore pays for upgrades and more land. Everyone in a room shares the same grid and
+economy, while live cursors show where the other players are building.
 
-## Why this exists
+## Why I built it
 
-A portfolio project to demonstrate (and defend in depth) real-time netcode, Go concurrency, performance engineering, full-stack development, and cloud deployment, in one cohesive system.
+I built Cogfab to see how far a simple, server-authoritative design can go before
+distributed infrastructure is actually useful. The goal is a system I can
+explain, test, observe, and operate end to end. Extra services only enter when
+the workload earns them.
 
-## Architecture in one line
+## Architecture
 
-One server process hosts many rooms. Each room is a hub: a single goroutine that owns that room's grid and economy (no locks), applies commands instantly, and runs a once-a-second simulation that moves ore chunks along the belts and pays out only what lands in a seller. Clients get small snapshots plus a handful of economy numbers; everything cosmetic (the flowing ore, the direction arrows, the particles) is derived client-side from the layout, so item positions never touch the wire. Rooms are goroutines, not pods: a room is a few kilobytes ticking in microseconds, so hundreds fit in one process, and scaling out later just means routing each room code to a consistent process.
+One Go process hosts every room. Each room owns its grid, players, and economy
+on one goroutine, so its hot path needs no locks.
+
+The server applies commands and advances the economy. Clients receive grid
+snapshots and economy totals, while animation stays in the browser. This keeps
+per-item positions off the wire and the server focused on authoritative state.
+
+Today, one Container-Optimized OS VM is enough. Rooms already have stable codes
+and isolated state. Scaling out would require routing each room code to one
+process and moving room saves to shared storage, but the room model itself would
+not change.
 
 ## Tech stack
 
@@ -22,11 +38,12 @@ One server process hosts many rooms. Each room is a hub: a single goroutine that
 | --- | --- |
 | Simulation + server | Go (pure grid engine; hub + ore sim; WebSocket server) |
 | Transport | WebSockets (`coder/websocket`) |
-| Wire format | JSON (snapshots are small enough that nothing hotter is needed) |
+| Wire format | JSON snapshots, with animation derived on the client |
 | Client | React + TypeScript + Vite |
 | Rendering | Three.js via React Three Fiber |
 | Audio | WebAudio, synthesized in code (no audio files) |
-| Persistence | JSON snapshots on disk, one file per room (a database when scale demands one) |
+| Persistence | JSON snapshots on disk, one file per room |
+| Observability | Prometheus metrics on a private listener, with container logs in Cloud Logging |
 | TLS | the server fetches its own Let's Encrypt certificate |
 | Deploy | Small distroless Docker image on one GCP free-tier COS VM; GKE manifests in `deploy/` as the scale-up path |
 | CI | GitHub Actions: ShellCheck, gofmt, vet, race-enabled tests, typecheck, vitest, build |
@@ -46,7 +63,12 @@ cogfab/
 └── docs/              devlog and the deploy runbook
 ```
 
-Good places to read: `internal/server/hub.go` (one goroutine per room, no locks), `internal/server/economy.go` (the ore simulation and why it stays off the wire), `internal/server/save.go` (persistence with atomic writes), and `internal/server/bench_test.go` (the benchmark behind a 148ms-to-2ms tick fix).
+Good places to start:
+
+- `internal/server/hub.go`: one goroutine owns each room.
+- `internal/server/economy.go`: the ore simulation stays off the wire.
+- `internal/server/save.go`: room snapshots use atomic writes.
+- `internal/server/bench_test.go`: the benchmark behind a 148ms-to-2ms tick fix.
 
 ## Development
 
@@ -62,7 +84,9 @@ go run ./cmd/server     # game server on :8080
 npm run dev             # in web/, opens the client (usually :5173)
 ```
 
-**Commit conventions:** [Conventional Commits](https://www.conventionalcommits.org/). Types: `feat fix docs test refactor perf build ci chore`; scopes such as `engine net web deploy docs`. A message template is wired up via `git config commit.template .gitmessage`.
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/).
+Common types and scopes are listed in `.gitmessage`, which can be enabled with
+`git config commit.template .gitmessage`.
 
 ## License
 
