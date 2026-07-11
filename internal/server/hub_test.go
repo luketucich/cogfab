@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/luketucich/cogfab/internal/engine"
 	"github.com/luketucich/cogfab/internal/wire"
@@ -141,17 +142,28 @@ func TestProfilesAreSanitizedNotRejected(t *testing.T) {
 
 func TestBroadcastDropsSlowClient(t *testing.T) {
 	h := NewHub(newTestWorld())
-	slow := &Client{send: make(chan []byte, 1)}
+	slow := &Client{send: make(chan []byte, 4)}
+	h.addClient(slow)              // welcome, state, and stats occupy three slots
 	slow.send <- []byte("backlog") // buffer is now full
-	h.clients[slow] = true
 
 	h.broadcast([]byte("next")) // can't enqueue -> the client is dropped
 
 	if h.clients[slow] {
 		t.Error("slow client should have been dropped from the hub")
 	}
-	<-slow.send // drain the backlog
-	if _, open := <-slow.send; open {
-		t.Error("dropped client's send channel should be closed")
+	for i := 0; i < 4; i++ {
+		select {
+		case <-slow.send:
+		case <-time.After(time.Second):
+			t.Fatal("timed out draining the slow client's queued messages")
+		}
+	}
+	select {
+	case _, open := <-slow.send:
+		if open {
+			t.Error("dropped client's send channel should be closed")
+		}
+	case <-time.After(time.Second):
+		t.Error("dropped client's send channel was not closed")
 	}
 }

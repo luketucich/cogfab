@@ -43,6 +43,25 @@ func BenchmarkTickHugeBoard(b *testing.B) {
 	}
 }
 
+func BenchmarkEconomyTickMetrics(b *testing.B) {
+	for _, enabled := range []bool{false, true} {
+		name := "disabled"
+		if enabled {
+			name = "enabled"
+		}
+		b.Run(name, func(b *testing.B) {
+			h := denseHub(12, 8)
+			if enabled {
+				h.metrics = NewMetrics()
+			}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				h.runEconomyTick()
+			}
+		})
+	}
+}
+
 func BenchmarkRecomputeHugeBoard(b *testing.B) {
 	h := denseHub(64, 64) // route rebuild cost per placement during a drag
 	b.ResetTimer()
