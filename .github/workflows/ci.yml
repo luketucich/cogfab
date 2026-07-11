@@ -9,6 +9,19 @@ permissions:
   contents: read
 
 jobs:
+  startup-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes shellcheck
+
+      - name: Check startup script
+        run: |
+          bash -n deploy/startup.sh
+          shellcheck deploy/startup.sh
+
   go:
     runs-on: ubuntu-latest
     steps:
