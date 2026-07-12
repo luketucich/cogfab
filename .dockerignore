@@ -7,3 +7,4 @@ web/dist/
 docs/
 *.md
 .claude/
+gha-creds-*.json
