@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="web/public/brand/cogfab-lockup.svg" width="360" alt="Cogfab">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="web/public/brand/cogfab-lockup-light.png">
+    <source media="(prefers-color-scheme: light)" srcset="web/public/brand/cogfab-lockup-dark.png">
+    <img src="web/public/brand/cogfab-lockup-dark.png" width="360" alt="Cogfab">
+  </picture>
 </p>
 
 <p align="center">
