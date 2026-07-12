@@ -1,8 +1,8 @@
 export function CogfabLogo() {
   return (
-    <div className="cogfab-brand">
-      <img className="cogfab-brand__mark" src="/brand/cogfab-mark.svg" alt="" aria-hidden="true" />
-      <span className="cogfab-brand__wordmark">Cogfab</span>
-    </div>
+    <picture className="cogfab-brand">
+      <source media="(max-width: 520px)" srcSet="/brand/cogfab-mark.png" />
+      <img className="cogfab-brand__image" src="/brand/cogfab-lockup-light.png" alt="Cogfab" />
+    </picture>
   );
 }
