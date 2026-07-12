@@ -20,7 +20,7 @@ type Flight = { t: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; fr
 // to the next, keeping its distance and height.
 type Turn = { t: number; from: number; to: number; radius: number };
 
-// easeInOut starts gently, sails through the middle, and settles softly.
+// easeInOut applies cubic easing to camera transitions.
 const easeInOut = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 // CameraRig owns the camera feel: the wheel sets a zoom target the camera

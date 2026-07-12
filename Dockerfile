@@ -19,8 +19,8 @@ RUN mkdir /data
 # distroless: no shell, no package manager, runs as a non-root user.
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=server /cogfab-server /cogfab-server
-# an empty /data the non-root user owns, so saves work even in a bare
-# `docker run`; in the cluster the volume mounts over it
+# Give the non-root user a writable /data for bare `docker run`. Production
+# and GKE mount persistent storage over this directory.
 COPY --from=server --chown=65532:65532 /data /data
 COPY --from=web /src/web/dist /web/dist
 ENV WEB_DIR=/web/dist

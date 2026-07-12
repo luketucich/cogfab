@@ -41,11 +41,8 @@ func (h *Hub) beltSpeed() float64 {
 	return oreSpeed * beltMult(min(h.beltLevel, maxSimLevel))
 }
 
-// oreValue is what one delivery is worth: the base ore plus one more per Ore
-// Value level. Linear on purpose, against a doubling price: every level pays
-// back slower than the one before, so no single upgrade can carry a run, and
-// real growth comes from more extractor lines, which need land. Keep in step
-// with oreValue in economy.ts.
+// oreValue is what one delivery is worth: the base ore plus one for each Ore
+// Value level. Keep in step with oreValue in economy.ts.
 func (h *Hub) oreValue() float64 {
 	return 1 + float64(h.valueLevel)
 }

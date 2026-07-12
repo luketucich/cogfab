@@ -16,7 +16,7 @@ const CONTROLS: [string, string][] = [
 ];
 
 // Controls is the little help button in the bottom left: click it and a small
-// sheet unfolds listing every input the game understands.
+// sheet unfolds with the main keyboard and mouse controls.
 export function Controls() {
   const [open, setOpen] = useState(false);
   return (

@@ -14,21 +14,19 @@ function ensure(): AudioContext | null {
     if (typeof AudioContext === "undefined") return null;
     ctx = new AudioContext();
     master = ctx.createGain();
-    master.gain.value = 0.25; // keep everything gentle
+    master.gain.value = 0.25; // lower the overall effect volume
     master.connect(ctx.destination);
   }
   if (ctx.state === "suspended") void ctx.resume();
   return ctx;
 }
 
-// jitter nudges a frequency a couple of percent differently every play, so a
-// repeated impact sounds struck each time, not stamped from a mould.
+// jitter varies an impact frequency by up to 2.5% so repeats are not identical.
 function jitter(freq: number): number {
   return freq * (1 + (Math.random() - 0.5) * 0.05);
 }
 
-// tone plays one note: a frequency glide with a rounded attack and a smooth
-// decay, through a lowpass that keeps even bright notes from turning harsh.
+// tone plays one filtered oscillator with frequency and gain envelopes.
 function tone(type: OscillatorType, from: number, to: number, delay: number, length: number, peak: number, cutoff = 2200) {
   const c = ensure();
   if (!c || !master) return;
@@ -51,8 +49,7 @@ function tone(type: OscillatorType, from: number, to: number, delay: number, len
   osc.stop(t0 + length + 0.02);
 }
 
-// rumble plays a burst of noise through a falling lowpass, for knocks and
-// breaks: real impacts lose their brightness first, so the cutoff decays too.
+// rumble plays a noise burst through a falling low-pass filter.
 function rumble(cutoff: number, length: number, peak: number) {
   const c = ensure();
   if (!c || !master) return;
@@ -75,49 +72,45 @@ function rumble(cutoff: number, length: number, peak: number) {
   src.start(t0);
 }
 
-// Deliveries can happen dozens of times a second late game, so their thud is
-// capped: at most one every DELIVER_GAP seconds, and quiet enough to read as
-// gentle activity in the background rather than a drumroll.
+// Rate-limit delivery sounds so a busy factory does not overwhelm other cues.
 const DELIVER_GAP = 0.14;
 let nextDeliverAt = 0;
 
 // The game's sound board. Each is a short, distinct cue for one action.
 export const sfx = {
-  // picking a tool: a soft pop
+  // Tool selection: a short high note.
   select(): void {
     tone("sine", 880, 620, 0, 0.05, 0.25, 1600);
   },
-  // placing a structure: a warm thock
+  // Placement: a low impact.
   place(): void {
     tone("sine", jitter(230), 120, 0, 0.1, 0.7, 900);
     rumble(700, 0.05, 0.18);
   },
-  // tearing one down: a crumbly break
+  // Teardown: a noise burst and low tone.
   destroy(): void {
     rumble(600, 0.18, 0.55);
     tone("sine", jitter(150), 55, 0, 0.13, 0.35, 500);
   },
-  // clicking somewhere you cannot build: a muted double knock
+  // Rejected action: two muted notes.
   deny(): void {
     tone("sine", jitter(150), 110, 0, 0.06, 0.3, 600);
     tone("sine", jitter(135), 100, 0.08, 0.07, 0.25, 600);
   },
-  // buying an upgrade: a rising two-note chime, felt more than heard
+  // Upgrade purchase: a rising two-note cue.
   buy(): void {
     tone("sine", 523, 523, 0, 0.14, 0.4, 1500);
     tone("sine", 784, 784, 0.07, 0.2, 0.35, 1500);
   },
-  // unlocking land: a bigger three-note rise over a low root
+  // Land unlock: a larger three-note cue over a low root.
   expand(): void {
     tone("sine", 131, 131, 0, 0.5, 0.35, 700);
     tone("triangle", 523, 523, 0, 0.14, 0.3, 1400);
     tone("triangle", 659, 659, 0.09, 0.16, 0.3, 1400);
     tone("triangle", 784, 784, 0.18, 0.28, 0.3, 1400);
   },
-  // one ore landing in a seller: a small thud, felt more than heard, pitched
-  // a little differently each time so a busy factory never sounds mechanical.
-  // Unlike the others it fires from the render loop, not a click, so it waits
-  // for a real interaction to have started the audio rather than starting it.
+  // Delivery: a rate-limited low impact. It runs outside an input event, so it
+  // waits for another effect to start the audio context first.
   deliver(): void {
     if (!ctx || ctx.state !== "running" || ctx.currentTime < nextDeliverAt) return;
     nextDeliverAt = ctx.currentTime + DELIVER_GAP;

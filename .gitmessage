@@ -2,7 +2,7 @@
 #
 # Conventional Commits: https://www.conventionalcommits.org
 #   type:  feat fix docs test refactor perf build ci chore revert
-#   scope: engine net web sim proto deploy docs ci   (optional)
+#   scope: engine server web deploy assets   (optional)
 #
 # Body (optional): explain what changed and why, not how. Wrap at ~72 chars.
 #

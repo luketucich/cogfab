@@ -3,9 +3,8 @@ import type { CSSProperties } from "react";
 import { getSession, subscribeSession } from "./net/session";
 import { panel, FONT_DISPLAY } from "./ui";
 
-// RoomFull covers the screen when the room we tried to join already has its
-// four players: explain, and offer a fresh room (dropping the ?room parameter
-// makes the server mint a new one).
+// RoomFull covers the screen when the server refuses a join, normally because
+// the room has four players, and offers a fresh room.
 export function RoomFull() {
   const session = useSyncExternalStore(subscribeSession, getSession);
   if (!session.full) return null;

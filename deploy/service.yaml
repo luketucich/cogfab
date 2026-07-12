@@ -12,9 +12,8 @@ spec:
     - port: 80
       targetPort: 8080
 ---
-# The load balancer drops idle connections after 30 seconds by default, which
-# would cut every WebSocket mid-game. An hour covers a long session; the
-# client reconnects with backoff if it is ever cut.
+# GKE's default 30-second backend timeout would end WebSocket sessions. An hour
+# covers a long session, and the client reconnects if the connection closes.
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:

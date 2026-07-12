@@ -42,8 +42,8 @@ export function beltMultiplier(beltLevel: number): number {
   return 1 + 0.25 * beltLevel;
 }
 
-// emissionMultiplier is the Extractor Rate scale: each level packs chunks half
-// the base rate closer together. Mirror of extractorMult in economy.go.
+// emissionMultiplier is the Extractor Rate scale: each level adds half the base
+// emission rate. Mirror of extractorMult in economy.go.
 export function emissionMultiplier(extractorLevel: number): number {
   return 1 + 0.5 * extractorLevel;
 }

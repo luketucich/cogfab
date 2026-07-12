@@ -9,18 +9,17 @@ import (
 )
 
 // Rooms persist as one small JSON file per room code, so a factory survives
-// server restarts and the empty-room grace running out. The hub writes its own
-// file on its Run goroutine (a save every so often plus one on the way down),
-// which keeps the no-lock rule intact: nothing outside that goroutine ever
-// reads hub state.
+// server restarts and the empty-room grace running out. Periodic and shutdown
+// save attempts run on the hub's goroutine, which keeps the no-lock rule intact:
+// nothing outside that goroutine reads hub state.
 
 // snapshotVersion marks the save layout. A file from another version is
 // ignored and the room starts fresh, which beats guessing at old fields.
 const snapshotVersion = 1
 
 // snapshot is everything a room needs to come back: the grid and the shared
-// purse, levels, and land. Ore in flight is skipped; it refills within a
-// second of someone joining.
+// purse, levels, and land. Ore in flight is omitted; production resumes on the
+// next tick.
 type snapshot struct {
 	Version        int         `json:"version"`
 	Width          int         `json:"width"`

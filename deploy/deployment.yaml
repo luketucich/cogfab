@@ -9,7 +9,7 @@ metadata:
 spec:
   replicas: 1
   # Recreate, not rolling: the saves disk is single-writer, so the old pod
-  # must let go (and write its final saves) before the new one starts.
+  # must finish shutdown and its final save attempt before the new one starts.
   strategy:
     type: Recreate
   selector:
@@ -52,7 +52,7 @@ spec:
           persistentVolumeClaim:
             claimName: cogfab-data
 ---
-# Room saves: one small JSON file per room, so 1Gi is years of headroom.
+# Room saves use one small JSON file per room. Expand the disk if usage grows.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

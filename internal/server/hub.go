@@ -86,14 +86,13 @@ func NewHub(w *engine.World) *Hub {
 	return h
 }
 
-// saveEvery is how often a live room writes itself to disk. A crash loses at
-// most this much progress; a clean teardown loses none (Run saves on the way
-// out).
+// saveEvery is how often a live room attempts a disk save. Run also attempts a
+// final save during a clean shutdown.
 const saveEvery = 30 * time.Second
 
 // Run is the hub's event loop: it applies and broadcasts each command right away
 // (so a placement shows up at once) and accrues ore once a second. On ctx cancel
-// it saves the room and disconnects everyone.
+// it attempts a final save and disconnects everyone.
 func (h *Hub) Run(ctx context.Context) {
 	defer close(h.done)
 	ticker := time.NewTicker(time.Second)
@@ -170,8 +169,8 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 	return true
 }
 
-// persist writes the room to disk. Losing one save is no disaster (the next
-// one lands within saveEvery), so a write error is logged, not fatal.
+// persist attempts to write the room to disk. A failure is logged instead of
+// stopping the game; a later scheduled save may retry.
 func (h *Hub) persist() {
 	if h.saves == nil {
 		return
@@ -189,9 +188,8 @@ func (h *Hub) persist() {
 	}
 }
 
-// Register, Unregister, and Submit are called from client goroutines; the work
-// itself happens on the Run goroutine. Each gives up once Run has exited, so a
-// client caught mid-call during shutdown cannot hang forever.
+// Register, Unregister, and Submit send client work to the Run goroutine. Each
+// returns if Run has exited so a caller cannot hang during shutdown.
 func (h *Hub) Register(c *Client) {
 	select {
 	case h.register <- c:
