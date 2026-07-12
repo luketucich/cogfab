@@ -6,12 +6,15 @@ readonly stable_container="cogfab"
 readonly candidate_container="cogfab-next"
 readonly previous_container="cogfab-previous"
 readonly collector_container="cogfab-otel"
-readonly collector_image="us-docker.pkg.dev/cloud-ops-agents-artifacts/google-cloud-opentelemetry-collector/otelcol-google:0.155.0"
+readonly previous_collector="cogfab-otel-previous"
+readonly collector_image="us-docker.pkg.dev/cloud-ops-agents-artifacts/google-cloud-opentelemetry-collector/otelcol-google@sha256:6add546498180921af0a2a0d26faa0b60f27faf7298c969b041226a52a685d32"
 readonly data_dir="/var/lib/cogfab"
 readonly deploy_home="/home/cogfab-deploy"
 readonly collector_dir="$data_dir/monitoring"
-readonly collector_config="$collector_dir/collector.yaml"
-readonly image_prefix="us-central1-docker.pkg.dev/cogfab-io/cogfab/server:"
+readonly legacy_collector_config="$collector_dir/collector.yaml"
+readonly collector_config_a="$collector_dir/collector-a.yaml"
+readonly collector_config_b="$collector_dir/collector-b.yaml"
+readonly image_repository="us-central1-docker.pkg.dev/cogfab-io/cogfab/server"
 readonly image_url="http://metadata.google.internal/computeMetadata/v1/instance/attributes/cogfab-image"
 readonly registry="us-central1-docker.pkg.dev"
 
@@ -172,14 +175,9 @@ collector_responding() {
 	curl --fail --silent --max-time 2 http://127.0.0.1:13133/ >/dev/null
 }
 
-start_collector() {
-	local config_tmp ready
-	config_tmp="$collector_config.tmp"
-	mkdir -p "$collector_dir"
-	docker cp "$stable_container:/etc/cogfab/collector.yaml" "$config_tmp"
-	mv "$config_tmp" "$collector_config"
-
-	remove_container "$collector_container"
+create_collector() {
+	local image="$1"
+	local config="$2"
 	docker create \
 		--name "$collector_container" \
 		--restart no \
@@ -189,11 +187,13 @@ start_collector() {
 		--security-opt no-new-privileges \
 		--tmpfs /tmp:rw,noexec,nosuid,size=16m \
 		--env GOOGLE_CLOUD_PROJECT=cogfab-io \
-		--mount "type=bind,source=$collector_config,target=/etc/otelcol/config.yaml,readonly" \
-		"$collector_image" \
+		--mount "type=bind,source=$config,target=/etc/otelcol/config.yaml,readonly" \
+		"$image" \
 		--config=/etc/otelcol/config.yaml >/dev/null
-	docker start "$collector_container" >/dev/null
+}
 
+wait_for_collector() {
+	local ready
 	ready=false
 	for _ in {1..20}; do
 		if container_running "$collector_container" && collector_responding; then
@@ -202,12 +202,143 @@ start_collector() {
 		fi
 		sleep 1
 	done
+	if [[ "$ready" == true ]]; then
+		# Keep the fallback until the collector clears Docker's restart threshold.
+		for _ in {1..12}; do
+			sleep 1
+			if ! container_running "$collector_container" || \
+				! collector_responding; then
+				ready=false
+				break
+			fi
+		done
+	fi
 	if [[ "$ready" != true ]]; then
 		docker logs --tail 50 "$collector_container" >&2 || true
 		log "metrics collector did not become healthy"
 		return 1
 	fi
-	docker update --restart always "$collector_container" >/dev/null
+}
+
+recover_collector_name() {
+	local current_restart
+	if ! container_exists "$previous_collector"; then
+		return
+	fi
+	current_restart=""
+	if container_exists "$collector_container"; then
+		current_restart="$(docker inspect --format \
+			'{{.HostConfig.RestartPolicy.Name}}' "$collector_container")"
+	fi
+	if container_exists "$collector_container" && container_running "$collector_container" && \
+		collector_responding && [[ "$current_restart" == always ]]; then
+		remove_container "$previous_collector"
+		return
+	fi
+	remove_container "$collector_container"
+	docker rename "$previous_collector" "$collector_container"
+	if ! container_running "$collector_container"; then
+		docker start "$collector_container" >/dev/null
+	fi
+	wait_for_collector
+}
+
+restore_collector() {
+	local candidate_config="$1"
+	local previous_restart="$2"
+	local collector_was_running="$3"
+
+	if ! remove_container "$collector_container"; then
+		return 1
+	fi
+	if container_exists "$previous_collector"; then
+		docker rename "$previous_collector" "$collector_container" || return 1
+		docker update --restart "$previous_restart" "$collector_container" \
+			>/dev/null || return 1
+		if [[ "$collector_was_running" == true ]]; then
+			docker start "$collector_container" >/dev/null || return 1
+			wait_for_collector || return 1
+		fi
+	fi
+	if ! rm -f "$candidate_config"; then
+		log "could not remove $candidate_config"
+	fi
+}
+
+start_collector() {
+	local candidate_config config_tmp current_config old_config
+	local collector_should_run previous_removed previous_restart
+
+	mkdir -p "$collector_dir"
+	recover_collector_name
+	current_config=""
+	previous_restart="no"
+	collector_should_run=false
+	if container_exists "$collector_container"; then
+		current_config="$(docker inspect --format \
+			'{{range .Mounts}}{{if eq .Destination "/etc/otelcol/config.yaml"}}{{.Source}}{{end}}{{end}}' \
+			"$collector_container")"
+		previous_restart="$(docker inspect --format \
+			'{{.HostConfig.RestartPolicy.Name}}' "$collector_container")"
+		if container_running "$collector_container" || \
+			[[ "$previous_restart" == always ]]; then
+			collector_should_run=true
+		fi
+	fi
+	if [[ "$current_config" == "$collector_config_a" ]]; then
+		candidate_config="$collector_config_b"
+	else
+		candidate_config="$collector_config_a"
+	fi
+	config_tmp="$candidate_config.tmp"
+	docker cp "$stable_container:/etc/cogfab/collector.yaml" "$config_tmp"
+	mv "$config_tmp" "$candidate_config"
+
+	if container_exists "$collector_container"; then
+		if container_running "$collector_container"; then
+			if ! docker stop --time=20 "$collector_container" >/dev/null; then
+				rm -f "$candidate_config" || true
+				return 1
+			fi
+		fi
+		if ! docker rename "$collector_container" "$previous_collector"; then
+			if [[ "$collector_should_run" == true ]] && \
+				! container_running "$collector_container"; then
+				docker start "$collector_container" >/dev/null || true
+			fi
+			rm -f "$candidate_config" || true
+			return 1
+		fi
+	fi
+
+	if ! create_collector "$collector_image" "$candidate_config" || \
+		! docker start "$collector_container" >/dev/null || \
+		! wait_for_collector || \
+		! docker update --restart always "$collector_container" >/dev/null; then
+		log "restoring the previous metrics collector"
+		if ! restore_collector "$candidate_config" "$previous_restart" \
+			"$collector_should_run"; then
+			log "could not restore the previous metrics collector"
+		fi
+		return 1
+	fi
+
+	previous_removed=true
+	if container_exists "$previous_collector" && \
+		! remove_container "$previous_collector"; then
+		previous_removed=false
+		log "could not remove $previous_collector; keeping its config"
+	fi
+	if [[ "$previous_removed" == true ]]; then
+		for old_config in "$legacy_collector_config" "$collector_config_a" \
+			"$collector_config_b"; do
+			if [[ "$old_config" != "$candidate_config" ]]; then
+				if ! rm -f "$old_config"; then
+					log "could not remove $old_config"
+				fi
+			fi
+		done
+	fi
 }
 
 log "configuring the host"
@@ -226,8 +357,9 @@ wait_for_docker
 image="$(curl --fail --silent --show-error --retry 5 --retry-all-errors \
 	--connect-timeout 2 --max-time 5 --retry-delay 2 \
 	--header 'Metadata-Flavor: Google' "$image_url")"
-if [[ "$image" != "$image_prefix"?* || "$image" == *:latest ]]; then
-	log "cogfab-image must be a versioned image from $image_prefix"
+if [[ "$image" != "$image_repository:"?* && \
+	"$image" != "$image_repository@sha256:"?* ]] || [[ "$image" == *:latest ]]; then
+	log "cogfab-image must be a versioned image or digest from $image_repository"
 	exit 1
 fi
 
