@@ -1,9 +1,18 @@
-# Cogfab
+<p align="center">
+  <img src="web/public/brand/cogfab-lockup.svg" width="360" alt="Cogfab">
+</p>
 
-> A real-time, multiplayer co-op factory game. Build an automated factory together, live, in the browser.
+<p align="center">
+  <strong>A real-time multiplayer co-op factory game.</strong><br>
+  Build an automated factory together, live in the browser.
+</p>
 
-**Play it: [cogfab.io](https://cogfab.io).** The URL is the invite link. Open a
-room, share the address, and up to four people can build one factory together.
+<p align="center">
+  <a href="https://cogfab.io"><strong>Play Cogfab</strong></a>
+</p>
+
+The URL is the invite link. Open a room, share the address, and up to four
+people can build one factory together.
 
 ![Animated demo of Luke and Bert connecting a shared belt line, moving ore, and upgrading the extractor](docs/demo.gif)
 

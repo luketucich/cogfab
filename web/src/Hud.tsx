@@ -8,6 +8,7 @@ import { setProfile, NAME_LIMIT } from "./net/profile";
 import { getPresence, subscribePresence } from "./world/presence";
 import type { PresencePlayer } from "./net/types";
 import { sfx } from "./sfx";
+import { CogfabLogo } from "./CogfabLogo";
 import { panel, ACCENT, DANGER, FONT_DISPLAY, SWATCHES, playerColor } from "./ui";
 
 // Hud is the lobby panel in the top left: the game title with the round-trip
@@ -23,8 +24,8 @@ export function Hud() {
 
   return (
     <div style={{ ...panel, top: 14, left: 14, width: 208, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-        <div style={title}>Cogfab.io</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <CogfabLogo />
         <span style={{ ...pingText, ...(connected ? null : { color: DANGER, opacity: 1 }) }}>
           {connected ? (ms === null ? "..." : `${ms}ms`) : "offline"}
         </span>
@@ -159,14 +160,6 @@ function PlayerRow({ player, you }: { player: PresencePlayer; you: boolean }) {
     </div>
   );
 }
-
-const title: CSSProperties = {
-  fontFamily: FONT_DISPLAY,
-  fontSize: 21,
-  fontWeight: 800,
-  letterSpacing: 0.5,
-  color: "#f0f3f8",
-};
 
 const pingText: CSSProperties = { fontSize: 10, fontWeight: 700, opacity: 0.55 };
 
