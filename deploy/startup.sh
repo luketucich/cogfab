@@ -20,7 +20,6 @@ readonly registry="us-central1-docker.pkg.dev"
 
 declare -a previous_containers=()
 declare -a previous_running=()
-lock_dir=""
 candidate_was_promoted=false
 rollback_needed=false
 stable_was_renamed=false
@@ -67,22 +66,17 @@ allow_web_port() {
 }
 
 acquire_lock() {
-	local boot_id stale_lock
-	boot_id="$(< /proc/sys/kernel/random/boot_id)"
-	lock_dir="$deploy_home/startup-$boot_id.lock"
-	if ! mkdir "$lock_dir" 2>/dev/null; then
-		log "could not acquire startup lock; another run may be active"
+	# The kernel releases this lock even if the startup script is interrupted.
+	exec 9>"$deploy_home/startup.lock"
+	if ! flock --nonblock 9; then
+		log "could not acquire startup lock; another run is active"
 		return 1
 	fi
-	for stale_lock in "$deploy_home"/startup-*.lock; do
-		if [[ "$stale_lock" != "$lock_dir" ]]; then
-			rmdir "$stale_lock" 2>/dev/null || true
-		fi
-	done
 }
 
 release_lock() {
-	rmdir "$lock_dir" 2>/dev/null || true
+	flock --unlock 9 2>/dev/null || true
+	exec 9>&-
 }
 
 rollback() {

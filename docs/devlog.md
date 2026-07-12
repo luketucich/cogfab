@@ -2,9 +2,17 @@
 
 What I've worked on, newest first.
 
+## 2026-07-12
+- Finished the production delivery path. Manually approved GitHub Actions
+  releases now use keyless GCP authentication, immutable image digests, health
+  checks, and rollback.
+- Added a live Cloud Monitoring dashboard, uptime checks, and three alerts that
+  notify the operator by email.
+
 ## 2026-07-11
-- Added private Prometheus metrics for room, player, command, tick, and save
-  activity. They bind to VM loopback; the public server still returns `404`.
+- Added private Prometheus-format metrics for room, player, command, tick, and
+  save activity. They bind to VM loopback; the public server still returns
+  `404`.
 - Replaced GCE's deprecated container startup agent with a checked-in COS
   startup script. Releases now use versioned images, candidate health checks,
   automatic rollback, and a dedicated VM service account. A saved two-player
@@ -20,12 +28,10 @@ What I've worked on, newest first.
   line with what actually runs, and swept the comments for anything stale.
   Pulled the upgrade multipliers into one place on each side of the wire
   while at it; they were inlined four times on the server.
-- Right-sized the deploy. A Kubernetes cluster and its load balancer run about
-  $90 a month for a game whose whole server is one goroutine-cheap process, so
-  production is now one container on an always-free e2-micro VM (~$4/month,
-  basically the static IP). The binary fetches and renews its own Let's
-  Encrypt certificate when DOMAIN is set, so the entire stack is the one
-  process. The GKE manifests stay in deploy/ as a reference deployment.
+- Right-sized the deploy. A Kubernetes cluster was unnecessary for a game whose
+  server is one goroutine-cheap process, so production moved to an e2-micro VM.
+  The binary fetches and renews its own Let's Encrypt certificate when DOMAIN
+  is set. The GKE manifests stay in deploy/ as a reference deployment.
 - Containerized the game and wrote the cluster config. The image is a
   three-stage build (web app, Go binary, then a 21MB distroless final that
   runs as non-root), and deploy/ holds the GKE pieces: one pod with the saves
@@ -77,10 +83,10 @@ What I've worked on, newest first.
   live: a named pointer at the exact spot plus a soft tile on the cell it snaps
   to, in their colour. Everyone can pick a name and colour in the lobby panel,
   which also copies the room code and lets you type a friend's code to jump to
-  their room. Rooms are goroutines,
-  not pods: one server process hosts hundreds of them (a mutex guards the
-  lookup; each room's world stays lock-free on its own goroutine), and an
-  empty room survives ten minutes so a refresh never loses the factory.
+  their room. Rooms are goroutines, not pods. One server process hosts multiple
+  rooms; a mutex guards the lookup, while each room's world stays lock-free on
+  its own goroutine. An empty room survives ten minutes so a refresh never
+  loses the factory.
 - Made the upgrades infinite: costs keep doubling, Ore Value doubles what each
   delivery is worth, and past level five the belts are visually maxed so
   richer chunks carry the difference. The game never runs out of a next thing

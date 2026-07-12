@@ -56,9 +56,9 @@ not change.
 | Rendering | Three.js via React Three Fiber |
 | Audio | WebAudio, synthesized in code (no audio files) |
 | Persistence | JSON snapshots on disk, one file per room |
-| Observability | Prometheus + OpenTelemetry metrics, Grafana-compatible PromQL dashboard, and Cloud Logging |
+| Observability | Prometheus-format metrics, OpenTelemetry Collector, Cloud Monitoring, Cloud Logging, and a portable Grafana dashboard |
 | TLS | the server fetches its own Let's Encrypt certificate |
-| Deploy | Small distroless Docker image on one GCP free-tier COS VM; reference GKE manifests in `deploy/` |
+| Deploy | Small distroless Docker image on one GCP e2-micro COS VM; reference GKE manifests in `deploy/` |
 | CI | GitHub Actions: static checks, race-enabled tests, web build, and production container smoke test |
 | Delivery | Keyless GitHub Actions deploy through GCP Workload Identity Federation, with health checks and rollback |
 
