@@ -1,0 +1,54 @@
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: cogfab
+          scrape_interval: 60s
+          static_configs:
+            - targets: ["127.0.0.1:9090"]
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 96
+    spike_limit_mib: 24
+  metric_start_time:
+    strategy: subtract_initial_point
+  resource_detection:
+    detectors: [gcp]
+    timeout: 10s
+    override: false
+  resource/gcp_project:
+    attributes:
+      - key: gcp.project_id
+        value: ${env:GOOGLE_CLOUD_PROJECT}
+        action: upsert
+  batch:
+    send_batch_size: 200
+    send_batch_max_size: 200
+    timeout: 5s
+
+exporters:
+  otlp_http:
+    encoding: proto
+    endpoint: https://telemetry.googleapis.com
+    auth:
+      authenticator: googleclientauth
+
+extensions:
+  googleclientauth:
+  health_check:
+    endpoint: 127.0.0.1:13133
+
+service:
+  extensions: [googleclientauth, health_check]
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      processors:
+        - memory_limiter
+        - metric_start_time
+        - resource_detection
+        - resource/gcp_project
+        - batch
+      exporters: [otlp_http]
