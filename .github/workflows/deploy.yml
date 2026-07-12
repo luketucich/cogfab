@@ -1,0 +1,58 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: cogfab-io
+  REGION: us-central1
+  IMAGE_REPOSITORY: us-central1-docker.pkg.dev/cogfab-io/cogfab/server
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://cogfab.io
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Build production image
+        run: docker build --platform linux/amd64 --tag "$IMAGE_REPOSITORY:$GITHUB_SHA" .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: cogfab-io
+          workload_identity_provider: projects/780890629384/locations/global/workloadIdentityPools/github-actions/providers/cogfab-production
+          service_account: cogfab-deploy@cogfab-io.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Configure Artifact Registry
+        run: gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+
+      - name: Publish image
+        id: image
+        run: |
+          set -euo pipefail
+          image="$IMAGE_REPOSITORY:$GITHUB_SHA"
+          docker push "$image"
+          digest="$(gcloud artifacts docker images describe "$image" \
+            --project="$PROJECT_ID" \
+            --format='value(image_summary.digest)')"
+          test "$digest" != ""
+          echo "image=$IMAGE_REPOSITORY@$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy and verify
+        run: deploy/release.sh '${{ steps.image.outputs.image }}'

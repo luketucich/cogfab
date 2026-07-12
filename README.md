@@ -46,7 +46,8 @@ not change.
 | Observability | Prometheus + OpenTelemetry metrics, Grafana-compatible PromQL dashboard, and Cloud Logging |
 | TLS | the server fetches its own Let's Encrypt certificate |
 | Deploy | Small distroless Docker image on one GCP free-tier COS VM; reference GKE manifests in `deploy/` |
-| CI | GitHub Actions: ShellCheck, gofmt, vet, race-enabled tests, typecheck, vitest, build |
+| CI | GitHub Actions: static checks, race-enabled tests, web build, and production container smoke test |
+| Delivery | Keyless GitHub Actions deploy through GCP Workload Identity Federation, with health checks and rollback |
 
 ## Repository layout
 
