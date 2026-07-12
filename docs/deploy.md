@@ -1,8 +1,9 @@
 # Deploying cogfab.io
 
-Cogfab runs as one Docker container on a Container-Optimized OS VM in GCP.
-The Go binary serves the site, WebSocket, and TLS certificate. Prometheus
-metrics stay on the VM's loopback interface.
+Cogfab runs as two Docker containers on a Container-Optimized OS VM in GCP.
+The game container serves the site, WebSocket, and TLS certificate. A small
+OpenTelemetry collector exports private metrics from the VM's loopback
+interface.
 
 `deploy/startup.sh` pulls a versioned image from Artifact Registry, checks it,
 and swaps containers only after the replacement is healthy. The GKE manifests
@@ -207,9 +208,10 @@ gcloud compute ssh cogfab \
 
 ## Metrics
 
-The app exposes Prometheus metrics on VM loopback. A Google-built OpenTelemetry
-collector scrapes them once a minute and sends them to Cloud Monitoring for
-retention and PromQL queries. The collector has no public listener.
+The app exposes Prometheus-format metrics on VM loopback. A Google-built
+OpenTelemetry collector scrapes them once a minute and sends them to Cloud
+Monitoring for retention and PromQL queries. The collector has no public
+listener.
 
 Open **Monitoring > Metrics explorer** in the `cogfab-io` project and use the
 PromQL editor. For example:
@@ -229,9 +231,9 @@ deploy/monitoring/apply.sh
 Open the [Cogfab Operations dashboard](https://console.cloud.google.com/monitoring/dashboards/builder/cogfab-operations?project=cogfab-io)
 to view the live charts.
 
-The script preserves notification channels already attached to those policies.
-New policies appear in Cloud Monitoring without a notification channel until
-one is configured.
+The production policies notify the primary operator by email. The script
+preserves attached notification channels. New projects must add their own
+destination under **Monitoring > Alerting > Edit notification channels**.
 
 The collector should be running beside the game:
 
@@ -280,6 +282,11 @@ gcloud compute ssh cogfab \
   --command='sudo google_metadata_script_runner startup'
 test "$(curl -fsS https://cogfab.io/healthz)" = ok
 ```
+
+This manual command reuses the startup script stored in VM metadata. If the
+failed release changed `deploy/startup.sh`, restore its previous revision in
+metadata as well. The normal GitHub deployment path automatically restores
+both the image and startup script when verification fails.
 
 The deployment changes the container, not the VM disk, so room saves and
 certificates remain in place during a rollback. Set `EXPECTED_IMAGE` to
