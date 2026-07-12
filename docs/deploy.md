@@ -169,6 +169,21 @@ PromQL editor. For example:
 cogfab_players_active
 ```
 
+`deploy/monitoring/grafana-dashboard.json` is the portable dashboard source.
+Its checked-in Cloud Monitoring conversion is applied with the uptime check and
+alert policies by running:
+
+```sh
+deploy/monitoring/apply.sh
+```
+
+Open the [Cogfab Operations dashboard](https://console.cloud.google.com/monitoring/dashboards/builder/cogfab-operations?project=cogfab-io)
+to view the live charts.
+
+The script preserves notification channels already attached to those policies.
+New policies appear in Cloud Monitoring without a notification channel until
+one is configured.
+
 The collector should be running beside the game:
 
 ```sh

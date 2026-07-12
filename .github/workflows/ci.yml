@@ -17,10 +17,11 @@ jobs:
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes shellcheck
 
-      - name: Check startup script
+      - name: Check deployment scripts
         run: |
           bash -n deploy/startup.sh
-          shellcheck deploy/startup.sh
+          bash -n deploy/monitoring/apply.sh
+          shellcheck deploy/startup.sh deploy/monitoring/apply.sh
 
   go:
     runs-on: ubuntu-latest

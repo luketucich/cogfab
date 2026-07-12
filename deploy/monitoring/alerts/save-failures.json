@@ -1,0 +1,22 @@
+{
+  "displayName": "Cogfab room save failed",
+  "combiner": "OR",
+  "enabled": true,
+  "conditions": [
+    {
+      "displayName": "At least one failed room save in fifteen minutes",
+      "conditionPrometheusQueryLanguage": {
+        "query": "sum(increase(cogfab_save_failures_total[15m])) > 0",
+        "duration": "0s",
+        "evaluationInterval": "60s"
+      }
+    }
+  ],
+  "documentation": {
+    "content": "Inspect the `cogfab` container logs and `/var/lib/cogfab` disk state.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {
+    "service": "cogfab"
+  }
+}
