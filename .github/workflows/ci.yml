@@ -60,7 +60,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
 
@@ -71,3 +71,72 @@ jobs:
       - run: npm test
 
       - run: npm run build
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build production image
+        env:
+          IMAGE: cogfab-ci:${{ github.sha }}
+        run: docker build --platform linux/amd64 --tag "$IMAGE" .
+
+      - name: Verify production image
+        env:
+          IMAGE: cogfab-ci:${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          readonly container=cogfab-ci
+          readonly app_url=http://127.0.0.1:18080
+          readonly metrics_url=http://127.0.0.1:19090
+          readonly index_file="$RUNNER_TEMP/cogfab-index.html"
+          readonly metrics_file="$RUNNER_TEMP/cogfab-metrics.txt"
+          readonly collector_file="$RUNNER_TEMP/cogfab-collector.yaml"
+
+          cleanup() {
+            exit_code=$?
+            trap - EXIT
+            if [[ "$exit_code" -ne 0 ]]; then
+              docker logs "$container" 2>/dev/null || true
+            fi
+            docker rm --force "$container" >/dev/null 2>&1 || true
+            exit "$exit_code"
+          }
+          trap cleanup EXIT
+
+          test "$(docker image inspect --format '{{.Architecture}}' "$IMAGE")" = amd64
+          test "$(docker image inspect --format '{{.Config.User}}' "$IMAGE")" = 65532
+
+          docker run --detach \
+            --name "$container" \
+            --platform linux/amd64 \
+            --publish 127.0.0.1:18080:8080 \
+            --publish 127.0.0.1:19090:9090 \
+            --env METRICS_ADDR=:9090 \
+            "$IMAGE" >/dev/null
+
+          ready=false
+          for _ in {1..30}; do
+            if curl --fail --silent "$app_url/healthz" >/dev/null &&
+              curl --fail --silent "$metrics_url/metrics" --output "$metrics_file"; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = true
+
+          test "$(curl --fail --silent "$app_url/healthz")" = ok
+          curl --fail --silent "$app_url/" --output "$index_file"
+          grep --quiet '<title>Cogfab</title>' "$index_file"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            "$app_url/metrics")" = 404
+          grep --quiet '^cogfab_rooms_active ' "$metrics_file"
+
+          docker cp "${container}:/etc/cogfab/collector.yaml" "$collector_file"
+          test -s "$collector_file"
+
+          docker stop --time=20 "$container" >/dev/null
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$container")" = 0
