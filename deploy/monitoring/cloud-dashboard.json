@@ -1,0 +1,239 @@
+{
+  "displayName": "Cogfab Operations",
+  "dashboardFilters": [],
+  "mosaicLayout": {
+    "columns": 24,
+    "tiles": [
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "sum(cogfab_players_active)"
+            }
+          },
+          "title": "Active players"
+        },
+        "xPos": 0,
+        "yPos": 0,
+        "height": 4,
+        "width": 6
+      },
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "sum(cogfab_rooms_active)"
+            }
+          },
+          "title": "Active rooms"
+        },
+        "xPos": 6,
+        "yPos": 0,
+        "height": 4,
+        "width": 6
+      },
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [
+              {
+                "value": 1,
+                "color": "RED",
+                "direction": "BELOW",
+                "targetAxis": "Y1"
+              }
+            ],
+            "timeSeriesQuery": {
+              "prometheusQuery": "min(up{job=\"cogfab\"}) or vector(0)"
+            }
+          },
+          "title": "Metrics target"
+        },
+        "xPos": 12,
+        "yPos": 0,
+        "height": 4,
+        "width": 6
+      },
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "sum(increase(cogfab_save_failures_total[1h]))"
+            }
+          },
+          "title": "Save failures, 1h"
+        },
+        "xPos": 18,
+        "yPos": 0,
+        "height": 4,
+        "width": 6
+      },
+      {
+        "widget": {
+          "title": "Live activity",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum(cogfab_players_active)"
+                },
+                "legendTemplate": "Players"
+              },
+              {
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum(cogfab_rooms_active)"
+                },
+                "legendTemplate": "Rooms"
+              }
+            ]
+          }
+        },
+        "xPos": 0,
+        "yPos": 4,
+        "height": 8,
+        "width": 12
+      },
+      {
+        "widget": {
+          "title": "Commands per second",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "STACKED_AREA",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (command, outcome) (rate(cogfab_commands_total[5m]))"
+                },
+          "legendTemplate": "${command} / ${outcome}"
+              }
+            ]
+          }
+        },
+        "xPos": 12,
+        "yPos": 4,
+        "height": 8,
+        "width": 12
+      },
+      {
+        "widget": {
+          "title": "Command latency p95",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "histogram_quantile(0.95, sum by (le, command) (rate(cogfab_command_processing_duration_seconds_bucket[5m])))"
+                },
+          "legendTemplate": "${command}"
+              }
+            ]
+          }
+        },
+        "xPos": 0,
+        "yPos": 12,
+        "height": 8,
+        "width": 12
+      },
+      {
+        "widget": {
+          "title": "Server work p95",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "histogram_quantile(0.95, sum by (le) (rate(cogfab_economy_tick_duration_seconds_bucket[5m])))"
+                },
+                "legendTemplate": "Economy tick"
+              },
+              {
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "histogram_quantile(0.95, sum by (le) (rate(cogfab_save_duration_seconds_bucket[5m])))"
+                },
+                "legendTemplate": "Room save"
+              }
+            ]
+          }
+        },
+        "xPos": 12,
+        "yPos": 12,
+        "height": 8,
+        "width": 12
+      },
+      {
+        "widget": {
+          "title": "Reliability signals, rolling 1h",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum(increase(cogfab_slow_client_disconnections_total[1h]))"
+                },
+                "legendTemplate": "Slow-client disconnects"
+              },
+              {
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum(increase(cogfab_save_failures_total[1h]))"
+                },
+                "legendTemplate": "Save failures"
+              }
+            ]
+          }
+        },
+        "xPos": 0,
+        "yPos": 20,
+        "height": 8,
+        "width": 12
+      },
+      {
+        "widget": {
+          "title": "Process resources",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "LINE",
+          "timeSeriesQuery": {
+            "prometheusQuery": "max(process_resident_memory_bytes{job=\"cogfab\"})"
+          },
+          "legendTemplate": "Memory",
+          "targetAxis": "Y1"
+              },
+              {
+                "plotType": "LINE",
+          "timeSeriesQuery": {
+            "prometheusQuery": "max(go_goroutines{job=\"cogfab\"})"
+          },
+          "legendTemplate": "Goroutines",
+          "targetAxis": "Y2"
+              }
+            ]
+          }
+        },
+        "xPos": 12,
+        "yPos": 20,
+        "height": 8,
+        "width": 12
+      }
+    ]
+  },
+  "name": "projects/cogfab-io/dashboards/cogfab-operations"
+}

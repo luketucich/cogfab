@@ -1,0 +1,22 @@
+{
+  "displayName": "Cogfab metrics are missing",
+  "combiner": "OR",
+  "enabled": true,
+  "conditions": [
+    {
+      "displayName": "No Cogfab target samples for five minutes",
+      "conditionPrometheusQueryLanguage": {
+        "query": "(max_over_time(up{job=\"cogfab\"}[5m]) == 0) or absent_over_time(up{job=\"cogfab\"}[5m])",
+        "duration": "0s",
+        "evaluationInterval": "60s"
+      }
+    }
+  ],
+  "documentation": {
+    "content": "Check the `cogfab-otel` container and its recent logs on the production VM.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {
+    "service": "cogfab"
+  }
+}

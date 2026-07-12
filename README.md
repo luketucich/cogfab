@@ -43,7 +43,7 @@ not change.
 | Rendering | Three.js via React Three Fiber |
 | Audio | WebAudio, synthesized in code (no audio files) |
 | Persistence | JSON snapshots on disk, one file per room |
-| Observability | Private Prometheus metrics retained in Google Cloud through OpenTelemetry; container logs in Cloud Logging |
+| Observability | Prometheus + OpenTelemetry metrics, Grafana-compatible PromQL dashboard, and Cloud Logging |
 | TLS | the server fetches its own Let's Encrypt certificate |
 | Deploy | Small distroless Docker image on one GCP free-tier COS VM; reference GKE manifests in `deploy/` |
 | CI | GitHub Actions: ShellCheck, gofmt, vet, race-enabled tests, typecheck, vitest, build |
