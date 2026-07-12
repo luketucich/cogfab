@@ -20,7 +20,9 @@ gcloud services enable \
   artifactregistry.googleapis.com \
   compute.googleapis.com \
   iam.googleapis.com \
-  logging.googleapis.com
+  logging.googleapis.com \
+  monitoring.googleapis.com \
+  telemetry.googleapis.com
 ```
 
 Create the image repository and configure Docker:
@@ -46,6 +48,9 @@ gcloud artifacts repositories add-iam-policy-binding cogfab \
 gcloud projects add-iam-policy-binding cogfab-io \
   --member="serviceAccount:$VM_SERVICE_ACCOUNT" \
   --role=roles/logging.logWriter
+gcloud projects add-iam-policy-binding cogfab-io \
+  --member="serviceAccount:$VM_SERVICE_ACCOUNT" \
+  --role=roles/telemetry.metricsWriter
 ```
 
 Reserve the public address and allow web traffic:
@@ -153,7 +158,32 @@ gcloud compute ssh cogfab \
 
 ## Metrics
 
-Open an SSH tunnel to the private metrics listener:
+The app exposes Prometheus metrics on VM loopback. A Google-built OpenTelemetry
+collector scrapes them once a minute and sends them to Cloud Monitoring for
+retention and PromQL queries. The collector has no public listener.
+
+Open **Monitoring > Metrics explorer** in the `cogfab-io` project and use the
+PromQL editor. For example:
+
+```promql
+cogfab_players_active
+```
+
+The collector should be running beside the game:
+
+```sh
+gcloud compute ssh cogfab \
+  --zone=us-central1-a \
+  --command='sudo docker ps --filter name=cogfab-otel'
+
+PROMETHEUS_API="https://monitoring.googleapis.com/v1/projects/cogfab-io/location/global/prometheus/api/v1/query"
+curl -fsS \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  "$PROMETHEUS_API?query=cogfab_players_active" | \
+  grep -q '"cogfab_players_active"'
+```
+
+For a raw snapshot, open an SSH tunnel to the private app listener:
 
 ```sh
 gcloud compute ssh cogfab \
@@ -167,9 +197,7 @@ In another terminal:
 curl -fsS http://127.0.0.1:9090/metrics | grep '^cogfab_'
 ```
 
-This is a current snapshot. Historical charts require a Prometheus scraper or
-another metrics backend, which is not deployed yet. Port 9090 should remain
-private.
+Port 9090 should remain private.
 
 ## Roll back
 

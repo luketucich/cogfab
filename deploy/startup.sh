@@ -5,8 +5,12 @@ set -euo pipefail
 readonly stable_container="cogfab"
 readonly candidate_container="cogfab-next"
 readonly previous_container="cogfab-previous"
+readonly collector_container="cogfab-otel"
+readonly collector_image="us-docker.pkg.dev/cloud-ops-agents-artifacts/google-cloud-opentelemetry-collector/otelcol-google:0.155.0"
 readonly data_dir="/var/lib/cogfab"
 readonly deploy_home="/home/cogfab-deploy"
+readonly collector_dir="$data_dir/monitoring"
+readonly collector_config="$collector_dir/collector.yaml"
 readonly image_prefix="us-central1-docker.pkg.dev/cogfab-io/cogfab/server:"
 readonly image_url="http://metadata.google.internal/computeMetadata/v1/instance/attributes/cogfab-image"
 readonly registry="us-central1-docker.pkg.dev"
@@ -164,6 +168,48 @@ wait_for_candidate() {
 	return 1
 }
 
+collector_responding() {
+	curl --fail --silent --max-time 2 http://127.0.0.1:13133/ >/dev/null
+}
+
+start_collector() {
+	local config_tmp ready
+	config_tmp="$collector_config.tmp"
+	mkdir -p "$collector_dir"
+	docker cp "$stable_container:/etc/cogfab/collector.yaml" "$config_tmp"
+	mv "$config_tmp" "$collector_config"
+
+	remove_container "$collector_container"
+	docker create \
+		--name "$collector_container" \
+		--restart no \
+		--network host \
+		--memory 160m \
+		--read-only \
+		--security-opt no-new-privileges \
+		--tmpfs /tmp:rw,noexec,nosuid,size=16m \
+		--env GOOGLE_CLOUD_PROJECT=cogfab-io \
+		--mount "type=bind,source=$collector_config,target=/etc/otelcol/config.yaml,readonly" \
+		"$collector_image" \
+		--config=/etc/otelcol/config.yaml >/dev/null
+	docker start "$collector_container" >/dev/null
+
+	ready=false
+	for _ in {1..20}; do
+		if container_running "$collector_container" && collector_responding; then
+			ready=true
+			break
+		fi
+		sleep 1
+	done
+	if [[ "$ready" != true ]]; then
+		docker logs --tail 50 "$collector_container" >&2 || true
+		log "metrics collector did not become healthy"
+		return 1
+	fi
+	docker update --restart always "$collector_container" >/dev/null
+}
+
 log "configuring the host"
 mkdir -p "$deploy_home"
 chmod 700 "$deploy_home"
@@ -188,6 +234,7 @@ fi
 log "pulling $image"
 docker-credential-gcr configure-docker --registries "$registry"
 docker pull "$image"
+docker pull "$collector_image"
 
 # Recover the stable name if a prior run lost power between its two renames.
 if container_exists "$previous_container"; then
@@ -250,6 +297,11 @@ if ! container_running "$stable_container" || ! service_responding; then
 fi
 rollback_needed=false
 
+# Metrics are operational support, not application state. A collector failure
+# fails the release check but does not roll back a healthy game container.
+log "starting metrics collector"
+start_collector
+
 # Cleanup happens only after the replacement is serving traffic. Failure here
 # must not roll back a healthy deployment.
 if ! remove_container "$previous_container"; then
@@ -261,4 +313,4 @@ for name in "${previous_containers[@]}"; do
 	fi
 done
 
-log "started $stable_container"
+log "started $stable_container and $collector_container"

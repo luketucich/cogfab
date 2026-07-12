@@ -23,6 +23,7 @@ COPY --from=server /cogfab-server /cogfab-server
 # and GKE mount persistent storage over this directory.
 COPY --from=server --chown=65532:65532 /data /data
 COPY --from=web /src/web/dist /web/dist
+COPY deploy/monitoring/collector.yaml /etc/cogfab/collector.yaml
 ENV WEB_DIR=/web/dist
 ENV DATA_DIR=/data
 EXPOSE 8080
