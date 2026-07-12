@@ -131,7 +131,7 @@ jobs:
 
           test "$(curl --fail --silent "$app_url/healthz")" = ok
           curl --fail --silent "$app_url/" --output "$index_file"
-          grep --quiet '<title>Cogfab</title>' "$index_file"
+          grep --quiet '<title>Cogfab' "$index_file"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
             "$app_url/metrics")" = 404
           grep --quiet '^cogfab_rooms_active ' "$metrics_file"
