@@ -14,3 +14,31 @@ body,
 canvas {
   display: block;
 }
+
+.cogfab-brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.cogfab-brand__mark {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+
+.cogfab-brand__wordmark {
+  color: #f0f3f8;
+  font-family: "Baloo 2", ui-rounded, system-ui, sans-serif;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+@media (max-width: 520px) {
+  .cogfab-brand__wordmark {
+    display: none;
+  }
+}

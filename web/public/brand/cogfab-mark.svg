@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Cogfab conveyor C mark</title>
+  <rect x="1" y="1" width="62" height="62" rx="16" fill="#171b24" stroke="#3a414e" stroke-width="2"/>
+  <path d="M47 18.5C42.6 13.1 36 10 28.6 10 16.8 10 7.5 19.8 7.5 32s9.3 22 21.1 22c7.3 0 13.9-3.1 18.4-8.4" fill="none" stroke="#6ea8ff" stroke-width="8.5" stroke-linecap="round"/>
+  <path d="m40.5 37.5 8.5 8-8.5 8" fill="none" stroke="#6ea8ff" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m30 21.5 8 4.7-8 4.7-8-4.7Z" fill="#d9b878"/>
+  <path d="m22 26.2 8 4.7v9.2l-8-4.7Z" fill="#ad9161"/>
+  <path d="m38 26.2-8 4.7v9.2l8-4.7Z" fill="#c6a86f"/>
+</svg>
