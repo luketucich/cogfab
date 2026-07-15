@@ -55,7 +55,7 @@ not change.
 | Client | React + TypeScript + Vite |
 | Rendering | Three.js via React Three Fiber |
 | Audio | WebAudio, synthesized in code (no audio files) |
-| Persistence | JSON snapshots on disk, one file per room |
+| Persistence | Validated JSON snapshots on disk, one file per room |
 | Observability | Prometheus-format metrics, OpenTelemetry Collector, Cloud Monitoring, Cloud Logging, and a portable Grafana dashboard |
 | TLS | the server fetches its own Let's Encrypt certificate |
 | Deploy | Small distroless Docker image on one GCP e2-micro COS VM; reference GKE manifests in `deploy/` |
@@ -81,7 +81,7 @@ Good places to start:
 
 - `internal/server/hub.go`: one goroutine owns each room.
 - `internal/server/economy.go`: the ore simulation stays off the wire.
-- `internal/server/save.go`: room snapshots use atomic writes.
+- `internal/server/save.go`: room snapshots use atomic writes and validate before restore.
 - `internal/server/bench_test.go`: the benchmark behind a 148ms-to-2ms tick fix.
 
 ## Development

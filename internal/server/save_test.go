@@ -45,24 +45,63 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsJunk(t *testing.T) {
+func TestLoadRejectsUnreadableFiles(t *testing.T) {
 	saves := newTestSaves(t)
 	if _, ok := saves.load("AAAAAA"); ok {
 		t.Fatal("a code never saved should not load")
 	}
 
-	junk := map[string]string{
-		"BBBBBB": `not json`,
-		"CCCCCC": `{"version":999,"width":3,"height":1,"tiles":[]}`,
-		"DDDDDD": `{"version":1,"width":3,"height":1,"tiles":[]}`, // tile count off
+	if err := os.WriteFile(saves.path("BBBBBB"), []byte("not json"), 0o644); err != nil {
+		t.Fatalf("write junk: %v", err)
 	}
-	for code, body := range junk {
-		if err := os.WriteFile(saves.path(code), []byte(body), 0o644); err != nil {
-			t.Fatalf("write junk: %v", err)
-		}
-		if _, ok := saves.load(code); ok {
-			t.Fatalf("junk save %q should not load", body)
-		}
+	if _, ok := saves.load("BBBBBB"); ok {
+		t.Fatal("malformed JSON should not load")
+	}
+}
+
+func TestLoadRejectsInvalidSnapshots(t *testing.T) {
+	saves := newTestSaves(t)
+	valid := NewHub(newTestWorld()).snapshot()
+	largestGrid := gridTiers[len(gridTiers)-1]
+
+	tests := []struct {
+		name   string
+		mutate func(*snapshot)
+	}{
+		{"wrong version", func(s *snapshot) { s.Version++ }},
+		{"zero width", func(s *snapshot) { s.Width = 0 }},
+		{"zero height", func(s *snapshot) { s.Height = 0 }},
+		{"width above largest grid", func(s *snapshot) {
+			s.Width, s.Height = largestGrid.w+1, 1
+			s.Tiles = make([]savedTile, s.Width)
+		}},
+		{"height above largest grid", func(s *snapshot) {
+			s.Width, s.Height = 1, largestGrid.h+1
+			s.Tiles = make([]savedTile, s.Height)
+		}},
+		{"wrong tile count", func(s *snapshot) { s.Tiles = s.Tiles[:len(s.Tiles)-1] }},
+		{"unknown tile kind", func(s *snapshot) { s.Tiles[0].K = uint8(engine.Seller) + 1 }},
+		{"unknown direction", func(s *snapshot) { s.Tiles[0].D = uint8(engine.West) + 1 }},
+		{"negative ore", func(s *snapshot) { s.IronOre = -1 }},
+		{"negative extractor level", func(s *snapshot) { s.ExtractorLevel = -1 }},
+		{"negative belt level", func(s *snapshot) { s.BeltLevel = -1 }},
+		{"negative value level", func(s *snapshot) { s.ValueLevel = -1 }},
+		{"negative grid tier", func(s *snapshot) { s.GridTier = -1 }},
+		{"grid tier past final", func(s *snapshot) { s.GridTier = len(gridTiers) }},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			snap := valid
+			snap.Tiles = append([]savedTile(nil), valid.Tiles...)
+			test.mutate(&snap)
+			if err := saves.save("AAAAAA", snap); err != nil {
+				t.Fatalf("save invalid snapshot: %v", err)
+			}
+			if _, ok := saves.load("AAAAAA"); ok {
+				t.Fatal("invalid snapshot should not load")
+			}
+		})
 	}
 }
 
