@@ -9,10 +9,12 @@ import { Floor } from "./world/Floor";
 import { FlowArrows } from "./world/FlowArrows";
 import { FlowItems } from "./world/FlowItems";
 import { Bursts } from "./world/Bursts";
+import { BuildPreviews } from "./world/BuildPreviews";
 import { Ground } from "./world/Ground";
 import { HoverGlow } from "./world/HoverGlow";
 import { MouthMarkers } from "./world/MouthMarkers";
 import { PlayerCursors } from "./world/PlayerCursors";
+import { PlacementEffects } from "./world/PlacementEffects";
 import { Region } from "./world/Region";
 
 // Scene is the whole 3D view: a locked isometric camera you pan and zoom like a
@@ -46,7 +48,9 @@ export function Scene() {
       <Ground />
 
       <Suspense fallback={null}>
+        <BuildPreviews />
         <Factory />
+        <PlacementEffects />
         <HoverGlow />
       </Suspense>
       <FlowItems />

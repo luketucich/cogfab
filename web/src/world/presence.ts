@@ -1,8 +1,7 @@
 import type { PresencePlayer } from "../net/types";
 
-// The room's roster, as the server last told it: every connected player's slot
-// and cursor position (fractional cell coordinates), ourselves included.
-// PlayerCursors reads it per frame; the lobby panel and CursorOverlay subscribe.
+// The latest room roster: every connected player's identity, cursor, and build
+// preview, ourselves included. World and overlay renderers subscribe or poll it.
 
 let players: PresencePlayer[] = [];
 const listeners = new Set<() => void>();

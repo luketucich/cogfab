@@ -68,3 +68,25 @@ func TestBeltStrokeCommandJSON(t *testing.T) {
 		t.Fatalf("second placement = %+v, want (2,2) south", got)
 	}
 }
+
+func TestPresenceBuildPreviewJSON(t *testing.T) {
+	msg := PresenceMessage{
+		Type: "presence",
+		Players: []PresencePlayer{{
+			Slot: 1,
+			Preview: &BuildPreview{
+				Kind:       KindSeller,
+				Placements: []BeltPlacement{{X: 4, Y: 2, Dir: "west"}},
+			},
+		}},
+	}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"preview"`, `"kind":"seller"`, `"dir":"west"`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("presence JSON %s does not contain %s", b, want)
+		}
+	}
+}

@@ -6,6 +6,7 @@ package wire
 const (
 	CmdPlace      = "place"
 	CmdBeltStroke = "beltStroke"
+	CmdPreview    = "preview" // temporary build intent shared with the room
 	CmdDestroy    = "destroy"
 	CmdRotate     = "rotate"  // turn the structure at (X, Y) a quarter clockwise
 	CmdBuy        = "buy"     // purchase an upgrade; Upgrade says which
@@ -37,9 +38,17 @@ type BeltPlacement struct {
 	Dir string `json:"dir"`
 }
 
+// BuildPreview is a player's temporary, uncommitted build intent. It is shared
+// through presence and never written into room state.
+type BuildPreview struct {
+	Kind       string          `json:"kind"`
+	Placements []BeltPlacement `json:"placements"`
+}
+
 // Command is a client request selected by Type. Place uses X, Y, Kind, and Dir;
-// beltStroke uses Placements; buy uses Upgrade; hover uses On with SX/SY for
-// the screen and Hovering with CX/CY for the grid; profile uses Name and Color.
+// beltStroke and preview use Placements; buy uses Upgrade; hover uses On with
+// SX/SY for the screen and Hovering with CX/CY for the grid; profile uses Name
+// and Color.
 type Command struct {
 	Type       string          `json:"type"`
 	X          int             `json:"x"`

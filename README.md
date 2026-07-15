@@ -18,15 +18,18 @@
 The URL is the invite link. Open a room, share the address, and up to four
 people can build one factory together.
 
-![Animated demo of Luke previewing an atomic belt stroke before Bert completes the shared line, moves ore, and upgrades the extractor](docs/demo.gif)
+![Animated demo of Luke starting a factory before Bert previews and places the remaining belt line and seller](docs/demo.gif)
 
 You start with enough ore to build an extractor, a belt, and a seller. Delivered
 ore pays for upgrades and more land. Everyone in a room shares the same grid and
-economy, while live cursors show where the other players are building.
+economy. Live cursors and color-coded build previews show what every player is
+about to place. Accepted buildings drop into the grid with a small particle
+burst.
 
-Belt drags preview the full path and cross the wire as one command. The server
-validates every cell before changing the grid, so overlapping player strokes
-cannot leave half-built lines.
+Build previews are temporary presence, not reservations. Belt drags cross the
+wire as one command, and the server validates every cell before changing the
+grid. If two players overlap, the first valid action wins without leaving a
+half-built line.
 
 ## Why I built it
 

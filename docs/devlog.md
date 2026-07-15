@@ -2,6 +2,14 @@
 
 What I've worked on, newest first.
 
+## 2026-07-15
+
+- Added color-coded build previews for every player and placeable. Belt drags
+  share the full path, while extractors and sellers use tinted copies of their
+  models. The server bounds the preview data but still decides every placement.
+- Accepted buildings now settle into the grid with a short drop and particle
+  burst. Re-recorded the README demo around the shared preview flow.
+
 ## 2026-07-14
 
 - Added atomic belt strokes. A drag now previews its full path locally and

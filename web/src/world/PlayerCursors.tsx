@@ -34,7 +34,7 @@ export function PlayerCursors() {
     group.current.children.forEach((tile, slot) => {
       const mat = mats.current[slot];
       if (!mat) return;
-      const player = roster.find((p) => p.slot === slot && p.hovering && slot !== mySlot);
+      const player = roster.find((p) => p.slot === slot && p.hovering && !p.preview && slot !== mySlot);
       mat.opacity = THREE.MathUtils.damp(mat.opacity, player ? OPACITY : 0, FADE, delta);
       tile.visible = mat.opacity > 0.005;
       if (!player) return;
