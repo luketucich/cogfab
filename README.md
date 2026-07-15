@@ -18,11 +18,15 @@
 The URL is the invite link. Open a room, share the address, and up to four
 people can build one factory together.
 
-![Animated demo of Luke and Bert connecting a shared belt line, moving ore, and upgrading the extractor](docs/demo.gif)
+![Animated demo of Luke previewing an atomic belt stroke before Bert completes the shared line, moves ore, and upgrades the extractor](docs/demo.gif)
 
 You start with enough ore to build an extractor, a belt, and a seller. Delivered
 ore pays for upgrades and more land. Everyone in a room shares the same grid and
 economy, while live cursors show where the other players are building.
+
+Belt drags preview the full path and cross the wire as one command. The server
+validates every cell before changing the grid, so overlapping player strokes
+cannot leave half-built lines.
 
 ## Why I built it
 
@@ -51,7 +55,7 @@ not change.
 | --- | --- |
 | Simulation + server | Go (pure grid engine; hub + ore sim; WebSocket server) |
 | Transport | WebSockets (`coder/websocket`) |
-| Wire format | JSON snapshots, with animation derived on the client |
+| Wire format | JSON commands and snapshots (belt strokes are atomic) |
 | Client | React + TypeScript + Vite |
 | Rendering | Three.js via React Three Fiber |
 | Audio | WebAudio, synthesized in code (no audio files) |

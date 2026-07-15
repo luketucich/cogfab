@@ -3,6 +3,10 @@
 What I've worked on, newest first.
 
 ## 2026-07-14
+
+- Added atomic belt strokes. A drag now previews its full path locally and
+  crosses the wire once on release. The server accepts the whole stroke or
+  none of it, so simultaneous players cannot leave partial overlaps.
 - Hardened room restores. Loaded saves now validate the grid, tiles, economy,
   and land tier before rebuilding a room. Invalid files start a fresh factory
   instead of reaching live game logic.

@@ -159,6 +159,9 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 
 	ore, rate := h.ironOre, h.currentRate()
 	if !h.apply(sub.cmd) {
+		// A rejected build may have reserved ore on the client while another
+		// player changed the room. Return the authoritative total so it clears.
+		h.sendTo(sub.c, h.statsBytes())
 		return false
 	}
 	h.broadcast(h.stateBytes())
@@ -223,6 +226,8 @@ func (h *Hub) apply(cmd wire.Command) bool {
 	switch cmd.Type {
 	case wire.CmdPlace:
 		return h.applyPlace(cmd)
+	case wire.CmdBeltStroke:
+		return h.applyBeltStroke(cmd)
 	case wire.CmdDestroy:
 		return h.applyDestroy(cmd)
 	case wire.CmdRotate:

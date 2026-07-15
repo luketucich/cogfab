@@ -122,6 +122,38 @@ func (h *Hub) applyPlace(cmd wire.Command) bool {
 	return true
 }
 
+// applyBeltStroke validates a whole drag before placing any of it. Commands
+// run one at a time on the hub goroutine, so overlapping player strokes cannot
+// partly overwrite each other: the first valid stroke wins and the next fails.
+func (h *Hub) applyBeltStroke(cmd wire.Command) bool {
+	placements := cmd.Placements
+	if len(placements) == 0 || len(placements) > h.world.Width()*h.world.Height() {
+		return false
+	}
+	cost := len(placements) * buildCost[engine.Belt]
+	if cost > h.ironOre {
+		return false
+	}
+
+	seen := make(map[int]bool, len(placements))
+	for _, placement := range placements {
+		if !h.unlocked(placement.X, placement.Y) || h.world.At(placement.X, placement.Y).Kind != engine.Empty {
+			return false
+		}
+		cell := placement.Y*h.world.Width() + placement.X
+		if seen[cell] {
+			return false
+		}
+		seen[cell] = true
+	}
+
+	for _, placement := range placements {
+		h.world.PlaceBelt(placement.X, placement.Y, engine.ParseDirection(placement.Dir))
+	}
+	h.ironOre -= cost
+	return true
+}
+
 // applyDestroy tears a structure down for half its build cost back. When the
 // destroy leaves nothing earning, the refund is the full cost instead: with no
 // income the board must always liquidate back into enough for a fresh line.

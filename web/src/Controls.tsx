@@ -6,7 +6,7 @@ import { sfx } from "./sfx";
 // Keep this list in step with the bindings in Ground.tsx, CameraRig.tsx,
 // Scene.tsx, and the hotkeys in toolbar/tools.ts.
 const CONTROLS: [string, string][] = [
-  ["Drag", "Lay belts facing the way you drag"],
+  ["Drag", "Preview and place a belt line"],
   ["Right drag", "Pan the camera"],
   ["Scroll", "Zoom at the cursor"],
   ["Q / E", "Spin the camera"],
