@@ -1,6 +1,7 @@
 package server
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/luketucich/cogfab/internal/engine"
@@ -26,6 +27,10 @@ func lineHub() *Hub {
 
 func place(kind string, x, y int) wire.Command {
 	return wire.Command{Type: wire.CmdPlace, X: x, Y: y, Kind: kind, Dir: "east"}
+}
+
+func beltStroke(placements ...wire.BeltPlacement) wire.Command {
+	return wire.Command{Type: wire.CmdBeltStroke, Placements: placements}
 }
 
 // applyAndSettle runs a command the way Run does: apply, then recompute the
@@ -130,6 +135,95 @@ func TestPlacingCannotOverwrite(t *testing.T) {
 	}
 	if h.world.At(4, 2).Kind != engine.Belt || h.ironOre != before {
 		t.Errorf("the belt and the ore should be untouched: kind=%v ore=%d", h.world.At(4, 2).Kind, h.ironOre)
+	}
+}
+
+func TestBeltStrokePlacesEveryCellForOnePrice(t *testing.T) {
+	h := shopHub()
+	before := h.ironOre
+	cmd := beltStroke(
+		wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
+		wire.BeltPlacement{X: 5, Y: 2, Dir: "south"},
+		wire.BeltPlacement{X: 5, Y: 3, Dir: "south"},
+	)
+
+	if !h.apply(cmd) {
+		t.Fatal("a valid belt stroke should succeed")
+	}
+	want := []engine.Direction{engine.East, engine.South, engine.South}
+	for i, placement := range cmd.Placements {
+		got := h.world.At(placement.X, placement.Y)
+		if got.Kind != engine.Belt || got.Dir != want[i] {
+			t.Errorf("belt %d = %+v, want belt facing %v", i, got, want[i])
+		}
+	}
+	if wantOre := before - len(cmd.Placements)*buildCost[engine.Belt]; h.ironOre != wantOre {
+		t.Fatalf("ironOre = %d after stroke, want %d", h.ironOre, wantOre)
+	}
+}
+
+func TestInvalidBeltStrokeChangesNothing(t *testing.T) {
+	tests := []struct {
+		name    string
+		prepare func(*Hub)
+		command wire.Command
+	}{
+		{"empty", nil, beltStroke()},
+		{"duplicate cell", nil, beltStroke(
+			wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
+			wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
+		)},
+		{"locked cell", nil, beltStroke(
+			wire.BeltPlacement{X: 4, Y: 2, Dir: "west"},
+			wire.BeltPlacement{X: 3, Y: 2, Dir: "west"},
+		)},
+		{"occupied cell", func(h *Hub) { h.world.PlaceExtractor(5, 2, engine.East) }, beltStroke(
+			wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
+			wire.BeltPlacement{X: 5, Y: 2, Dir: "east"},
+		)},
+		{"not enough ore", func(h *Hub) { h.ironOre = 19 }, beltStroke(
+			wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
+			wire.BeltPlacement{X: 5, Y: 2, Dir: "east"},
+		)},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := shopHub()
+			if test.prepare != nil {
+				test.prepare(h)
+			}
+			before := h.snapshot()
+			if h.apply(test.command) {
+				t.Fatal("invalid belt stroke should be rejected")
+			}
+			if after := h.snapshot(); !reflect.DeepEqual(after, before) {
+				t.Fatalf("rejected stroke changed the room\nbefore: %+v\nafter:  %+v", before, after)
+			}
+		})
+	}
+}
+
+func TestOverlappingBeltStrokesDoNotPartlyApply(t *testing.T) {
+	h := shopHub()
+	first := beltStroke(
+		wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
+		wire.BeltPlacement{X: 5, Y: 2, Dir: "east"},
+	)
+	second := beltStroke(
+		wire.BeltPlacement{X: 5, Y: 2, Dir: "east"},
+		wire.BeltPlacement{X: 6, Y: 2, Dir: "east"},
+	)
+
+	if !h.apply(first) {
+		t.Fatal("the first stroke should succeed")
+	}
+	beforeSecond := h.snapshot()
+	if h.apply(second) {
+		t.Fatal("the overlapping stroke should be rejected")
+	}
+	if after := h.snapshot(); !reflect.DeepEqual(after, beforeSecond) {
+		t.Fatal("the overlapping stroke partly changed the room")
 	}
 }
 

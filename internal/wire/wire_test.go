@@ -48,3 +48,23 @@ func TestSnapshotJSONHasExpectedKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestBeltStrokeCommandJSON(t *testing.T) {
+	var cmd Command
+	err := json.Unmarshal([]byte(`{
+		"type":"beltStroke",
+		"placements":[
+			{"x":1,"y":2,"dir":"east"},
+			{"x":2,"y":2,"dir":"south"}
+		]
+	}`), &cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd.Type != CmdBeltStroke || len(cmd.Placements) != 2 {
+		t.Fatalf("decoded command = %+v", cmd)
+	}
+	if got := cmd.Placements[1]; got.X != 2 || got.Y != 2 || got.Dir != "south" {
+		t.Fatalf("second placement = %+v, want (2,2) south", got)
+	}
+}

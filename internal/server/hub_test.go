@@ -46,6 +46,23 @@ func TestStateBytesProducesStateJSON(t *testing.T) {
 	}
 }
 
+func TestRejectedWorldCommandReturnsCurrentStats(t *testing.T) {
+	h := NewHub(engine.NewWorld(2, 1))
+	c := &Client{send: make(chan []byte, 1)}
+	cmd := wire.Command{Type: wire.CmdPlace, X: 3, Y: 0, Kind: wire.KindBelt, Dir: "east"}
+
+	if h.handleCommand(clientCommand{c: c, cmd: cmd}) {
+		t.Fatal("off-grid placement should be rejected")
+	}
+	var msg wire.StatsMessage
+	if data := <-c.send; json.Unmarshal(data, &msg) != nil || msg.Type != "stats" {
+		t.Fatalf("rejected command should return current stats, got %s", data)
+	}
+	if msg.IronOre != startingOre {
+		t.Fatalf("returned iron ore = %d, want %d", msg.IronOre, startingOre)
+	}
+}
+
 func TestBroadcastSendsToAllClients(t *testing.T) {
 	h := NewHub(newTestWorld())
 	c1 := &Client{send: make(chan []byte, 1)}

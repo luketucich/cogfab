@@ -9,19 +9,57 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/luketucich/cogfab/internal/engine"
 	"github.com/luketucich/cogfab/internal/wire"
 )
 
 // newTestServer runs a registry-backed server over tiny test worlds and
 // returns its WebSocket base URL. Dial it with "?room=CODE" to pick a room.
 func newTestServer(t *testing.T) string {
+	return newTestServerWithWorld(t, newTestWorld)
+}
+
+func newTestServerWithWorld(t *testing.T, newWorld func() *engine.World) string {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	rooms := NewRooms(ctx, time.Minute, newTestWorld, nil, nil)
+	rooms := NewRooms(ctx, time.Minute, newWorld, nil, nil)
 	srv := httptest.NewServer(rooms.Handler())
 	t.Cleanup(srv.Close)
 	return "ws" + strings.TrimPrefix(srv.URL, "http")
+}
+
+func TestBeltStrokeBroadcastsOneCompleteState(t *testing.T) {
+	url := newTestServerWithWorld(t, func() *engine.World { return engine.NewWorld(3, 1) })
+	conn, read := dial(t, url+"?room=STROKE")
+	readWelcome(t, read)
+	read() // initial state
+	read() // initial stats
+	read() // initial presence
+
+	wctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := conn.Write(wctx, websocket.MessageText, []byte(`{
+		"type":"beltStroke",
+		"placements":[
+			{"x":0,"y":0,"dir":"east"},
+			{"x":1,"y":0,"dir":"east"},
+			{"x":2,"y":0,"dir":"east"}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("write belt stroke: %v", err)
+	}
+
+	var state wire.StateMessage
+	if data := read(); json.Unmarshal(data, &state) != nil || state.Type != "state" {
+		t.Fatalf("belt stroke should broadcast state first, got %s", data)
+	}
+	for i, tile := range state.Tiles {
+		if tile.Kind != wire.KindBelt || tile.Dir != "east" {
+			t.Errorf("tile %d = %+v, want east belt", i, tile)
+		}
+	}
 }
 
 // dial connects to a test server and hands back the conn and a read helper
