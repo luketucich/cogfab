@@ -38,6 +38,26 @@ type savedTile struct {
 	D uint8 `json:"d"`
 }
 
+// valid reports whether decoded save data can become live room state.
+func (s snapshot) valid() bool {
+	largestGrid := gridTiers[len(gridTiers)-1]
+	if s.Version != snapshotVersion ||
+		s.Width <= 0 || s.Width > largestGrid.w ||
+		s.Height <= 0 || s.Height > largestGrid.h ||
+		len(s.Tiles) != s.Width*s.Height ||
+		s.IronOre < 0 ||
+		s.ExtractorLevel < 0 || s.BeltLevel < 0 || s.ValueLevel < 0 ||
+		s.GridTier < 0 || s.GridTier >= len(gridTiers) {
+		return false
+	}
+	for _, tile := range s.Tiles {
+		if engine.TileKind(tile.K) > engine.Seller || engine.Direction(tile.D) > engine.West {
+			return false
+		}
+	}
+	return true
+}
+
 // snapshot captures the hub's saveable state. Run-goroutine only.
 func (h *Hub) snapshot() snapshot {
 	width, height := h.world.Width(), h.world.Height()
@@ -129,8 +149,7 @@ func (s *Saves) save(code string, snap snapshot) error {
 }
 
 // load reads a room's save, reporting ok = false when there is none worth
-// restoring: no file, unreadable JSON, another snapshot version, or a grid
-// that does not add up.
+// restoring: no file, unreadable JSON, or state outside the game's bounds.
 func (s *Saves) load(code string) (snapshot, bool) {
 	if s == nil {
 		return snapshot{}, false
@@ -140,8 +159,7 @@ func (s *Saves) load(code string) (snapshot, bool) {
 		return snapshot{}, false
 	}
 	var snap snapshot
-	if json.Unmarshal(b, &snap) != nil || snap.Version != snapshotVersion ||
-		snap.Width <= 0 || snap.Height <= 0 || len(snap.Tiles) != snap.Width*snap.Height {
+	if json.Unmarshal(b, &snap) != nil || !snap.valid() {
 		return snapshot{}, false
 	}
 	return snap, true

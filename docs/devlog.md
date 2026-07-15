@@ -2,6 +2,11 @@
 
 What I've worked on, newest first.
 
+## 2026-07-14
+- Hardened room restores. Loaded saves now validate the grid, tiles, economy,
+  and land tier before rebuilding a room. Invalid files start a fresh factory
+  instead of reaching live game logic.
+
 ## 2026-07-12
 - Finished the production delivery path. Manually approved GitHub Actions
   releases now use keyless GCP authentication, immutable image digests, health
