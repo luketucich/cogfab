@@ -180,6 +180,60 @@ func TestPlayersShareARoomAndSeeEachOthersHover(t *testing.T) {
 	t.Fatal("player B never saw player A's hover")
 }
 
+func TestPlayersShareBuildPreviewsUntilPlacement(t *testing.T) {
+	url := newTestServerWithWorld(t, func() *engine.World { return engine.NewWorld(3, 1) })
+	connA, readA := dial(t, url+"?room=PREVUE")
+	readWelcome(t, readA)
+	_, readB := dial(t, url+"?room=PREVUE")
+	readWelcome(t, readB)
+
+	wctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	preview := `{"type":"preview","kind":"belt","placements":[{"x":0,"y":0,"dir":"east"}]}`
+	if err := connA.Write(wctx, websocket.MessageText, []byte(preview)); err != nil {
+		t.Fatalf("write preview: %v", err)
+	}
+
+	for i := 0; i < 12; i++ {
+		var msg wire.PresenceMessage
+		if data := readB(); json.Unmarshal(data, &msg) != nil || msg.Type != "presence" {
+			continue
+		}
+		for _, player := range msg.Players {
+			if player.Slot == 0 && player.Preview != nil && player.Preview.Kind == wire.KindBelt {
+				goto previewSeen
+			}
+		}
+	}
+	t.Fatal("player B never saw player A's build preview")
+
+previewSeen:
+	place := `{"type":"place","x":0,"y":0,"kind":"belt","dir":"east"}`
+	if err := connA.Write(wctx, websocket.MessageText, []byte(place)); err != nil {
+		t.Fatalf("write place: %v", err)
+	}
+
+	cleared, placed := false, false
+	for i := 0; i < 12 && (!cleared || !placed); i++ {
+		data := readB()
+		var presence wire.PresenceMessage
+		if json.Unmarshal(data, &presence) == nil && presence.Type == "presence" {
+			for _, player := range presence.Players {
+				if player.Slot == 0 && player.Preview == nil {
+					cleared = true
+				}
+			}
+		}
+		var state wire.StateMessage
+		if json.Unmarshal(data, &state) == nil && state.Type == "state" && state.Tiles[0].Kind == wire.KindBelt {
+			placed = true
+		}
+	}
+	if !cleared || !placed {
+		t.Fatalf("after placement: preview cleared = %v, belt placed = %v", cleared, placed)
+	}
+}
+
 func TestRoomsAreIsolated(t *testing.T) {
 	url := newTestServer(t)
 

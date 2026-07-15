@@ -192,7 +192,7 @@ func (m *Metrics) saveFinished(elapsed time.Duration, err error) {
 // Otherwise arbitrary command names could grow the registry without bound.
 func commandLabel(command string) string {
 	switch command {
-	case wire.CmdPlace, wire.CmdBeltStroke, wire.CmdDestroy, wire.CmdRotate, wire.CmdBuy, wire.CmdHover, wire.CmdProfile:
+	case wire.CmdPlace, wire.CmdBeltStroke, wire.CmdPreview, wire.CmdDestroy, wire.CmdRotate, wire.CmdBuy, wire.CmdHover, wire.CmdProfile:
 		return command
 	default:
 		return "unknown"

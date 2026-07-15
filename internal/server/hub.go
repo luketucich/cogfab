@@ -16,10 +16,9 @@ import (
 // treated as too slow and dropped.
 const clientBuffer = 16
 
-// Client is one connected player: its outbound queue, who it is, and where its
-// mouse is. The WebSocket plumbing lives in the transport layer; the presence
-// fields are read and written only on the hub goroutine, the same no-lock rule
-// as everything else the hub owns.
+// Client is one connected player: its outbound queue, identity, cursor, and
+// temporary build preview. The WebSocket plumbing lives in the transport
+// layer; these fields belong to the hub goroutine and need no locks.
 type Client struct {
 	send chan []byte
 
@@ -33,6 +32,7 @@ type Client struct {
 	hovering bool    // the mouse is over a grid cell
 	hoverX   float64 // that spot in cell coordinates, fractional
 	hoverY   float64
+	preview  wire.BuildPreview
 }
 
 // clientCommand is a command plus who sent it. World commands ignore the
@@ -155,6 +155,17 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 			h.broadcastPresence()
 		}
 		return changed
+	case wire.CmdPreview:
+		changed := h.applyPreview(sub.c, sub.cmd)
+		if changed {
+			h.broadcastPresence()
+		}
+		return changed
+	}
+	if sub.cmd.Type == wire.CmdPlace || sub.cmd.Type == wire.CmdBeltStroke {
+		if h.clearPreview(sub.c) {
+			h.broadcastPresence()
+		}
 	}
 
 	ore, rate := h.ironOre, h.currentRate()
