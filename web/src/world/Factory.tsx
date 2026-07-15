@@ -4,6 +4,7 @@ import { getLatest, subscribe } from "./store";
 import { MACHINE_ROTATION, cellOffsets } from "./grid";
 import { beltPiece } from "./beltShape";
 import { useFactoryModels } from "./models";
+import { getPlacementEffects, subscribePlacementEffects } from "./placementEffectStore";
 
 const MAX_INSTANCES = 4096;
 
@@ -36,6 +37,7 @@ export function Factory() {
   const extractors = useRef<THREE.InstancedMesh>(null!);
   const sellers = useRef<THREE.InstancedMesh>(null!);
   const snap = useSyncExternalStore(subscribe, getLatest);
+  const effects = useSyncExternalStore(subscribePlacementEffects, getPlacementEffects);
 
   useLayoutEffect(() => {
     let nStraight = 0;
@@ -44,11 +46,13 @@ export function Factory() {
     let nCross = 0;
     let nExt = 0;
     let nSeller = 0;
+    const animating = new Set(effects.map((effect) => `${effect.x}:${effect.y}`));
     if (snap) {
       const { width, height, tiles } = snap;
       const { offX, offZ } = cellOffsets(snap);
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
+          if (animating.has(`${x}:${y}`)) continue;
           const tile = tiles[y * width + x];
           const wx = x - offX;
           const wz = y - offZ;
@@ -72,7 +76,7 @@ export function Factory() {
     flush(crosses.current, nCross);
     flush(extractors.current, nExt);
     flush(sellers.current, nSeller);
-  }, [snap]);
+  }, [effects, snap]);
 
   return (
     <>

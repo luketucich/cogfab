@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
-type MeshParts = { geometry?: THREE.BufferGeometry; material?: THREE.Material };
+export type MeshParts = { geometry?: THREE.BufferGeometry; material?: THREE.Material };
 
 const CONVEYOR_URL = "/models/conveyor.glb";
 const CONVEYOR_CORNER_URL = "/models/conveyor-corner.glb";

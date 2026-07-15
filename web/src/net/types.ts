@@ -42,10 +42,9 @@ export type WelcomeMessage = {
   slot: number;
 };
 
-// PresencePlayer is one connected player: who it is (name and colour, "" colour
-// means the slot's default) and where its mouse is, twice over: sx/sy on the
-// screen in fractions (for the named pointer), x/y on the grid in cell
-// coordinates like 3.4 (for the cell marker). Mirror of wire.PresencePlayer.
+// PresencePlayer is one connected player: identity, cursor, and any temporary
+// build preview. The preview is uncommitted room presence, not world state.
+// Mirror of wire.PresencePlayer.
 export type PresencePlayer = {
   slot: number;
   name: string;
@@ -56,10 +55,11 @@ export type PresencePlayer = {
   hovering: boolean; // the mouse is over a grid cell
   x: number;
   y: number;
+  preview?: BuildPreview;
 };
 
-// PresenceMessage is the room's full roster, sent whenever a player joins,
-// leaves, or moves their hover. Mirror of wire.PresenceMessage.
+// PresenceMessage is the room's full roster, sent whenever player presence
+// changes. Mirror of wire.PresenceMessage.
 export type PresenceMessage = {
   type: "presence";
   players: PresencePlayer[];
@@ -103,8 +103,19 @@ export type BeltPlacement = {
   dir: Dir;
 };
 
+export type BuildPreview = {
+  kind: PlaceableKind;
+  placements: BeltPlacement[];
+};
+
 export type BeltStrokeCommand = {
   type: "beltStroke";
+  placements: BeltPlacement[];
+};
+
+export type PreviewCommand = {
+  type: "preview";
+  kind: PlaceableKind | "";
   placements: BeltPlacement[];
 };
 
@@ -143,4 +154,4 @@ export type ProfileCommand = {
 
 // Ping is deliberately not in this union: connection.ts sends it raw and the
 // server answers it in the transport layer, before commands reach the game.
-export type Command = PlaceCommand | BeltStrokeCommand | DestroyCommand | RotateCommand | BuyCommand | HoverCommand | ProfileCommand;
+export type Command = PlaceCommand | BeltStrokeCommand | PreviewCommand | DestroyCommand | RotateCommand | BuyCommand | HoverCommand | ProfileCommand;
