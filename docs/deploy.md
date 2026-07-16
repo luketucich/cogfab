@@ -138,6 +138,11 @@ browsers, make a recognizable change, and wait at least 35 seconds for the
 periodic save. Record the room code and state, then take a disk snapshot. Image
 rollback cannot repair incompatible or damaged data.
 
+The current server reads version 1 and version 2 room saves, then writes version
+2. A previous release cannot read a room after it has been saved as version 2,
+so keep the disk snapshot until the migrated room has been verified in
+production.
+
 ```sh
 SNAPSHOT="cogfab-predeploy-$(date +%Y%m%d-%H%M%S)"
 gcloud compute disks snapshot cogfab \
@@ -195,7 +200,13 @@ gcloud compute ssh cogfab \
 The health check covers public HTTP and TLS. The `404` confirms that metrics
 are not exposed by the public server. For a higher-risk release, also join one
 room from two browsers and confirm that a change appears in both. After a
-startup or persistence change, also confirm that the recorded room restores.
+startup or persistence change, wait 35 seconds for the recorded room to save,
+confirm its JSON now reports version 2, and reconnect to verify it restores.
+Keep the pre-deploy disk snapshot until all three checks pass.
+
+After a room has migrated, do not leave a version 1 image running against its
+version 2 save. Fix the release by rolling forward, or restore the pre-deploy
+disk snapshot before rolling back the image.
 
 Room saves and certificates live under `/var/lib/cogfab` on the VM:
 

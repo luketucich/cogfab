@@ -4,7 +4,19 @@ What I've worked on, newest first.
 
 ## 2026-07-15
 
-- Made belt models follow the same route as the moving ore. Connections to
+- Replaced the uniform ore supply with deterministic finite-resource worlds.
+  Each room code seeds the same deposits and shipping ports, while land grows
+  through practical tiers from 8x8 to 64x64.
+- Added iron, copper, quartz, and gold with distinct values and increasing
+  rarity farther from the starting factory. Extractors require a live deposit,
+  sellers require a shipping port, and the server owns every placement and
+  depletion check.
+- Changed the shared economy from ore to credits and added typed material on
+  the belts. Version 2 saves preserve deposits, ports, stock, and material in
+  flight while safely migrating existing version 1 rooms.
+- Re-recorded the README demo in a real two-player room so the first iron line
+  shows deposits, the shipping port, shared build previews, and material flow.
+- Made belt models follow the same route as the moving material. Connections to
   extractors and sellers now form the correct corner automatically, while
   disconnected construction keeps the existing neighbour-based shapes.
 - Added color-coded build previews for every player and placeable. Build drags
