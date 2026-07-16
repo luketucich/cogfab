@@ -1,6 +1,7 @@
 package server
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/luketucich/cogfab/internal/engine"
@@ -26,6 +27,10 @@ func lineHub() *Hub {
 
 func place(kind string, x, y int) wire.Command {
 	return wire.Command{Type: wire.CmdPlace, X: x, Y: y, Kind: kind, Dir: "east"}
+}
+
+func placeBatch(kind string, placements ...wire.Placement) wire.Command {
+	return wire.Command{Type: wire.CmdPlaceBatch, Kind: kind, Placements: placements}
 }
 
 // applyAndSettle runs a command the way Run does: apply, then recompute the
@@ -130,6 +135,111 @@ func TestPlacingCannotOverwrite(t *testing.T) {
 	}
 	if h.world.At(4, 2).Kind != engine.Belt || h.ironOre != before {
 		t.Errorf("the belt and the ore should be untouched: kind=%v ore=%d", h.world.At(4, 2).Kind, h.ironOre)
+	}
+}
+
+func TestPlaceBatchBuildsEveryKindAtomically(t *testing.T) {
+	placements := []wire.Placement{
+		{X: 4, Y: 2, Dir: "east"},
+		{X: 5, Y: 2, Dir: "south"},
+		{X: 5, Y: 3, Dir: "south"},
+	}
+	tests := []struct {
+		name     string
+		kindName string
+		kind     engine.TileKind
+	}{
+		{"belts", wire.KindBelt, engine.Belt},
+		{"extractors", wire.KindExtractor, engine.Extractor},
+		{"sellers", wire.KindSeller, engine.Seller},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := shopHub()
+			before := h.ironOre
+			cmd := placeBatch(test.kindName, placements...)
+			if !h.apply(cmd) {
+				t.Fatal("a valid placement batch should succeed")
+			}
+			wantDirections := []engine.Direction{engine.East, engine.South, engine.South}
+			for i, placement := range placements {
+				got := h.world.At(placement.X, placement.Y)
+				if got.Kind != test.kind || got.Dir != wantDirections[i] {
+					t.Errorf("building %d = %+v, want %v facing %v", i, got, test.kind, wantDirections[i])
+				}
+			}
+			if want := before - len(placements)*buildCost[test.kind]; h.ironOre != want {
+				t.Fatalf("ironOre = %d after batch, want %d", h.ironOre, want)
+			}
+		})
+	}
+}
+
+func TestInvalidPlaceBatchChangesNothing(t *testing.T) {
+	tests := []struct {
+		name    string
+		prepare func(*Hub)
+		command wire.Command
+	}{
+		{"empty", nil, placeBatch(wire.KindBelt)},
+		{"unknown kind", nil, placeBatch("factory", wire.Placement{X: 4, Y: 2, Dir: "east"})},
+		{"bad direction", nil, placeBatch(wire.KindBelt, wire.Placement{X: 4, Y: 2, Dir: "sideways"})},
+		{"duplicate cell", nil, placeBatch(wire.KindBelt,
+			wire.Placement{X: 4, Y: 2, Dir: "east"},
+			wire.Placement{X: 4, Y: 2, Dir: "east"},
+		)},
+		{"locked cell", nil, placeBatch(wire.KindBelt,
+			wire.Placement{X: 4, Y: 2, Dir: "west"},
+			wire.Placement{X: 3, Y: 2, Dir: "west"},
+		)},
+		{"occupied cell", func(h *Hub) { h.world.PlaceExtractor(5, 2, engine.East) }, placeBatch(wire.KindSeller,
+			wire.Placement{X: 4, Y: 2, Dir: "east"},
+			wire.Placement{X: 5, Y: 2, Dir: "east"},
+		)},
+		{"not enough ore", func(h *Hub) { h.ironOre = 149 }, placeBatch(wire.KindExtractor,
+			wire.Placement{X: 4, Y: 2, Dir: "east"},
+			wire.Placement{X: 5, Y: 2, Dir: "east"},
+		)},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := shopHub()
+			if test.prepare != nil {
+				test.prepare(h)
+			}
+			before := h.snapshot()
+			if h.apply(test.command) {
+				t.Fatal("invalid placement batch should be rejected")
+			}
+			if after := h.snapshot(); !reflect.DeepEqual(after, before) {
+				t.Fatalf("rejected batch changed the room\nbefore: %+v\nafter:  %+v", before, after)
+			}
+		})
+	}
+}
+
+func TestOverlappingPlaceBatchesDoNotPartlyApply(t *testing.T) {
+	h := shopHub()
+	first := placeBatch(wire.KindBelt,
+		wire.Placement{X: 4, Y: 2, Dir: "east"},
+		wire.Placement{X: 5, Y: 2, Dir: "east"},
+	)
+	second := placeBatch(wire.KindSeller,
+		wire.Placement{X: 5, Y: 2, Dir: "east"},
+		wire.Placement{X: 6, Y: 2, Dir: "east"},
+	)
+
+	if !h.apply(first) {
+		t.Fatal("the first batch should succeed")
+	}
+	beforeSecond := h.snapshot()
+	if h.apply(second) {
+		t.Fatal("the overlapping batch should be rejected")
+	}
+	if after := h.snapshot(); !reflect.DeepEqual(after, beforeSecond) {
+		t.Fatal("the overlapping batch partly changed the room")
 	}
 }
 

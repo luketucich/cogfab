@@ -9,6 +9,7 @@ import { Floor } from "./world/Floor";
 import { FlowArrows } from "./world/FlowArrows";
 import { FlowItems } from "./world/FlowItems";
 import { Bursts } from "./world/Bursts";
+import { BuildPreviews } from "./world/BuildPreviews";
 import { Ground } from "./world/Ground";
 import { HoverGlow } from "./world/HoverGlow";
 import { MouthMarkers } from "./world/MouthMarkers";
@@ -46,6 +47,7 @@ export function Scene() {
       <Ground />
 
       <Suspense fallback={null}>
+        <BuildPreviews />
         <Factory />
         <HoverGlow />
       </Suspense>

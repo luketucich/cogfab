@@ -2,7 +2,14 @@
 // drains the queue each frame. Module state like the other stores; no notify
 // is needed because the renderer already polls every frame.
 
-export type Burst = { x: number; z: number; color: string; count: number };
+export type Burst = {
+  x: number;
+  y?: number;
+  z: number;
+  radius?: number;
+  color: string;
+  count: number;
+};
 
 let queue: Burst[] = [];
 

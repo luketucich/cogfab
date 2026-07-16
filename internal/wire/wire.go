@@ -51,24 +51,26 @@ type WelcomeMessage struct {
 	Slot int    `json:"slot"`
 }
 
-// PresencePlayer describes one connected player and their cursor. SX/SY are
-// screen fractions and X/Y are grid coordinates. On marks the screen position
-// valid; Hovering marks the grid position valid.
+// PresencePlayer describes one connected player, their cursor, and any
+// temporary build preview. SX/SY are screen fractions and X/Y are grid
+// coordinates. On marks the screen position valid; Hovering marks the grid
+// position valid.
 type PresencePlayer struct {
-	Slot     int     `json:"slot"`
-	Name     string  `json:"name"`
-	Color    string  `json:"color"` // "" means use the slot's default colour
-	On       bool    `json:"on"`
-	SX       float64 `json:"sx"`
-	SY       float64 `json:"sy"`
-	Hovering bool    `json:"hovering"`
-	X        float64 `json:"x"`
-	Y        float64 `json:"y"`
+	Slot     int           `json:"slot"`
+	Name     string        `json:"name"`
+	Color    string        `json:"color"` // "" means use the slot's default colour
+	On       bool          `json:"on"`
+	SX       float64       `json:"sx"`
+	SY       float64       `json:"sy"`
+	Hovering bool          `json:"hovering"`
+	X        float64       `json:"x"`
+	Y        float64       `json:"y"`
+	Preview  *BuildPreview `json:"preview,omitempty"`
 }
 
-// PresenceMessage is a room's full roster, sent to everyone whenever a player
-// joins, leaves, or moves their hover. Four players at most, so sending the
-// whole list every time beats delta bookkeeping.
+// PresenceMessage is a room's full roster, sent whenever identity, cursor, or
+// build-preview presence changes. Four players at most, so sending the whole
+// list every time beats delta bookkeeping.
 type PresenceMessage struct {
 	Type    string           `json:"type"`
 	Players []PresencePlayer `json:"players"`

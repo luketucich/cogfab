@@ -43,8 +43,8 @@ export const panel: CSSProperties = {
 // corner for a hotkey number. The toolbar tools and the reset-view button share it.
 export const tile: CSSProperties = {
   position: "relative",
-  width: 66,
-  height: 66,
+  width: "var(--hud-button-size)",
+  height: "var(--hud-button-size)",
   display: "flex",
   flexDirection: "column",
   alignItems: "center",

@@ -9,9 +9,7 @@ export const CHEVRON_ROT: Record<Dir, number> = {
   south: -Math.PI / 2,
 };
 
-// chevronGeometry builds the arrow shape shared by the flowing belt arrows and
-// the build cursor: a long, wide flat chevron pointing +x, lying on the floor.
-// One builder so the two always look identical.
+// chevronGeometry builds the arrow shared by belt flow and direction markers.
 export function chevronGeometry(): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();
   g.setAttribute(

@@ -2,7 +2,25 @@
 
 What I've worked on, newest first.
 
+## 2026-07-15
+
+- Added color-coded build previews for every player and placeable. Build drags
+  share their full path as tinted building models. Subtle arrow-shaped pulses
+  keep the full path readable without stacking tile highlights.
+- Extended atomic drag batches to extractors and sellers. Every build tool now
+  previews the full stroke and commits it together when the player releases.
+- Accepted buildings now appear immediately with a small particle burst. The
+  server still decides every placement, and placed structures keep one hover
+  treatment.
+- Added looping background music and subtle build-preview ticks, balanced
+  through one mixer with separate music and sound-effect controls. The HUD now
+  scales down cleanly before its panels or controls can overlap.
+
 ## 2026-07-14
+
+- Added atomic belt strokes. A drag now previews its full path locally and
+  crosses the wire once on release. The server accepts the whole stroke or
+  none of it, so simultaneous players cannot leave partial overlaps.
 - Hardened room restores. Loaded saves now validate the grid, tiles, economy,
   and land tier before rebuilding a room. Invalid files start a fresh factory
   instead of reaching live game logic.

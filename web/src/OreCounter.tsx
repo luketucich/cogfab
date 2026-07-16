@@ -12,10 +12,10 @@ export function OreCounter() {
   const stats = useSyncExternalStore(subscribeStats, getStats);
 
   return (
-    <div style={{ ...panel, top: 14, left: "50%", transform: "translateX(-50%)", padding: "9px 22px", minWidth: 170, textAlign: "center" }}>
+    <div className="hud-ore" style={{ ...panel, textAlign: "center" }}>
       <div style={statLabel}>Iron Ore</div>
       <div style={count}>{fmtNum(amount)}</div>
-      <div style={subRow}>
+      <div className="hud-ore__subrow" style={subRow}>
         <span>
           <span style={statLabel}>Rate</span> <span style={rateValue}>+{fmtNum(stats.ratePerSec, 1)}/s</span>
         </span>
@@ -78,8 +78,8 @@ const subRow: CSSProperties = {
   display: "flex",
   alignItems: "baseline",
   justifyContent: "center",
-  gap: 8,
   marginTop: 2,
+  whiteSpace: "nowrap",
 };
 
 const rateValue: CSSProperties = {

@@ -9,19 +9,58 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/luketucich/cogfab/internal/engine"
 	"github.com/luketucich/cogfab/internal/wire"
 )
 
 // newTestServer runs a registry-backed server over tiny test worlds and
 // returns its WebSocket base URL. Dial it with "?room=CODE" to pick a room.
 func newTestServer(t *testing.T) string {
+	return newTestServerWithWorld(t, newTestWorld)
+}
+
+func newTestServerWithWorld(t *testing.T, newWorld func() *engine.World) string {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	rooms := NewRooms(ctx, time.Minute, newTestWorld, nil, nil)
+	rooms := NewRooms(ctx, time.Minute, newWorld, nil, nil)
 	srv := httptest.NewServer(rooms.Handler())
 	t.Cleanup(srv.Close)
 	return "ws" + strings.TrimPrefix(srv.URL, "http")
+}
+
+func TestPlaceBatchBroadcastsOneCompleteState(t *testing.T) {
+	url := newTestServerWithWorld(t, func() *engine.World { return engine.NewWorld(3, 1) })
+	conn, read := dial(t, url+"?room=STROKE")
+	readWelcome(t, read)
+	read() // initial state
+	read() // initial stats
+	read() // initial presence
+
+	wctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := conn.Write(wctx, websocket.MessageText, []byte(`{
+		"type":"placeBatch",
+		"kind":"extractor",
+		"placements":[
+			{"x":0,"y":0,"dir":"east"},
+			{"x":1,"y":0,"dir":"east"},
+			{"x":2,"y":0,"dir":"east"}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("write placement batch: %v", err)
+	}
+
+	var state wire.StateMessage
+	if data := read(); json.Unmarshal(data, &state) != nil || state.Type != "state" {
+		t.Fatalf("placement batch should broadcast state first, got %s", data)
+	}
+	for i, tile := range state.Tiles {
+		if tile.Kind != wire.KindExtractor || tile.Dir != "east" {
+			t.Errorf("tile %d = %+v, want east extractor", i, tile)
+		}
+	}
 }
 
 // dial connects to a test server and hands back the conn and a read helper
@@ -140,6 +179,60 @@ func TestPlayersShareARoomAndSeeEachOthersHover(t *testing.T) {
 		}
 	}
 	t.Fatal("player B never saw player A's hover")
+}
+
+func TestPlayersShareBuildPreviewsUntilPlacement(t *testing.T) {
+	url := newTestServerWithWorld(t, func() *engine.World { return engine.NewWorld(3, 1) })
+	connA, readA := dial(t, url+"?room=PREVUE")
+	readWelcome(t, readA)
+	_, readB := dial(t, url+"?room=PREVUE")
+	readWelcome(t, readB)
+
+	wctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	preview := `{"type":"preview","kind":"belt","placements":[{"x":0,"y":0,"dir":"east"}]}`
+	if err := connA.Write(wctx, websocket.MessageText, []byte(preview)); err != nil {
+		t.Fatalf("write preview: %v", err)
+	}
+
+	for i := 0; i < 12; i++ {
+		var msg wire.PresenceMessage
+		if data := readB(); json.Unmarshal(data, &msg) != nil || msg.Type != "presence" {
+			continue
+		}
+		for _, player := range msg.Players {
+			if player.Slot == 0 && player.Preview != nil && player.Preview.Kind == wire.KindBelt {
+				goto previewSeen
+			}
+		}
+	}
+	t.Fatal("player B never saw player A's build preview")
+
+previewSeen:
+	place := `{"type":"place","x":0,"y":0,"kind":"belt","dir":"east"}`
+	if err := connA.Write(wctx, websocket.MessageText, []byte(place)); err != nil {
+		t.Fatalf("write place: %v", err)
+	}
+
+	cleared, placed := false, false
+	for i := 0; i < 12 && (!cleared || !placed); i++ {
+		data := readB()
+		var presence wire.PresenceMessage
+		if json.Unmarshal(data, &presence) == nil && presence.Type == "presence" {
+			for _, player := range presence.Players {
+				if player.Slot == 0 && player.Preview == nil {
+					cleared = true
+				}
+			}
+		}
+		var state wire.StateMessage
+		if json.Unmarshal(data, &state) == nil && state.Type == "state" && state.Tiles[0].Kind == wire.KindBelt {
+			placed = true
+		}
+	}
+	if !cleared || !placed {
+		t.Fatalf("after placement: preview cleared = %v, belt placed = %v", cleared, placed)
+	}
 }
 
 func TestRoomsAreIsolated(t *testing.T) {

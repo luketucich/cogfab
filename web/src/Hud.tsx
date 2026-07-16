@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
-import { PiCheckBold, PiCopyFill, PiPencilSimpleFill } from "react-icons/pi";
+import { PiCheckBold, PiCopyFill, PiPencilSimpleFill, PiXBold } from "react-icons/pi";
 import { useConnection } from "./useConnection";
 import { getPing, subscribePing } from "./net/ping";
 import { getSession, isRoomCode, subscribeSession, CODE_LENGTH } from "./net/session";
@@ -14,7 +14,7 @@ import { panel, ACCENT, DANGER, FONT_DISPLAY, SWATCHES, playerColor } from "./ui
 // Hud is the lobby panel in the top left: the game title with the round-trip
 // ping, the room code (click it to type a friend's code and jump rooms, or
 // copy yours for them), and everyone in the lobby. Your own row is yours to
-// dress up: click the name to change it, the pencil for a colour.
+// dress up: the pencil opens one editor for your name and colour.
 export function Hud() {
   const { connected } = useConnection();
   const ping = useSyncExternalStore(subscribePing, getPing);
@@ -23,7 +23,7 @@ export function Hud() {
   const ms = ping === null ? null : Math.round(ping);
 
   return (
-    <div style={{ ...panel, top: 14, left: 14, width: 208, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
+    <div className="hud-lobby" style={{ ...panel, display: "flex", flexDirection: "column", gap: 9 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <CogfabLogo />
         <span style={{ ...pingText, ...(connected ? null : { color: DANGER, opacity: 1 }) }}>
@@ -94,58 +94,75 @@ function RoomRow({ code }: { code: string }) {
   );
 }
 
-// PlayerRow is one lobby member: their cursor colour and name. Your own row
-// edits in place: the name is a button, the pencil opens the colour swatches.
+// PlayerRow is one lobby member: their cursor colour and name. The pencil on
+// your own row opens both profile controls in place.
 function PlayerRow({ player, you }: { player: PresencePlayer; you: boolean }) {
-  const [draft, setDraft] = useState<string | null>(null); // null = not editing
-  const [picking, setPicking] = useState(false);
-  const color = playerColor(player);
+  const [draft, setDraft] = useState<{ name: string; color: string } | null>(null);
+  const savedColor = playerColor(player);
+  const color = draft?.color ?? savedColor;
 
-  const rename = () => {
-    if (draft && draft.trim()) setProfile(draft, player.color);
+  const save = () => {
+    if (!draft) return;
+    setProfile(draft.name.trim() || player.name, draft.color);
     setDraft(null);
+    sfx.select();
   };
 
   return (
-    <div>
+    <div
+      onBlur={(event) => {
+        if (draft !== null && !event.currentTarget.contains(event.relatedTarget as Node | null)) setDraft(null);
+      }}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ ...colorDot, background: color }} />
         {!you ? (
           <span style={nameText}>{player.name}</span>
         ) : draft === null ? (
-          <button onClick={() => setDraft(player.name)} title="Change your name" style={nameButton}>
+          <span style={ownName}>
             {player.name}
             <span style={youTag}>you</span>
-          </button>
+          </span>
         ) : (
           <input
             autoFocus
-            value={draft}
+            value={draft.name}
             maxLength={NAME_LIMIT}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
             onKeyDown={(e) => {
-              if (e.key === "Enter") rename();
+              if (e.key === "Enter") save();
               if (e.key === "Escape") setDraft(null);
             }}
-            onBlur={rename}
             style={nameInput}
           />
         )}
-        {you && (
-          <button onClick={() => setPicking((v) => !v)} title="Pick your colour" style={iconButton}>
+        {you && draft === null && (
+          <button
+            onClick={() => setDraft({ name: player.name, color: savedColor })}
+            title="Edit your name and colour"
+            style={iconButton}
+          >
             <PiPencilSimpleFill size={12} />
           </button>
         )}
+        {you && draft !== null && (
+          <div style={editActions}>
+            <button onClick={() => setDraft(null)} title="Cancel editing" style={editActionButton}>
+              <PiXBold size={12} />
+            </button>
+            <button onClick={save} title="Save name and colour" style={editActionButton}>
+              <PiCheckBold size={12} color="#5fd47a" />
+            </button>
+          </div>
+        )}
       </div>
-      {you && picking && (
+      {you && draft !== null && (
         <div style={swatchRow}>
           {SWATCHES.map((swatch) => (
             <button
               key={swatch}
               onClick={() => {
-                setProfile(player.name, swatch);
-                setPicking(false);
-                sfx.select();
+                setDraft({ ...draft, color: swatch });
               }}
               title={swatch}
               style={{
@@ -217,15 +234,11 @@ const colorDot: CSSProperties = { width: 10, height: 10, borderRadius: "50%", fl
 
 const nameText: CSSProperties = { fontSize: 12, fontWeight: 700, color: "#cdd3dc" };
 
-const nameButton: CSSProperties = {
+const ownName: CSSProperties = {
   ...nameText,
   display: "flex",
   alignItems: "center",
   gap: 6,
-  padding: 0,
-  border: "none",
-  background: "none",
-  cursor: "text",
 };
 
 const youTag: CSSProperties = {
@@ -238,13 +251,17 @@ const youTag: CSSProperties = {
 
 const nameInput: CSSProperties = {
   ...nameText,
-  width: 120,
+  width: 95,
+  minWidth: 0,
   padding: "1px 5px",
   borderRadius: 6,
   border: `1px solid ${ACCENT}`,
   background: "rgba(0, 0, 0, 0.35)",
   outline: "none",
 };
+
+const editActions: CSSProperties = { display: "flex", gap: 4, marginLeft: "auto" };
+const editActionButton: CSSProperties = { ...iconButton, marginLeft: 0 };
 
 const swatchRow: CSSProperties = { display: "flex", gap: 6, marginTop: 7, marginLeft: 18 };
 

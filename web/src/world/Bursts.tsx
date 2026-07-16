@@ -6,7 +6,7 @@ import { drainBursts } from "./burst";
 const MAX_PARTICLES = 512;
 const SIZE = 0.055; // particle radius
 const GRAVITY = -9;
-const SPAWN_Y = 0.25; // pop out just above the floor
+const SPAWN_Y = 0.25;
 
 // One flying speck: position, velocity, and how much life it has left.
 type Particle = {
@@ -37,12 +37,13 @@ export function Bursts() {
       const color = new THREE.Color(b.color);
       for (let i = 0; i < b.count && particles.current.length < MAX_PARTICLES; i++) {
         const angle = Math.random() * Math.PI * 2;
+        const radius = (b.radius ?? 0) * (0.82 + Math.random() * 0.18);
         const speed = 0.6 + Math.random() * 1.2;
         const ttl = 0.35 + Math.random() * 0.25;
         particles.current.push({
-          x: b.x,
-          y: SPAWN_Y,
-          z: b.z,
+          x: b.x + Math.cos(angle) * radius,
+          y: b.y ?? SPAWN_Y,
+          z: b.z + Math.sin(angle) * radius,
           vx: Math.cos(angle) * speed,
           vy: 2 + Math.random() * 2,
           vz: Math.sin(angle) * speed,

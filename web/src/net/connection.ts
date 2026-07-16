@@ -1,5 +1,5 @@
 import type { Command, ServerMessage } from "./types";
-import { setLatest } from "../world/store";
+import { resetLatest, setLatest } from "../world/store";
 import { setStats } from "../world/economy";
 import { setPresence } from "../world/presence";
 import { setRoomFull, setSession } from "./session";
@@ -69,6 +69,7 @@ class Connection {
       if (msg.type === "state") setLatest(msg);
       else if (msg.type === "stats") setStats(msg);
       else if (msg.type === "welcome") {
+        resetLatest();
         setSession(msg.room, msg.slot);
         // The server's code is authoritative: write it into the address bar so
         // the URL is the invite link and a reconnect rejoins the same room.

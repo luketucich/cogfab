@@ -46,6 +46,37 @@ func TestStateBytesProducesStateJSON(t *testing.T) {
 	}
 }
 
+func TestRejectedWorldCommandReturnsCurrentStats(t *testing.T) {
+	h := NewHub(engine.NewWorld(2, 1))
+	c := &Client{
+		send: make(chan []byte, 2),
+		preview: wire.BuildPreview{
+			Kind:       wire.KindBelt,
+			Placements: []wire.Placement{{X: 0, Y: 0, Dir: "east"}},
+		},
+	}
+	h.clients[c] = true
+	cmd := wire.Command{Type: wire.CmdPlace, X: 3, Y: 0, Kind: wire.KindBelt, Dir: "east"}
+
+	if h.handleCommand(clientCommand{c: c, cmd: cmd}) {
+		t.Fatal("off-grid placement should be rejected")
+	}
+	var presence wire.PresenceMessage
+	if data := <-c.send; json.Unmarshal(data, &presence) != nil || presence.Type != "presence" {
+		t.Fatalf("rejected placement should clear its preview first, got %s", data)
+	}
+	if c.preview.Kind != "" {
+		t.Fatal("rejected placement left its build preview behind")
+	}
+	var msg wire.StatsMessage
+	if data := <-c.send; json.Unmarshal(data, &msg) != nil || msg.Type != "stats" {
+		t.Fatalf("rejected command should return current stats, got %s", data)
+	}
+	if msg.IronOre != startingOre {
+		t.Fatalf("returned iron ore = %d, want %d", msg.IronOre, startingOre)
+	}
+}
+
 func TestBroadcastSendsToAllClients(t *testing.T) {
 	h := NewHub(newTestWorld())
 	c1 := &Client{send: make(chan []byte, 1)}
@@ -137,6 +168,98 @@ func TestProfilesAreSanitizedNotRejected(t *testing.T) {
 	}
 	if h.applyProfile(c, wire.Command{Type: wire.CmdProfile, Name: "", Color: "zz"}) {
 		t.Fatal("all-junk profile should change nothing")
+	}
+}
+
+func TestPresenceRosterTracksBuildPreviews(t *testing.T) {
+	h := NewHub(engine.NewWorld(4, 2))
+	c := &Client{send: make(chan []byte, 8)}
+	h.addClient(c)
+	cmd := wire.Command{
+		Type: wire.CmdPreview,
+		Kind: wire.KindSeller,
+		Placements: []wire.Placement{
+			{X: 1, Y: 0, Dir: "east"},
+			{X: 2, Y: 0, Dir: "south"},
+		},
+	}
+
+	if !h.applyPreview(c, cmd) {
+		t.Fatal("a fresh build preview should count as a change")
+	}
+	if h.applyPreview(c, cmd) {
+		t.Fatal("repeating the same preview should not count as a change")
+	}
+	cmd.Placements[0].X = 3
+	if c.preview.Placements[0].X != 1 {
+		t.Fatal("the hub should keep its own copy of preview placements")
+	}
+
+	var msg wire.PresenceMessage
+	if err := json.Unmarshal(h.presenceBytes(), &msg); err != nil {
+		t.Fatal(err)
+	}
+	preview := msg.Players[0].Preview
+	if preview == nil || preview.Kind != wire.KindSeller || len(preview.Placements) != 2 {
+		t.Fatalf("presence preview = %+v, want two sellers", preview)
+	}
+
+	if !h.clearPreview(c) || c.preview.Kind != "" {
+		t.Fatal("clearing a visible preview should remove it")
+	}
+	if h.clearPreview(c) {
+		t.Fatal("clearing an empty preview should change nothing")
+	}
+}
+
+func TestBuildPreviewRejectsUnsafeInput(t *testing.T) {
+	h := NewHub(engine.NewWorld(3, 2))
+	tests := []struct {
+		name string
+		cmd  wire.Command
+	}{
+		{"empty", wire.Command{Kind: wire.KindBelt}},
+		{"unknown kind", wire.Command{Kind: "factory", Placements: []wire.Placement{{X: 0, Y: 0, Dir: "east"}}}},
+		{"off grid", wire.Command{Kind: wire.KindBelt, Placements: []wire.Placement{{X: 3, Y: 0, Dir: "east"}}}},
+		{"bad direction", wire.Command{Kind: wire.KindBelt, Placements: []wire.Placement{{X: 0, Y: 0, Dir: "sideways"}}}},
+		{"duplicate", wire.Command{Kind: wire.KindBelt, Placements: []wire.Placement{{X: 0, Y: 0, Dir: "east"}, {X: 0, Y: 0, Dir: "east"}}}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if preview, valid := h.buildPreview(test.cmd); valid || preview.Kind != "" {
+				t.Fatalf("unsafe preview accepted: %+v", preview)
+			}
+		})
+	}
+}
+
+func TestBuildPreviewAllowsMachineBatches(t *testing.T) {
+	h := NewHub(engine.NewWorld(3, 1))
+	cmd := wire.Command{
+		Kind: wire.KindExtractor,
+		Placements: []wire.Placement{
+			{X: 0, Y: 0, Dir: "east"},
+			{X: 1, Y: 0, Dir: "east"},
+		},
+	}
+	preview, valid := h.buildPreview(cmd)
+	if !valid || preview.Kind != wire.KindExtractor || len(preview.Placements) != 2 {
+		t.Fatalf("machine batch preview = %+v valid=%v, want two extractors", preview, valid)
+	}
+}
+
+func TestInvalidBuildPreviewClearsPreviousIntent(t *testing.T) {
+	h := NewHub(engine.NewWorld(2, 1))
+	c := &Client{}
+	valid := wire.Command{Kind: wire.KindBelt, Placements: []wire.Placement{{X: 0, Y: 0, Dir: "east"}}}
+	invalid := wire.Command{Kind: wire.KindBelt, Placements: []wire.Placement{{X: 2, Y: 0, Dir: "east"}}}
+
+	if !h.applyPreview(c, valid) || !h.applyPreview(c, invalid) {
+		t.Fatal("new and cleared previews should both count as changes")
+	}
+	if c.preview.Kind != "" {
+		t.Fatal("invalid preview left stale intent on the player")
 	}
 }
 

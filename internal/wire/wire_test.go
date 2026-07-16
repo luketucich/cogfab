@@ -48,3 +48,46 @@ func TestSnapshotJSONHasExpectedKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestPlaceBatchCommandJSON(t *testing.T) {
+	var cmd Command
+	err := json.Unmarshal([]byte(`{
+		"type":"placeBatch",
+		"kind":"extractor",
+		"placements":[
+			{"x":1,"y":2,"dir":"east"},
+			{"x":2,"y":2,"dir":"south"}
+		]
+	}`), &cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd.Type != CmdPlaceBatch || cmd.Kind != KindExtractor || len(cmd.Placements) != 2 {
+		t.Fatalf("decoded command = %+v", cmd)
+	}
+	if got := cmd.Placements[1]; got.X != 2 || got.Y != 2 || got.Dir != "south" {
+		t.Fatalf("second placement = %+v, want (2,2) south", got)
+	}
+}
+
+func TestPresenceBuildPreviewJSON(t *testing.T) {
+	msg := PresenceMessage{
+		Type: "presence",
+		Players: []PresencePlayer{{
+			Slot: 1,
+			Preview: &BuildPreview{
+				Kind:       KindSeller,
+				Placements: []Placement{{X: 4, Y: 2, Dir: "west"}},
+			},
+		}},
+	}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"preview"`, `"kind":"seller"`, `"dir":"west"`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("presence JSON %s does not contain %s", b, want)
+		}
+	}
+}

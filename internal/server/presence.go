@@ -3,16 +3,17 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/luketucich/cogfab/internal/engine"
 	"github.com/luketucich/cogfab/internal/wire"
 )
 
-// Presence is the little social layer on top of the shared factory: who is in
-// the room (name and colour), where each player's mouse is on their screen (for
-// the named cursors), and which grid spot it is over (for the cell markers).
-// It all runs on the hub goroutine, like everything else the hub owns.
+// Presence is the social layer on top of the shared factory: identity, cursors,
+// hovered cells, and temporary build previews. It all runs on the hub
+// goroutine, like everything else the hub owns.
 
 // maxNameLength keeps names to nametag size.
 const maxNameLength = 16
@@ -69,6 +70,60 @@ func (h *Hub) applyProfile(c *Client, cmd wire.Command) bool {
 	return true
 }
 
+// applyPreview keeps a bounded, well-formed build preview on the player. Bad
+// input clears the old preview so a stale ghost cannot remain in the room.
+func (h *Hub) applyPreview(c *Client, cmd wire.Command) bool {
+	next, valid := h.buildPreview(cmd)
+	if !valid {
+		next = wire.BuildPreview{}
+	}
+	if c.preview.Kind == next.Kind && slices.Equal(c.preview.Placements, next.Placements) {
+		return false
+	}
+	c.preview = next
+	return true
+}
+
+func (h *Hub) clearPreview(c *Client) bool {
+	return h.applyPreview(c, wire.Command{})
+}
+
+// buildPreview validates the small piece of untrusted presence data before it
+// is echoed to the room. Preview cells may be locked or occupied because the
+// authoritative placement command still makes the final decision.
+func (h *Hub) buildPreview(cmd wire.Command) (wire.BuildPreview, bool) {
+	if cmd.Kind == "" && len(cmd.Placements) == 0 {
+		return wire.BuildPreview{}, true
+	}
+	if kindOf(cmd.Kind) == engine.Empty || len(cmd.Placements) == 0 ||
+		len(cmd.Placements) > h.world.Width()*h.world.Height() {
+		return wire.BuildPreview{}, false
+	}
+	seen := make(map[int]bool, len(cmd.Placements))
+	for _, placement := range cmd.Placements {
+		if placement.X < 0 || placement.X >= h.world.Width() ||
+			placement.Y < 0 || placement.Y >= h.world.Height() ||
+			!validDirection(placement.Dir) {
+			return wire.BuildPreview{}, false
+		}
+		cell := placement.Y*h.world.Width() + placement.X
+		if seen[cell] {
+			return wire.BuildPreview{}, false
+		}
+		seen[cell] = true
+	}
+	return wire.BuildPreview{Kind: cmd.Kind, Placements: slices.Clone(cmd.Placements)}, true
+}
+
+func validDirection(dir string) bool {
+	switch dir {
+	case "north", "east", "south", "west":
+		return true
+	default:
+		return false
+	}
+}
+
 // validColor reports whether a client-supplied colour is a #rrggbb value.
 func validColor(color string) bool {
 	if len(color) != 7 || color[0] != '#' {
@@ -93,11 +148,16 @@ func (h *Hub) welcomeBytes(c *Client) []byte {
 func (h *Hub) presenceBytes() []byte {
 	players := make([]wire.PresencePlayer, 0, len(h.clients))
 	for c := range h.clients {
-		players = append(players, wire.PresencePlayer{
+		player := wire.PresencePlayer{
 			Slot: c.slot, Name: c.name, Color: c.color,
 			On: c.onScreen, SX: c.screenX, SY: c.screenY,
 			Hovering: c.hovering, X: c.hoverX, Y: c.hoverY,
-		})
+		}
+		if c.preview.Kind != "" {
+			preview := c.preview
+			player.Preview = &preview
+		}
+		players = append(players, player)
 	}
 	sort.Slice(players, func(i, j int) bool { return players[i].Slot < players[j].Slot })
 	b, _ := json.Marshal(wire.PresenceMessage{Type: "presence", Players: players})

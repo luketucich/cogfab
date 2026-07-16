@@ -101,22 +101,53 @@ func kindOf(kind string) engine.TileKind {
 	return engine.Empty
 }
 
-// applyPlace builds a structure and pays for it. Rejected when the kind is
-// unknown, the cell is locked or occupied, or the ore does not cover it.
+// applyPlace keeps the single-cell wire command on the same validation path as
+// drag batches.
 func (h *Hub) applyPlace(cmd wire.Command) bool {
-	kind := kindOf(cmd.Kind)
-	cost, buildable := buildCost[kind]
-	if !buildable || !h.unlocked(cmd.X, cmd.Y) || h.world.At(cmd.X, cmd.Y).Kind != engine.Empty || cost > h.ironOre {
+	return h.applyPlacements(cmd.Kind, []wire.Placement{{X: cmd.X, Y: cmd.Y, Dir: cmd.Dir}})
+}
+
+// applyPlaceBatch validates a whole drag before placing any of it.
+func (h *Hub) applyPlaceBatch(cmd wire.Command) bool {
+	return h.applyPlacements(cmd.Kind, cmd.Placements)
+}
+
+// applyPlacements is the authoritative path for every build. Commands run one
+// at a time, so the first valid overlapping batch wins and the next fails.
+func (h *Hub) applyPlacements(kindName string, placements []wire.Placement) bool {
+	kind := kindOf(kindName)
+	unitCost, buildable := buildCost[kind]
+	if !buildable || len(placements) == 0 || len(placements) > h.world.Width()*h.world.Height() {
 		return false
 	}
-	dir := engine.ParseDirection(cmd.Dir)
-	switch kind {
-	case engine.Belt:
-		h.world.PlaceBelt(cmd.X, cmd.Y, dir)
-	case engine.Extractor:
-		h.world.PlaceExtractor(cmd.X, cmd.Y, dir)
-	case engine.Seller:
-		h.world.PlaceSeller(cmd.X, cmd.Y, dir)
+	cost := len(placements) * unitCost
+	if cost > h.ironOre {
+		return false
+	}
+
+	seen := make(map[int]bool, len(placements))
+	for _, placement := range placements {
+		if !validDirection(placement.Dir) || !h.unlocked(placement.X, placement.Y) ||
+			h.world.At(placement.X, placement.Y).Kind != engine.Empty {
+			return false
+		}
+		cell := placement.Y*h.world.Width() + placement.X
+		if seen[cell] {
+			return false
+		}
+		seen[cell] = true
+	}
+
+	for _, placement := range placements {
+		dir := engine.ParseDirection(placement.Dir)
+		switch kind {
+		case engine.Belt:
+			h.world.PlaceBelt(placement.X, placement.Y, dir)
+		case engine.Extractor:
+			h.world.PlaceExtractor(placement.X, placement.Y, dir)
+		case engine.Seller:
+			h.world.PlaceSeller(placement.X, placement.Y, dir)
+		}
 	}
 	h.ironOre -= cost
 	return true

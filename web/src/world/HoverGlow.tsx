@@ -34,8 +34,7 @@ function structureAt(snap: StateMessage, models: FactoryModels, x: number, y: nu
 
 // HoverGlow lights up the structure under the cursor: an additive copy of the
 // exact model the factory draws, fading in over whatever you point at. Red for
-// the destroy tool, blue otherwise. Empty cells get nothing here (Ground
-// previews those with a tile and an arrow).
+// the destroy tool, blue otherwise. Empty cells use PlayerCursors instead.
 export function HoverGlow() {
   const models = useFactoryModels();
   const mesh = useRef<THREE.Mesh>(null!);

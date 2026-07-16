@@ -27,10 +27,14 @@ func scrapeMetrics(t *testing.T, metrics *Metrics) string {
 func TestMetricsEndpointUsesBoundedLabels(t *testing.T) {
 	metrics := NewMetrics()
 	metrics.commandProcessed("a-client-invented-this", false, time.Millisecond)
+	metrics.commandProcessed(wire.CmdPlaceBatch, true, time.Millisecond)
+	metrics.commandProcessed(wire.CmdPreview, true, time.Millisecond)
 	body := scrapeMetrics(t, metrics)
 
 	for _, want := range []string{
 		`cogfab_commands_total{command="unknown",outcome="ignored"} 1`,
+		`cogfab_commands_total{command="placeBatch",outcome="applied"} 1`,
+		`cogfab_commands_total{command="preview",outcome="applied"} 1`,
 		"cogfab_rooms_active 0",
 		"go_goroutines",
 	} {
