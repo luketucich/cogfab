@@ -51,7 +51,7 @@ func TestMetricsTrackRoomLifecycle(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	metrics := NewMetrics()
-	rooms := NewRooms(ctx, 20*time.Millisecond, newTestWorld, nil, metrics)
+	rooms := NewRooms(ctx, 20*time.Millisecond, func(string) *engine.World { return newTestWorld() }, nil, metrics)
 	t.Cleanup(rooms.Shutdown)
 
 	first, _ := rooms.join("AAAAAA")

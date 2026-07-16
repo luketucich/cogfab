@@ -23,18 +23,19 @@ func (w *World) IsBelt(i int) bool { return i >= 0 && i < len(w.tiles) && w.tile
 // IsSeller reports whether cell i holds a seller.
 func (w *World) IsSeller(i int) bool { return i >= 0 && i < len(w.tiles) && w.tiles[i].Kind == Seller }
 
-// Producer is one productive extractor: the belts its ore crosses (extractor mouth
-// first, seller mouth last) and the seller cell the ore lands in.
+// Producer is one productive extractor: the belts its material crosses
+// (extractor mouth first, seller mouth last) and the seller cell it lands in.
 type Producer struct {
 	Cell   int
 	Path   []int
 	Seller int
 }
 
-// Producers lists every extractor whose ore reaches a seller. Ore leaves an
-// extractor only from the side it faces and enters a seller only on the side it
-// faces, so the run starts at the belt at the extractor's mouth and ends at the
-// belt at a seller's mouth. Mirrors the client's flowPaths; keep the two in step.
+// Producers lists every extractor whose material reaches a seller. Material
+// leaves an extractor only from the side it faces and enters a seller only on
+// the side it faces, so the run starts at the belt at the extractor's mouth and
+// ends at the belt at a seller's mouth. Mirrors the client's flowPaths; keep
+// the two in step.
 func (w *World) Producers() []Producer {
 	var out []Producer
 	for i := range w.tiles {

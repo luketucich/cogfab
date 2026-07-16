@@ -25,27 +25,30 @@ describe("buildPreviewsEqual", () => {
 describe("build preview rendering data", () => {
   const snap: StateMessage = {
     type: "state",
-    width: 3,
+    width: 4,
     height: 1,
     tiles: [
       { kind: "empty", dir: "east" },
       { kind: "extractor", dir: "north" },
       { kind: "empty", dir: "east" },
+      { kind: "empty", dir: "east" },
     ],
+    deposits: [{ x: 0, y: 0, kind: "iron", capacity: 100, remaining: 100 }],
+    ports: [{ x: 3, y: 0 }],
   };
 
   it("does not render ghosts over placed buildings or outside the grid", () => {
     const mixed: BuildPreview = {
       kind: "belt",
       placements: [
-        { x: 0, y: 0, dir: "east" },
+        { x: 2, y: 0, dir: "east" },
         { x: 1, y: 0, dir: "east" },
-        { x: 3, y: 0, dir: "east" },
+        { x: 4, y: 0, dir: "east" },
       ],
     };
     expect(visibleBuildPreview(mixed, snap)).toEqual({
       kind: "belt",
-      placements: [{ x: 0, y: 0, dir: "east" }],
+      placements: [{ x: 2, y: 0, dir: "east" }],
     });
   });
 
@@ -61,6 +64,31 @@ describe("build preview rendering data", () => {
     expect(overlaid.tiles[0]).toEqual({ kind: "belt", dir: "east" });
     expect(overlaid.tiles[2]).toEqual({ kind: "belt", dir: "south" });
     expect(snap.tiles[0].kind).toBe("empty");
+  });
+
+  it("hides machine ghosts from invalid terrain", () => {
+    const extractor: BuildPreview = {
+      kind: "extractor",
+      placements: [
+        { x: 0, y: 0, dir: "east" },
+        { x: 3, y: 0, dir: "east" },
+      ],
+    };
+    const seller: BuildPreview = { kind: "seller", placements: extractor.placements };
+    expect(visibleBuildPreview(extractor, snap)?.placements).toEqual([extractor.placements[0]]);
+    expect(visibleBuildPreview(seller, snap)?.placements).toEqual([seller.placements[1]]);
+  });
+
+  it("hides belt ghosts on live deposits and shipping ports", () => {
+    const belt: BuildPreview = {
+      kind: "belt",
+      placements: [
+        { x: 0, y: 0, dir: "east" },
+        { x: 2, y: 0, dir: "east" },
+        { x: 3, y: 0, dir: "east" },
+      ],
+    };
+    expect(visibleBuildPreview(belt, snap)?.placements).toEqual([belt.placements[1]]);
   });
 
   it("keeps a turning build stroke in one continuous path", () => {

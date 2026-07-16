@@ -6,19 +6,33 @@ export type TileView = {
   dir: "north" | "east" | "south" | "west";
 };
 
+export type ResourceKind = "iron" | "copper" | "quartz" | "gold";
+
+export type DepositView = {
+  x: number;
+  y: number;
+  kind: ResourceKind;
+  capacity: number;
+  remaining: number;
+};
+
+export type PortView = { x: number; y: number };
+
 export type StateMessage = {
   type: "state";
   width: number;
   height: number;
   tiles: TileView[];
+  deposits: DepositView[];
+  ports: PortView[];
 };
 
-// StatsMessage is the economy update: the iron-ore total, production rate, and
+// StatsMessage is the economy update: the shared credits, production rate, and
 // where the upgrades stand. A cost of 0 means that upgrade is maxed out.
 // Mirror of wire.StatsMessage in Go.
 export type StatsMessage = {
   type: "stats";
-  ironOre: number;
+  credits: number;
   ratePerSec: number;
   extractorLevel: number;
   extractorCost: number;
@@ -79,7 +93,12 @@ export type PongMessage = {
   t: number;
 };
 
-export type ServerMessage = StateMessage | StatsMessage | WelcomeMessage | PresenceMessage | RoomFullMessage | PongMessage;
+export type ResourcesMessage = {
+  type: "resources";
+  deposits: DepositView[];
+};
+
+export type ServerMessage = StateMessage | StatsMessage | ResourcesMessage | WelcomeMessage | PresenceMessage | RoomFullMessage | PongMessage;
 
 // PlaceableKind is the tile kinds a player can place (everything but empty).
 // Derived from TileView so the two stay in sync.

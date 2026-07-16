@@ -1,36 +1,41 @@
 import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { getLatest, subscribe } from "./store";
-import { beltMultiplier, emissionMultiplier, getStats, MAX_SIM_LEVEL, ORE_GAP, ORE_SPEED } from "./economy";
+import { getTerrain, subscribeResources } from "./store";
+import { beltMultiplier, emissionMultiplier, getStats, MATERIAL_GAP, MATERIAL_SPEED, MAX_SIM_LEVEL } from "./economy";
 import { cellOffsets } from "./grid";
 import { makeCurve, curvePoint, type Curve } from "./beltCurve";
 import { flowPaths, runKey } from "./flow";
 import { addBurst } from "./burst";
 import { sfx } from "../sfx";
+import type { ResourceKind } from "../net/types";
+import { RESOURCE_PALETTE } from "./resources";
 
 const MAX_ORE = 8192;
 const ORE_Y = 0.5; // sit on the belt surface
 const SIZE = 0.13; // chunk radius
-const ORE = new THREE.Color("#8a7f72"); // iron ore: a warm grey rock
-const MAX_STEP = 0.1; // clamp the frame step so a backgrounded tab does not teleport ore
+const MAX_STEP = 0.1; // prevents material from teleporting after a backgrounded tab resumes
 
-// A Route is one extractor-to-seller path the ore rides: the curve for each cell
+const RESOURCE_COLORS: Record<ResourceKind, THREE.Color> = {
+  iron: new THREE.Color(RESOURCE_PALETTE.iron.color),
+  copper: new THREE.Color(RESOURCE_PALETTE.copper.color),
+  quartz: new THREE.Color(RESOURCE_PALETTE.quartz.color),
+  gold: new THREE.Color(RESOURCE_PALETTE.gold.color),
+};
+
+// A Route is one extractor-to-seller path the material rides: the curve for each cell
 // and the tile each cell sits on, so a chunk can tell when the belt under it is
 // gone. nearest is per-frame scratch: the chunk closest to the extractor, noted
 // while advancing so emission never rescans every chunk.
-type Route = { curves: Curve[]; cells: number[]; nearest: number };
+type Route = { curves: Curve[]; cells: number[]; resource: ResourceKind; active: boolean; nearest: number };
 
-// A Chunk of ore riding a route: how far along it has travelled (in cells) and a
+// A Chunk of material riding a route: how far it has travelled (in cells) and a
 // fixed id so its tumble stays steady frame to frame.
 type Chunk = { route: Route; dist: number; id: number };
 
-// FlowItems is the material on the belts: grey iron-ore chunks the extractor emits
-// one at a time, each riding the belts to the seller on its own. A chunk is
-// dropped the moment the belt under it is gone, so it falls off at a gap instead
-// of skipping it, while a chunk already past a break rides the remaining belts on
-// to the seller. All client-side, from the layout, so nothing per-item touches the
-// wire.
+// FlowItems draws raw material in the colour of its source deposit. A chunk drops the
+// moment the belt beneath it disappears; chunks already past a break keep riding
+// to the seller. Motion is client-side, so individual chunks never touch the wire.
 export function FlowItems() {
   const mesh = useRef<THREE.InstancedMesh>(null!);
   const chunks = useRef<Chunk[]>([]);
@@ -42,10 +47,10 @@ export function FlowItems() {
   const landing = useMemo(() => new THREE.Vector3(), []); // where a delivered chunk sparkles
   const geometry = useMemo(() => new THREE.IcosahedronGeometry(SIZE, 0), []);
   const material = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: ORE, roughness: 0.75, metalness: 0.3, flatShading: true }),
+    () => new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.75, metalness: 0.3, flatShading: true }),
     [],
   );
-  const snap = useSyncExternalStore(subscribe, getLatest);
+  const snap = useSyncExternalStore(subscribeResources, getTerrain);
 
   // Track the live extractor-to-seller paths. A path that persists keeps its Route
   // object, so the chunks already riding it carry on uninterrupted; a path that is
@@ -55,13 +60,17 @@ export function FlowItems() {
     if (snap) {
       const { offX, offZ } = cellOffsets(snap);
       for (const run of flowPaths(snap)) {
-        if (!run.complete) continue; // ore only rides paths that reach a seller
+        if (!run.complete) continue; // material only rides paths that reach a seller
         const key = runKey(run);
+        const previous = routes.current.get(key);
+        if (previous) previous.active = run.active;
         next.set(
           key,
-          routes.current.get(key) ?? {
+          previous ?? {
             curves: run.steps.map((s) => makeCurve(s.x - offX, s.y - offZ, s.entry, s.exit)),
             cells: run.steps.map((s) => s.y * snap.width + s.x),
+            resource: run.resource,
+            active: run.active,
             nearest: Infinity,
           },
         );
@@ -73,10 +82,12 @@ export function FlowItems() {
 
   useFrame(({ clock }) => {
     const now = clock.elapsedTime;
-    // Belt Speed levels carry the ore visibly faster, up to the sim cap;
+    // Belt Speed levels carry material visibly faster, up to the sim cap;
     // mirror of beltSpeed in economy.go.
     const step =
-      Math.min(now - lastTime.current, MAX_STEP) * ORE_SPEED * beltMultiplier(Math.min(getStats().beltLevel, MAX_SIM_LEVEL));
+      Math.min(now - lastTime.current, MAX_STEP) *
+      MATERIAL_SPEED *
+      beltMultiplier(Math.min(getStats().beltLevel, MAX_SIM_LEVEL));
     lastTime.current = now;
 
     // Advance every chunk, dropping the ones that reached the seller or whose belt
@@ -88,8 +99,8 @@ export function FlowItems() {
       chunk.dist += step;
       const cell = Math.floor(chunk.dist);
       if (cell >= chunk.route.cells.length) {
-        // Consumed. A live route ends at a seller, so sparkle where the ore
-        // vanished; ore on a cut route just rides off with no fanfare.
+        // Consumed. A live route ends at a seller, so sparkle where the material
+        // vanished; material on a cut route just rides off with no fanfare.
         if (live.current.has(chunk.route)) {
           curvePoint(chunk.route.curves[chunk.route.curves.length - 1], 1, 0, landing);
           addBurst({ x: landing.x, z: landing.z, color: "#ffd57a", count: 2 });
@@ -106,8 +117,9 @@ export function FlowItems() {
     // moved a gap ahead, starting it at the overshoot so no spacing is lost.
     // Each Extractor Rate level up to the sim cap packs them tighter; mirror of
     // emitGap and emit in economy.go.
-    const gap = ORE_GAP / emissionMultiplier(Math.min(getStats().extractorLevel, MAX_SIM_LEVEL));
+    const gap = MATERIAL_GAP / emissionMultiplier(Math.min(getStats().extractorLevel, MAX_SIM_LEVEL));
     for (const route of routes.current.values()) {
+      if (!route.active) continue;
       if (route.nearest === Infinity) alive.push({ route, dist: 0, id: nextId.current++ });
       else if (route.nearest >= gap) alive.push({ route, dist: route.nearest - gap, id: nextId.current++ });
     }
@@ -121,9 +133,11 @@ export function FlowItems() {
       dummy.rotation.set(chunk.id * 1.7, chunk.id * 0.9, chunk.id * 2.3); // fixed tumble, no spin
       dummy.updateMatrix();
       mesh.current.setMatrixAt(inst++, dummy.matrix);
+      mesh.current.setColorAt(inst - 1, RESOURCE_COLORS[chunk.route.resource]);
     }
     mesh.current.count = inst;
     mesh.current.instanceMatrix.needsUpdate = true;
+    if (mesh.current.instanceColor) mesh.current.instanceColor.needsUpdate = true;
   });
 
   return <instancedMesh ref={mesh} args={[geometry, material, MAX_ORE]} frustumCulled={false} />;

@@ -24,7 +24,7 @@ function perpendicular(a: Dir, b: Dir): boolean {
   return a !== b && a !== OPPOSITE[b];
 }
 
-// beltShape prefers the sides used by the live ore route, including connections
+// beltShape prefers the sides used by the live material route, including connections
 // to extractors and sellers. Belts outside a route still join their belt
 // neighbours, which keeps incomplete construction readable. The chosen sides
 // pick the piece:

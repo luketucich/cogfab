@@ -10,9 +10,15 @@ import (
 	"github.com/luketucich/cogfab/internal/wire"
 )
 
-// writeTimeout bounds how long a single message write may take before the
-// client is considered stuck.
-const writeTimeout = 5 * time.Second
+const (
+	// writeTimeout bounds how long a single message write may take before the
+	// client is considered stuck.
+	writeTimeout = 5 * time.Second
+
+	// clientReadLimit fits a full-world placement batch while still bounding
+	// memory used by an untrusted WebSocket frame.
+	clientReadLimit = 256 << 10
+)
 
 // acceptOptions is shared by every upgrade. Only the game's own pages may open
 // sockets: the production site, plus localhost for the Vite dev server (which
@@ -46,6 +52,7 @@ func (h *Hub) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.CloseNow()
+	conn.SetReadLimit(clientReadLimit)
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()

@@ -1,5 +1,5 @@
 import type { Command, ServerMessage } from "./types";
-import { resetLatest, setLatest } from "../world/store";
+import { resetLatest, setLatest, setResources } from "../world/store";
 import { setStats } from "../world/economy";
 import { setPresence } from "../world/presence";
 import { setRoomFull, setSession } from "./session";
@@ -68,6 +68,7 @@ class Connection {
       const msg = JSON.parse(e.data as string) as ServerMessage;
       if (msg.type === "state") setLatest(msg);
       else if (msg.type === "stats") setStats(msg);
+      else if (msg.type === "resources") setResources(msg);
       else if (msg.type === "welcome") {
         resetLatest();
         setSession(msg.room, msg.slot);

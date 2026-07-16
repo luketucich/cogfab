@@ -3,8 +3,8 @@ import type { CSSProperties } from "react";
 import type { IconType } from "react-icons";
 import { PiCaretDoubleRightFill, PiShovelFill, PiStorefrontFill, PiTrashFill } from "react-icons/pi";
 import { TOOLS, getSelectedId, selectTool, subscribe } from "./tools";
-import { getStats, spendableOre, subscribeStats } from "../world/economy";
-import { tile, ACCENT, ORE_TEXT, isTyping } from "../ui";
+import { getStats, spendableCredits, subscribeStats } from "../world/economy";
+import { tile, ACCENT, CREDIT_TEXT, isTyping } from "../ui";
 import { sfx } from "../sfx";
 
 // One icon per tool, keyed by id.
@@ -20,7 +20,7 @@ const ICONS: Record<string, IconType> = {
 // selected tool is what Ground places when you click a cell.
 export function Toolbar() {
   const selectedId = useSyncExternalStore(subscribe, getSelectedId);
-  useSyncExternalStore(subscribeStats, getStats); // re-render when the ore moves
+  useSyncExternalStore(subscribeStats, getStats); // re-render when the credits move
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -40,7 +40,7 @@ export function Toolbar() {
       {TOOLS.map((tool) => {
         const Icon = ICONS[tool.id];
         const selected = tool.id === selectedId;
-        const affordable = (tool.cost ?? 0) <= spendableOre();
+        const affordable = (tool.cost ?? 0) <= spendableCredits();
         return (
           <button
             key={tool.id}
@@ -49,7 +49,7 @@ export function Toolbar() {
               sfx.select();
             }}
             aria-pressed={selected}
-            title={`${tool.label} (${tool.hotkey})${tool.cost ? ` · ${tool.cost} ore` : ""}`}
+            title={`${tool.label} (${tool.hotkey})${tool.cost ? ` · ${tool.cost} credits` : ""}`}
             style={{
               ...tile,
               ...(!affordable && { opacity: 0.45 }), // too pricey right now
@@ -88,5 +88,5 @@ const costBadge: CSSProperties = {
   right: 7,
   fontSize: 9,
   fontWeight: 800,
-  color: ORE_TEXT,
+  color: CREDIT_TEXT,
 };

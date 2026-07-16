@@ -22,7 +22,7 @@ type Particle = {
 };
 
 // Bursts renders every queued particle puff: placement dust, destroy debris,
-// and the sparkle when ore lands in a seller. Purely cosmetic; each particle
+// and the sparkle when material lands in a seller. Purely cosmetic; each particle
 // pops up, falls under gravity, and shrinks away.
 export function Bursts() {
   const mesh = useRef<THREE.InstancedMesh>(null!);

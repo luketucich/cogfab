@@ -15,7 +15,7 @@ import { isTyping } from "../ui";
 import { extendBuildStroke, strokePlacements } from "./buildStroke";
 import { setBuildPreview } from "./buildPreviewStore";
 import { addBurst } from "./burst";
-import { addPendingSpend, getStats, spendableOre } from "./economy";
+import { addPendingSpend, getStats, spendableCredits } from "./economy";
 import {
   cellFromWorld,
   cellIndex,
@@ -27,7 +27,8 @@ import {
   type Cell,
 } from "./grid";
 import { getHover, setHover } from "./hover";
-import { getLatest, subscribe } from "./store";
+import { getTerrain, subscribeResources } from "./store";
+import { placementTerrainAllows } from "./resources";
 
 const AIM_STEP = 0.15; // cursor distance (in cells) before placement direction changes
 
@@ -53,11 +54,11 @@ export function Ground() {
   const strokeAnchor = useRef<Cell | null>(null); // occupied start used only to aim the first new building
   const aimFrom = useRef<{ x: number; z: number } | null>(null);
   const shiftLock = useRef(false);
-  const latest = useSyncExternalStore(subscribe, getLatest);
+  const terrain = useSyncExternalStore(subscribeResources, getTerrain);
   const selectedID = useSyncExternalStore(subscribeTools, getSelectedId);
 
   function pointerAt(e: ThreeEvent<PointerEvent>): { cell: Cell | null; spot?: { x: number; y: number } } {
-    const snap = getLatest();
+    const snap = getTerrain();
     if (!snap) return { cell: null };
     const { offX, offZ } = cellOffsets(snap);
     return {
@@ -67,9 +68,17 @@ export function Ground() {
   }
 
   function hoverPreview(cell: Cell | null): BuildPreview | null {
-    const snap = getLatest();
+    const snap = getTerrain();
     const kind = placeableKind(getSelectedId());
-    if (!snap || !cell || !kind || !cellUnlocked(snap, cell) || kindAt(snap, cell) !== "empty") return null;
+    if (
+      !snap ||
+      !cell ||
+      !kind ||
+      !cellUnlocked(snap, cell) ||
+      kindAt(snap, cell) !== "empty" ||
+      !placementTerrainAllows(snap, kind, cell.x, cell.y)
+    )
+      return null;
     return { kind, placements: [{ ...cell, dir: getFacing() }] };
   }
 
@@ -92,7 +101,7 @@ export function Ground() {
   }
 
   function sendDestroy(cell: Cell) {
-    const snap = getLatest();
+    const snap = getTerrain();
     if (!snap || !cellUnlocked(snap, cell) || kindAt(snap, cell) === "empty") return;
     connection.send({ type: "destroy", x: cell.x, y: cell.y });
     const { offX, offZ } = cellOffsets(snap);
@@ -100,25 +109,35 @@ export function Ground() {
     addBurst({ x: cell.x - offX, z: cell.y - offZ, color: "#8a8f9a", count: 10 });
   }
 
-  function canPlaceBatch(placements: Placement[], unitCost: number): boolean {
-    const snap = getLatest();
+  function canPlaceBatch(kind: PlaceableKind, placements: Placement[], unitCost: number): boolean {
+    const snap = getTerrain();
     return (
       !!snap &&
       placements.length > 0 &&
-      placements.length * unitCost <= spendableOre() &&
-      placements.every((cell) => cellUnlocked(snap, cell) && kindAt(snap, cell) === "empty")
+      placements.length * unitCost <= spendableCredits() &&
+      placements.every(
+        (cell) =>
+          cellUnlocked(snap, cell) &&
+          kindAt(snap, cell) === "empty" &&
+          placementTerrainAllows(snap, kind, cell.x, cell.y),
+      )
     );
   }
 
   function extendStroke(to: Cell) {
     const cells = stroke.current;
     if (!cells) return;
-    if (strokeKind.current) {
+    const kind = strokeKind.current;
+    if (kind) {
       const anchor = strokeAnchor.current;
       let next = cells;
       if (cells.length > 0) next = extendBuildStroke(cells, to);
       else if (anchor) next = extendBuildStroke([anchor], to).slice(1);
-      const snap = getLatest();
+      const snap = getTerrain();
+      if (snap) {
+        const blocked = next.findIndex((cell) => !placementTerrainAllows(snap, kind, cell.x, cell.y));
+        if (blocked >= 0) next = next.slice(0, blocked);
+      }
       if (anchor && to.x === anchor.x && to.y === anchor.y && snap && kindAt(snap, anchor) !== "empty") next = [];
       const added = next.length - cells.length;
       if (added > 0) sfx.preview(added);
@@ -147,7 +166,7 @@ export function Ground() {
         return;
       }
       const placements = strokePlacements(cells, getFacing(), shiftLock.current);
-      const valid = canPlaceBatch(placements, unitCost);
+      const valid = canPlaceBatch(kind, placements, unitCost);
       clearStroke();
       if (!valid) {
         sfx.deny();
@@ -172,7 +191,7 @@ export function Ground() {
         return;
       }
       if (e.repeat || (e.key !== "r" && e.key !== "R")) return;
-      const snap = getLatest();
+      const snap = getTerrain();
       const cell = getHover();
       if (snap && cell && cellUnlocked(snap, cell) && kindAt(snap, cell) !== "empty") {
         connection.send({ type: "rotate", x: cell.x, y: cell.y });
@@ -218,7 +237,7 @@ export function Ground() {
 
   useEffect(() => {
     if (!stroke.current) showHoverPreview();
-  }, [latest, selectedID]);
+  }, [selectedID, terrain]);
 
   return (
     <mesh
@@ -227,19 +246,25 @@ export function Ground() {
         if (e.nativeEvent.button !== 0) return;
         const { cell, spot } = pointerAt(e);
         if (!cell) return;
-        const snap = getLatest();
+        const snap = getTerrain();
         const tool = getSelectedTool();
-        if (snap && (!cellUnlocked(snap, cell) || (tool.id !== "destroy" && (tool.cost ?? 0) > spendableOre()))) {
+        const kind = placeableKind(tool.id);
+        if (
+          snap &&
+          (!cellUnlocked(snap, cell) ||
+            (tool.id !== "destroy" && (tool.cost ?? 0) > spendableCredits()) ||
+            (!!kind && kindAt(snap, cell) === "empty" && !placementTerrainAllows(snap, kind, cell.x, cell.y)))
+        ) {
           sfx.deny();
         }
         target.current = cell;
         setHover(cell, spot);
         strokeAnchor.current = cell;
-        const kind = placeableKind(tool.id);
         strokeKind.current = kind;
         strokeCost.current = tool.cost ?? 0;
         const startsOnStructure = !!kind && !!snap && kindAt(snap, cell) !== "empty";
-        stroke.current = startsOnStructure ? [] : [cell];
+        const startsOnInvalidTerrain = !!kind && !!snap && !placementTerrainAllows(snap, kind, cell.x, cell.y);
+        stroke.current = startsOnStructure || startsOnInvalidTerrain ? [] : [cell];
         if (kind) showBuildPreview(stroke.current);
         else setBuildPreview(null);
       }}

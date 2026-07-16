@@ -1,7 +1,7 @@
 import { Scene } from "./Scene";
 import { Vignette } from "./Vignette";
 import { Hud } from "./Hud";
-import { OreCounter } from "./OreCounter";
+import { CreditsCounter } from "./CreditsCounter";
 import { UpgradePanel } from "./UpgradePanel";
 import { ResetView } from "./ResetView";
 import { Settings } from "./Settings";
@@ -24,7 +24,7 @@ export function App() {
       <BackgroundMusic />
       <Vignette />
       <Hud />
-      <OreCounter />
+      <CreditsCounter />
       <UpgradePanel />
       <Toolbar />
       <ResetView />

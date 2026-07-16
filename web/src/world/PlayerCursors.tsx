@@ -5,8 +5,9 @@ import { getLatest, subscribe } from "./store";
 import { getPresence } from "./presence";
 import { getSession } from "../net/session";
 import { getBuildPreview } from "./buildPreviewStore";
-import { cellIndex, cellOffsets, CURSOR_TILE } from "./grid";
+import { cellIndex, cellOffsets, CURSOR_TILE, isUnlocked, unlockedRect } from "./grid";
 import { getHover } from "./hover";
+import { getStats } from "./economy";
 import { PLAYER_COLORS, playerColor } from "../ui";
 
 const TILE = CURSOR_TILE;
@@ -27,6 +28,8 @@ export function PlayerCursors() {
   useFrame((_, delta) => {
     if (!snap) return;
     const { offX, offZ } = cellOffsets(snap);
+    const stats = getStats();
+    const unlocked = unlockedRect(snap, stats.gridWidth, stats.gridHeight);
     const roster = getPresence();
     const mySlot = getSession().slot;
 
@@ -47,7 +50,7 @@ export function PlayerCursors() {
 
       if (cursor) {
         const index = cellIndex(snap, cursor.x, cursor.y);
-        if (index < 0 || snap.tiles[index].kind !== "empty") cursor = null;
+        if (!isUnlocked(unlocked, cursor.x, cursor.y) || index < 0 || snap.tiles[index].kind !== "empty") cursor = null;
       }
 
       const wasVisible = mat.opacity > 0.005;

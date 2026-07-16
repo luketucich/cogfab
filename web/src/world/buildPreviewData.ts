@@ -1,11 +1,12 @@
 import type { BuildPreview, Placement, StateMessage } from "../net/types";
 import { cellIndex } from "./grid";
+import { placementTerrainAllows } from "./resources";
 
 // visibleBuildPreview removes cells that already hold a placed building.
 export function visibleBuildPreview(preview: BuildPreview, snap: StateMessage): BuildPreview | null {
   const placements = preview.placements.filter((placement) => {
     const index = cellIndex(snap, placement.x, placement.y);
-    return index >= 0 && snap.tiles[index].kind === "empty";
+    return index >= 0 && snap.tiles[index].kind === "empty" && placementTerrainAllows(snap, preview.kind, placement.x, placement.y);
   });
   return placements.length > 0 ? { kind: preview.kind, placements } : null;
 }

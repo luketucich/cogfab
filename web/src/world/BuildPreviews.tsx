@@ -2,24 +2,30 @@ import { useSyncExternalStore } from "react";
 import { BuildPreview } from "./BuildPreview";
 import { visibleBuildPreview } from "./buildPreviewData";
 import { getBuildPreview, subscribeBuildPreview } from "./buildPreviewStore";
-import { getStats, spendableOre, subscribeStats } from "./economy";
+import { getStats, spendableCredits, subscribeStats } from "./economy";
 import { cellIndex, isUnlocked, unlockedRect } from "./grid";
 import { useFactoryModels } from "./models";
 import { getPresence, subscribePresence } from "./presence";
-import { getLatest, subscribe } from "./store";
+import { getTerrain, subscribeResources } from "./store";
 import { getSession, subscribeSession } from "../net/session";
 import type { BuildPreview as BuildPreviewData, PlaceableKind, StateMessage } from "../net/types";
 import { TOOLS } from "../toolbar/tools";
 import { DANGER, PLAYER_COLORS, playerColor } from "../ui";
+import { placementTerrainAllows } from "./resources";
 
 function previewIsValid(preview: BuildPreviewData, snap: StateMessage): boolean {
   const stats = getStats();
   const cost = TOOLS.find((tool) => tool.id === preview.kind)?.cost;
-  if (cost === undefined || preview.placements.length * cost > spendableOre()) return false;
+  if (cost === undefined || preview.placements.length * cost > spendableCredits()) return false;
   const region = unlockedRect(snap, stats.gridWidth, stats.gridHeight);
   return preview.placements.every((placement) => {
     const index = cellIndex(snap, placement.x, placement.y);
-    return index >= 0 && isUnlocked(region, placement.x, placement.y) && snap.tiles[index].kind === "empty";
+    return (
+      index >= 0 &&
+      isUnlocked(region, placement.x, placement.y) &&
+      snap.tiles[index].kind === "empty" &&
+      placementTerrainAllows(snap, preview.kind, placement.x, placement.y)
+    );
   });
 }
 
@@ -33,7 +39,7 @@ export function BuildPreviews() {
   const local = useSyncExternalStore(subscribeBuildPreview, getBuildPreview);
   const players = useSyncExternalStore(subscribePresence, getPresence);
   const session = useSyncExternalStore(subscribeSession, getSession);
-  const snap = useSyncExternalStore(subscribe, getLatest);
+  const snap = useSyncExternalStore(subscribeResources, getTerrain);
   useSyncExternalStore(subscribeStats, getStats);
   const models = useFactoryModels();
   if (!snap) return null;

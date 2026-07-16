@@ -13,6 +13,8 @@ func denseHub(w, h int) *Hub {
 	world := engine.NewWorld(w, h)
 	for y := 0; y < h; y++ {
 		for x := 0; x+2 < w; x += 3 {
+			world.SetDeposit(x, y, engine.Iron, 1_000_000_000)
+			world.SetPort(x+2, y, true)
 			world.PlaceExtractor(x, y, engine.East)
 			world.PlaceBelt(x+1, y, engine.East)
 			world.PlaceSeller(x+2, y, engine.West)
@@ -27,16 +29,16 @@ func denseHub(w, h int) *Hub {
 	return hub
 }
 
-func BenchmarkTickFullBoard(b *testing.B) {
-	h := denseHub(12, 8) // today's whole world, packed solid
+func BenchmarkTickSmallBoard(b *testing.B) {
+	h := denseHub(12, 8)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		h.tick()
 	}
 }
 
-func BenchmarkTickHugeBoard(b *testing.B) {
-	h := denseHub(64, 64) // the future: ~1,300 pipelines
+func BenchmarkTickFullWorld(b *testing.B) {
+	h := denseHub(resourceWorldSize, resourceWorldSize)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		h.tick()
@@ -62,8 +64,8 @@ func BenchmarkEconomyTickMetrics(b *testing.B) {
 	}
 }
 
-func BenchmarkRecomputeHugeBoard(b *testing.B) {
-	h := denseHub(64, 64) // route rebuild cost per placement during a drag
+func BenchmarkRecomputeFullWorld(b *testing.B) {
+	h := denseHub(resourceWorldSize, resourceWorldSize)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		h.recompute()

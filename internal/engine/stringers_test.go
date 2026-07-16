@@ -46,3 +46,13 @@ func TestParseDirectionRoundTrips(t *testing.T) {
 		t.Errorf("ParseDirection(unknown) = %v, want North", got)
 	}
 }
+
+func TestResourceKindString(t *testing.T) {
+	for kind, want := range map[ResourceKind]string{
+		Iron: "iron", Copper: "copper", Quartz: "quartz", Gold: "gold",
+	} {
+		if got := kind.String(); got != want {
+			t.Errorf("ResourceKind(%d).String() = %q, want %q", kind, got, want)
+		}
+	}
+}

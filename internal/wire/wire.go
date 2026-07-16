@@ -9,10 +9,12 @@ import "github.com/luketucich/cogfab/internal/engine"
 // StateMessage is a full snapshot of the factory grid. Tiles are in row-major
 // order (index = y*width + x), matching the engine's layout.
 type StateMessage struct {
-	Type   string     `json:"type"`
-	Width  int        `json:"width"`
-	Height int        `json:"height"`
-	Tiles  []TileView `json:"tiles"`
+	Type     string        `json:"type"`
+	Width    int           `json:"width"`
+	Height   int           `json:"height"`
+	Tiles    []TileView    `json:"tiles"`
+	Deposits []DepositView `json:"deposits"`
+	Ports    []CellView    `json:"ports"`
 }
 
 // TileView is one tile, with the enum values rendered as readable strings.
@@ -21,12 +23,33 @@ type TileView struct {
 	Dir  string `json:"dir"`  // north, east, south, west
 }
 
-// StatsMessage is the economy update: the authoritative iron-ore total, the
+// CellView identifies one sparse terrain feature in the world grid.
+type CellView struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
+
+// DepositView describes one visible resource deposit and its current stock.
+type DepositView struct {
+	X         int    `json:"x"`
+	Y         int    `json:"y"`
+	Kind      string `json:"kind"`
+	Remaining int    `json:"remaining"`
+	Capacity  int    `json:"capacity"`
+}
+
+// ResourcesMessage updates finite stock without resending the full grid.
+type ResourcesMessage struct {
+	Type     string        `json:"type"`
+	Deposits []DepositView `json:"deposits"`
+}
+
+// StatsMessage is the economy update: the authoritative credit total, the
 // current production rate, and where the upgrades stand. A cost of 0 means
 // that upgrade is maxed out. Item motion is cosmetic and lives on the client.
 type StatsMessage struct {
 	Type           string  `json:"type"`
-	IronOre        int     `json:"ironOre"`
+	Credits        int     `json:"credits"`
 	Rate           float64 `json:"ratePerSec"` // production rate of the current routes
 	ExtractorLevel int     `json:"extractorLevel"`
 	ExtractorCost  int     `json:"extractorCost"`
@@ -95,10 +118,13 @@ func Pong(t float64) PongMessage {
 	return PongMessage{Type: "pong", T: t}
 }
 
-// Snapshot builds a StateMessage describing the whole world.
-func Snapshot(w *engine.World) StateMessage {
+// Snapshot builds a state message while hiding terrain outside the unlocked
+// rectangle. Buildings remain a full fixed-size grid for simple indexing.
+func Snapshot(w *engine.World, x0, y0, x1, y1 int) StateMessage {
 	width, height := w.Width(), w.Height()
 	tiles := make([]TileView, 0, width*height)
+	deposits := make([]DepositView, 0)
+	ports := make([]CellView, 0)
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			t := w.At(x, y)
@@ -106,12 +132,42 @@ func Snapshot(w *engine.World) StateMessage {
 				Kind: t.Kind.String(),
 				Dir:  t.Dir.String(),
 			})
+			if x < x0 || x > x1 || y < y0 || y > y1 {
+				continue
+			}
+			if d := w.DepositAt(x, y); d.Kind != engine.NoResource {
+				deposits = append(deposits, depositView(x, y, d))
+			}
+			if w.HasPort(x, y) {
+				ports = append(ports, CellView{X: x, Y: y})
+			}
 		}
 	}
 	return StateMessage{
-		Type:   "state",
-		Width:  width,
-		Height: height,
-		Tiles:  tiles,
+		Type:     "state",
+		Width:    width,
+		Height:   height,
+		Tiles:    tiles,
+		Deposits: deposits,
+		Ports:    ports,
+	}
+}
+
+// Resources builds the small stock update sent after active extractors run.
+func Resources(w *engine.World, x0, y0, x1, y1 int) ResourcesMessage {
+	deposits := make([]DepositView, 0)
+	for y := y0; y <= y1; y++ {
+		for x := x0; x <= x1; x++ {
+			if d := w.DepositAt(x, y); d.Kind != engine.NoResource {
+				deposits = append(deposits, depositView(x, y, d))
+			}
+		}
+	}
+	return ResourcesMessage{Type: "resources", Deposits: deposits}
+}
+
+func depositView(x, y int, d engine.Deposit) DepositView {
+	return DepositView{
+		X: x, Y: y, Kind: d.Kind.String(), Remaining: d.Remaining, Capacity: d.Capacity,
 	}
 }

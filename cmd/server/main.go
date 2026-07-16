@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/luketucich/cogfab/internal/engine"
 	"github.com/luketucich/cogfab/internal/server"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -53,13 +52,10 @@ func main() {
 		}()
 	}
 
-	// Every room starts as an empty world: a small unlocked region and just
-	// enough ore to build a first extractor-to-seller line. Rooms are created
-	// on demand, survive ten minutes after the last player leaves, and come
-	// back from their save when someone returns later.
-	rooms := server.NewRooms(ctx, 10*time.Minute, func() *engine.World {
-		return engine.NewWorld(12, 8)
-	}, saves, metrics)
+	// Every room gets the same large logical world, with a small unlocked centre
+	// and terrain generated from its room code. Rooms are created on demand,
+	// survive ten minutes after the last player leaves, and restore from disk.
+	rooms := server.NewRooms(ctx, 10*time.Minute, server.NewResourceWorld, saves, metrics)
 
 	mux := http.NewServeMux()
 	mux.Handle("/ws", rooms.Handler())

@@ -27,7 +27,7 @@ const (
 const (
 	UpgradeExtractorRate = "extractorRate"
 	UpgradeBeltSpeed     = "beltSpeed"
-	UpgradeOreValue      = "oreValue"
+	UpgradeSaleValue     = "oreValue" // keep the deployed wire value compatible
 	UpgradeGridSize      = "gridSize"
 )
 

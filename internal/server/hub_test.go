@@ -11,6 +11,7 @@ import (
 
 func newTestWorld() *engine.World {
 	w := engine.NewWorld(3, 1)
+	w.SetDeposit(0, 0, engine.Iron, 4000)
 	w.PlaceExtractor(0, 0, engine.East)
 	w.PlaceBelt(1, 0, engine.East)
 	w.PlaceBelt(2, 0, engine.East)
@@ -46,6 +47,39 @@ func TestStateBytesProducesStateJSON(t *testing.T) {
 	}
 }
 
+func TestResourceWorldStatePayloadStaysBounded(t *testing.T) {
+	h := NewHub(NewResourceWorld("PAYLOD"))
+	h.gridTier = len(gridTiers) - 1
+	if size := len(h.stateBytes()); size > 200_000 {
+		t.Fatalf("full 64x64 state is %d bytes, want at most 200000", size)
+	}
+}
+
+func TestEconomyTickBroadcastsResourceStockChanges(t *testing.T) {
+	w := engine.NewWorld(3, 1)
+	w.SetDeposit(0, 0, engine.Iron, 10)
+	w.SetPort(2, 0, true)
+	w.PlaceExtractor(0, 0, engine.East)
+	w.PlaceBelt(1, 0, engine.East)
+	w.PlaceSeller(2, 0, engine.West)
+	h := NewHub(w)
+	c := &Client{send: make(chan []byte, 2)}
+	h.clients[c] = true
+
+	h.runEconomyTick()
+	var stats wire.StatsMessage
+	if data := <-c.send; json.Unmarshal(data, &stats) != nil || stats.Type != "stats" {
+		t.Fatalf("first tick message = %s, want stats", data)
+	}
+	var resources wire.ResourcesMessage
+	if data := <-c.send; json.Unmarshal(data, &resources) != nil || resources.Type != "resources" {
+		t.Fatalf("second tick message = %s, want resources", data)
+	}
+	if len(resources.Deposits) != 1 || resources.Deposits[0].Remaining >= 10 {
+		t.Fatalf("resource update = %+v, want consumed stock", resources.Deposits)
+	}
+}
+
 func TestRejectedWorldCommandReturnsCurrentStats(t *testing.T) {
 	h := NewHub(engine.NewWorld(2, 1))
 	c := &Client{
@@ -72,8 +106,43 @@ func TestRejectedWorldCommandReturnsCurrentStats(t *testing.T) {
 	if data := <-c.send; json.Unmarshal(data, &msg) != nil || msg.Type != "stats" {
 		t.Fatalf("rejected command should return current stats, got %s", data)
 	}
-	if msg.IronOre != startingOre {
-		t.Fatalf("returned iron ore = %d, want %d", msg.IronOre, startingOre)
+	if msg.Credits != startingCredits {
+		t.Fatalf("returned credits = %d, want %d", msg.Credits, startingCredits)
+	}
+}
+
+func TestDisconnectedClientCommandsAreIgnored(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  wire.Command
+	}{
+		{
+			name: "valid",
+			cmd:  wire.Command{Type: wire.CmdPlace, X: 0, Y: 0, Kind: wire.KindBelt, Dir: "east"},
+		},
+		{
+			name: "rejected",
+			cmd:  wire.Command{Type: wire.CmdPlace, X: 3, Y: 0, Kind: wire.KindBelt, Dir: "east"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewHub(engine.NewWorld(2, 1))
+			c := &Client{send: make(chan []byte, 1)}
+			h.clients[c] = true
+			h.removeClient(c)
+
+			if h.handleCommand(clientCommand{c: c, cmd: tt.cmd}) {
+				t.Fatal("disconnected client command should be ignored")
+			}
+			if got := h.world.At(0, 0).Kind; got != engine.Empty {
+				t.Fatalf("disconnected client changed tile to %v", got)
+			}
+			if h.credits != startingCredits {
+				t.Fatalf("disconnected client changed credits to %d", h.credits)
+			}
+		})
 	}
 }
 

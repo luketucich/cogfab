@@ -3,19 +3,17 @@ import type { CSSProperties } from "react";
 import { fmtNum, getStats, subscribeStats } from "./world/economy";
 import { panel, FONT_DISPLAY } from "./ui";
 
-// OreCounter is the centred readout at the top: the iron-ore total as the big
-// headline, with the rate and grid size tucked on one line beneath. The panel
-// keeps a fixed floor width and fixed-width digits so the fast-changing number
-// never makes it jitter. The server owns the displayed purse.
-export function OreCounter() {
-  const amount = useSmoothOre();
+// CreditsCounter is the centred readout at the top: shared credits as the big
+// headline, with the current sale rate and grid size beneath it.
+export function CreditsCounter() {
+  const amount = useSmoothCredits();
   const stats = useSyncExternalStore(subscribeStats, getStats);
 
   return (
-    <div className="hud-ore" style={{ ...panel, textAlign: "center" }}>
-      <div style={statLabel}>Iron Ore</div>
+    <div className="hud-credits" style={{ ...panel, textAlign: "center" }}>
+      <div style={statLabel}>Credits</div>
       <div style={count}>{fmtNum(amount)}</div>
-      <div className="hud-ore__subrow" style={subRow}>
+      <div className="hud-credits__subrow" style={subRow}>
         <span>
           <span style={statLabel}>Rate</span> <span style={rateValue}>+{fmtNum(stats.ratePerSec, 1)}/s</span>
         </span>
@@ -28,11 +26,9 @@ export function OreCounter() {
   );
 }
 
-// useSmoothOre counts the total up smoothly between the ~1/sec server updates,
-// predicting from the last total and the rate. It steps backward only when the
-// server total drops after spending; an overshot prediction waits for the real
-// total to catch up.
-function useSmoothOre(): number {
+// Count smoothly between server updates without ever spending credits the
+// server has not confirmed.
+function useSmoothCredits(): number {
   const [amount, setAmount] = useState(0);
 
   useEffect(() => {
@@ -40,14 +36,12 @@ function useSmoothOre(): number {
     let shown = 0;
     let lastServer = 0;
     const tick = () => {
-      const s = getStats();
-      const elapsed = s.receivedAt ? Math.min((performance.now() - s.receivedAt) / 1000, 1.2) : 0;
-      const predicted = Math.floor(s.ironOre + s.ratePerSec * elapsed);
-      // With no income the server total is final, so show it exactly; otherwise
-      // hold any prediction overshoot until the real total catches up.
-      shown = s.ironOre < lastServer || s.ratePerSec === 0 ? predicted : Math.max(predicted, shown);
-      lastServer = s.ironOre;
-      setAmount((prev) => (prev === shown ? prev : shown));
+      const stats = getStats();
+      const elapsed = stats.receivedAt ? Math.min((performance.now() - stats.receivedAt) / 1000, 1.2) : 0;
+      const predicted = Math.floor(stats.credits + stats.ratePerSec * elapsed);
+      shown = stats.credits < lastServer || stats.ratePerSec === 0 ? predicted : Math.max(predicted, shown);
+      lastServer = stats.credits;
+      setAmount((previous) => (previous === shown ? previous : shown));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -71,7 +65,7 @@ const count: CSSProperties = {
   fontWeight: 800,
   lineHeight: 1.1,
   color: "#f4f6fa",
-  fontVariantNumeric: "tabular-nums", // every digit the same width: no wobble
+  fontVariantNumeric: "tabular-nums",
 };
 
 const subRow: CSSProperties = {

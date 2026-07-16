@@ -14,12 +14,11 @@ import (
 // colour, so this matches PLAYER_COLORS in web/src/ui.ts.
 const maxPlayers = 4
 
-// maxRooms caps how many rooms one process hosts at once. Rooms are cheap
-// (a goroutine and a few kilobytes), so this is far above real use; it exists
-// so a script hammering the endpoint cannot mint goroutines and save files
-// without bound. A joiner refused by the cap gets the same full answer as a
-// fifth player.
-const maxRooms = 1000
+// maxRooms bounds the worlds, goroutines, and save files one process can own.
+// A 64x64 resource world is intentionally larger than the old board, so this
+// leaves useful headroom on the production e2-micro. A joiner refused by the
+// cap gets the same full answer as a fifth player.
+const maxRooms = 100
 
 // room is one live game: a hub plus the bookkeeping the registry needs. Every
 // field here is guarded by Rooms.mu; the hub itself runs on its own goroutine
@@ -37,18 +36,18 @@ type room struct {
 // the cold path, so one mutex guards it; each room's world stays lock-free on
 // its own goroutine.
 type Rooms struct {
-	ctx      context.Context      // parent of every hub; ends them all on shutdown
-	grace    time.Duration        // how long an empty room survives
-	newWorld func() *engine.World // main decides what a fresh factory looks like
-	saves    *Saves               // rooms restore from and save to here; nil = memory only
-	metrics  *Metrics             // nil when operational metrics are disabled
+	ctx      context.Context            // parent of every hub; ends them all on shutdown
+	grace    time.Duration              // how long an empty room survives
+	newWorld func(string) *engine.World // room code deterministically seeds a fresh world
+	saves    *Saves                     // rooms restore from and save to here; nil = memory only
+	metrics  *Metrics                   // nil when operational metrics are disabled
 
 	mu    sync.Mutex
 	rooms map[string]*room
 }
 
 // NewRooms creates an empty registry.
-func NewRooms(ctx context.Context, grace time.Duration, newWorld func() *engine.World, saves *Saves, metrics *Metrics) *Rooms {
+func NewRooms(ctx context.Context, grace time.Duration, newWorld func(string) *engine.World, saves *Saves, metrics *Metrics) *Rooms {
 	return &Rooms{ctx: ctx, grace: grace, newWorld: newWorld, saves: saves, metrics: metrics, rooms: make(map[string]*room)}
 }
 
@@ -86,9 +85,9 @@ func (rs *Rooms) join(code string) (*Hub, bool) {
 		}
 		var hub *Hub
 		if snap, ok := rs.saves.load(code); ok {
-			hub = hubFromSnapshot(snap)
+			hub = hubFromSnapshot(snap, code)
 		} else {
-			hub = NewHub(rs.newWorld())
+			hub = NewHub(rs.newWorld(code))
 		}
 		hub.code = code
 		hub.saves = rs.saves

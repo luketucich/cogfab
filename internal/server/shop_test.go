@@ -8,21 +8,34 @@ import (
 	"github.com/luketucich/cogfab/internal/wire"
 )
 
-// shopHub is a hub on an empty 12x8 world (the real game size), so the starting
-// unlocked region sits at x 4-6, y 2-4.
+// shopHub is a compact world whose centred 8x8 starter region is easy to
+// exercise without allocating the full production map in every test.
 func shopHub() *Hub {
 	return NewHub(engine.NewWorld(12, 8))
 }
 
-// lineHub is a hub with a working extractor-belt-seller line already earning,
-// since upgrades only sell while ore is flowing.
+// lineHub has a working extractor-belt-seller line because production upgrades
+// require flowing material. Grid Size does not.
 func lineHub() *Hub {
 	h := shopHub()
+	h.world.SetDeposit(4, 3, engine.Iron, 1_000_000)
+	h.world.SetPort(6, 3, true)
 	h.world.PlaceExtractor(4, 3, engine.East)
 	h.world.PlaceBelt(5, 3, engine.East)
 	h.world.PlaceSeller(6, 3, engine.West)
 	h.recompute()
 	return h
+}
+
+func prepareTerrain(h *Hub, kind engine.TileKind, placements ...wire.Placement) {
+	for _, placement := range placements {
+		switch kind {
+		case engine.Extractor:
+			h.world.SetDeposit(placement.X, placement.Y, engine.Iron, 4000)
+		case engine.Seller:
+			h.world.SetPort(placement.X, placement.Y, true)
+		}
+	}
 }
 
 func place(kind string, x, y int) wire.Command {
@@ -49,20 +62,21 @@ func TestPlacingChargesAndDestroyingRefundsHalf(t *testing.T) {
 	// nothing earning refunds in full instead).
 	h := lineHub()
 	cost := buildCost[engine.Extractor]
-	before := h.ironOre
+	before := h.credits
+	h.world.SetDeposit(4, 2, engine.Iron, 4000)
 
 	if !h.apply(place(wire.KindExtractor, 4, 2)) {
 		t.Fatal("placing an extractor on an unlocked empty cell should succeed")
 	}
-	if h.ironOre != before-cost {
-		t.Fatalf("ironOre = %d after buying an extractor, want %d", h.ironOre, before-cost)
+	if h.credits != before-cost {
+		t.Fatalf("credits = %d after buying an extractor, want %d", h.credits, before-cost)
 	}
 
 	if !h.apply(wire.Command{Type: wire.CmdDestroy, X: 4, Y: 2}) {
 		t.Fatal("destroying a structure should succeed")
 	}
-	if want := before - cost + cost/2; h.ironOre != want {
-		t.Fatalf("ironOre = %d after the refund, want %d (half back)", h.ironOre, want)
+	if want := before - cost + cost/2; h.credits != want {
+		t.Fatalf("credits = %d after the refund, want %d (half back)", h.credits, want)
 	}
 	if h.world.At(4, 2).Kind != engine.Empty {
 		t.Error("the cell should be empty after the destroy")
@@ -71,22 +85,22 @@ func TestPlacingChargesAndDestroyingRefundsHalf(t *testing.T) {
 
 func TestDestroyingTheLastLineRefundsInFull(t *testing.T) {
 	h := lineHub()
-	before := h.ironOre
+	before := h.credits
 
 	// Tearing the extractor off the only working line leaves nothing earning,
 	// so the full 75 comes back, not 37.
 	if !applyAndSettle(h, wire.Command{Type: wire.CmdDestroy, X: 4, Y: 3}) {
 		t.Fatal("destroying the extractor should succeed")
 	}
-	if h.ironOre != before+buildCost[engine.Extractor] {
-		t.Fatalf("ironOre = %d, want %d (full refund when nothing earns)", h.ironOre, before+buildCost[engine.Extractor])
+	if h.credits != before+buildCost[engine.Extractor] {
+		t.Fatalf("credits = %d, want %d (full refund when nothing earns)", h.credits, before+buildCost[engine.Extractor])
 	}
 }
 
-func TestTheGameCanAlwaysAffordALine(t *testing.T) {
-	// Burn ore the worst way we know: build a line, then tear it down starting
-	// with a piece that leaves the rest still earning, over and over. The purse
-	// plus a full liquidation must always cover a fresh 160-ore line.
+func TestRepeatedRebuildKeepsStarterLineAffordable(t *testing.T) {
+	// Spend credits in the worst refund order: build a line, then tear it down
+	// starting with a piece that leaves the rest earning. The purse plus a full
+	// liquidation must still cover a fresh 160-credit line.
 	h := shopHub()
 	lineCost := buildCost[engine.Extractor] + buildCost[engine.Belt] + buildCost[engine.Seller]
 	for i := 0; i < 5; i++ {
@@ -97,20 +111,20 @@ func TestTheGameCanAlwaysAffordALine(t *testing.T) {
 		applyAndSettle(h, wire.Command{Type: wire.CmdDestroy, X: 5, Y: 3})
 		applyAndSettle(h, wire.Command{Type: wire.CmdDestroy, X: 6, Y: 3})
 	}
-	if h.ironOre < lineCost {
-		t.Fatalf("ironOre = %d after churn, want at least %d so a line is still buildable", h.ironOre, lineCost)
+	if h.credits < lineCost {
+		t.Fatalf("credits = %d after churn, want at least %d so a line is still buildable", h.credits, lineCost)
 	}
 }
 
 func TestPlacingIsRejectedWhenBroke(t *testing.T) {
 	h := shopHub()
-	h.ironOre = 5 // less than any structure
+	h.credits = 5 // less than any structure
 
 	if h.apply(place(wire.KindBelt, 4, 2)) {
-		t.Fatal("placing should be rejected when the ore does not cover it")
+		t.Fatal("placing should be rejected when the credits do not cover it")
 	}
-	if h.ironOre != 5 || h.world.At(4, 2).Kind != engine.Empty {
-		t.Errorf("a rejected place must change nothing: ore=%d kind=%v", h.ironOre, h.world.At(4, 2).Kind)
+	if h.credits != 5 || h.world.At(4, 2).Kind != engine.Empty {
+		t.Errorf("a rejected place must change nothing: credits=%d kind=%v", h.credits, h.world.At(4, 2).Kind)
 	}
 }
 
@@ -120,21 +134,68 @@ func TestPlacingIsRejectedOutsideTheUnlockedRegion(t *testing.T) {
 	if h.apply(place(wire.KindBelt, 0, 0)) {
 		t.Fatal("placing outside the unlocked region should be rejected")
 	}
-	if h.ironOre != startingOre {
-		t.Errorf("ironOre = %d, want the untouched %d", h.ironOre, startingOre)
+	if h.credits != startingCredits {
+		t.Errorf("credits = %d, want the untouched %d", h.credits, startingCredits)
 	}
 }
 
 func TestPlacingCannotOverwrite(t *testing.T) {
 	h := shopHub()
 	h.apply(place(wire.KindBelt, 4, 2))
-	before := h.ironOre
+	before := h.credits
 
 	if h.apply(place(wire.KindExtractor, 4, 2)) {
 		t.Fatal("placing on an occupied cell should be rejected")
 	}
-	if h.world.At(4, 2).Kind != engine.Belt || h.ironOre != before {
-		t.Errorf("the belt and the ore should be untouched: kind=%v ore=%d", h.world.At(4, 2).Kind, h.ironOre)
+	if h.world.At(4, 2).Kind != engine.Belt || h.credits != before {
+		t.Errorf("the belt and credits should be untouched: kind=%v credits=%d", h.world.At(4, 2).Kind, h.credits)
+	}
+}
+
+func TestTerrainControlsPlacement(t *testing.T) {
+	tests := []struct {
+		name    string
+		kind    string
+		prepare func(*engine.World)
+		want    bool
+	}{
+		{"extractor needs a deposit", wire.KindExtractor, nil, false},
+		{"extractor accepts a live deposit", wire.KindExtractor, func(w *engine.World) {
+			w.SetDeposit(4, 2, engine.Iron, 4000)
+		}, true},
+		{"extractor rejects a depleted deposit", wire.KindExtractor, func(w *engine.World) {
+			w.RestoreDeposit(4, 2, engine.Iron, 0, 4000)
+		}, false},
+		{"seller needs a port", wire.KindSeller, nil, false},
+		{"seller accepts a port", wire.KindSeller, func(w *engine.World) {
+			w.SetPort(4, 2, true)
+		}, true},
+		{"belt rejects a live deposit", wire.KindBelt, func(w *engine.World) {
+			w.SetDeposit(4, 2, engine.Iron, 4000)
+		}, false},
+		{"belt rejects a port", wire.KindBelt, func(w *engine.World) {
+			w.SetPort(4, 2, true)
+		}, false},
+		{"belt accepts a depleted deposit", wire.KindBelt, func(w *engine.World) {
+			w.RestoreDeposit(4, 2, engine.Iron, 0, 4000)
+		}, true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := shopHub()
+			if test.prepare != nil {
+				test.prepare(h.world)
+			}
+			before := h.credits
+			got := h.apply(place(test.kind, 4, 2))
+			if got != test.want {
+				t.Fatalf("placement accepted = %v, want %v", got, test.want)
+			}
+			if !test.want && h.credits != before {
+				t.Fatal("rejected terrain placement spent credits")
+			}
+		})
 	}
 }
 
@@ -157,7 +218,8 @@ func TestPlaceBatchBuildsEveryKindAtomically(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			h := shopHub()
-			before := h.ironOre
+			prepareTerrain(h, test.kind, placements...)
+			before := h.credits
 			cmd := placeBatch(test.kindName, placements...)
 			if !h.apply(cmd) {
 				t.Fatal("a valid placement batch should succeed")
@@ -169,8 +231,8 @@ func TestPlaceBatchBuildsEveryKindAtomically(t *testing.T) {
 					t.Errorf("building %d = %+v, want %v facing %v", i, got, test.kind, wantDirections[i])
 				}
 			}
-			if want := before - len(placements)*buildCost[test.kind]; h.ironOre != want {
-				t.Fatalf("ironOre = %d after batch, want %d", h.ironOre, want)
+			if want := before - len(placements)*buildCost[test.kind]; h.credits != want {
+				t.Fatalf("credits = %d after batch, want %d", h.credits, want)
 			}
 		})
 	}
@@ -191,13 +253,17 @@ func TestInvalidPlaceBatchChangesNothing(t *testing.T) {
 		)},
 		{"locked cell", nil, placeBatch(wire.KindBelt,
 			wire.Placement{X: 4, Y: 2, Dir: "west"},
-			wire.Placement{X: 3, Y: 2, Dir: "west"},
+			wire.Placement{X: 1, Y: 2, Dir: "west"},
 		)},
 		{"occupied cell", func(h *Hub) { h.world.PlaceExtractor(5, 2, engine.East) }, placeBatch(wire.KindSeller,
 			wire.Placement{X: 4, Y: 2, Dir: "east"},
 			wire.Placement{X: 5, Y: 2, Dir: "east"},
 		)},
-		{"not enough ore", func(h *Hub) { h.ironOre = 149 }, placeBatch(wire.KindExtractor,
+		{"not enough credits", func(h *Hub) {
+			h.credits = 149
+			prepareTerrain(h, engine.Extractor,
+				wire.Placement{X: 4, Y: 2}, wire.Placement{X: 5, Y: 2})
+		}, placeBatch(wire.KindExtractor,
 			wire.Placement{X: 4, Y: 2, Dir: "east"},
 			wire.Placement{X: 5, Y: 2, Dir: "east"},
 		)},
@@ -249,15 +315,16 @@ func TestDestroyingNothingGivesNothing(t *testing.T) {
 	if h.apply(wire.Command{Type: wire.CmdDestroy, X: 4, Y: 2}) {
 		t.Fatal("destroying an empty cell should be a rejected no-op")
 	}
-	if h.ironOre != startingOre {
-		t.Errorf("ironOre = %d, want the untouched %d", h.ironOre, startingOre)
+	if h.credits != startingCredits {
+		t.Errorf("credits = %d, want the untouched %d", h.credits, startingCredits)
 	}
 }
 
 func TestRotatingIsFreeAndGuarded(t *testing.T) {
 	h := shopHub()
+	h.world.SetDeposit(4, 2, engine.Iron, 4000)
 	h.apply(place(wire.KindExtractor, 4, 2))
-	before := h.ironOre
+	before := h.credits
 
 	if !h.apply(wire.Command{Type: wire.CmdRotate, X: 4, Y: 2}) {
 		t.Fatal("rotating a structure should succeed")
@@ -265,8 +332,8 @@ func TestRotatingIsFreeAndGuarded(t *testing.T) {
 	if got := h.world.At(4, 2).Dir; got != engine.South {
 		t.Errorf("dir = %v after rotating an east extractor, want south", got)
 	}
-	if h.ironOre != before {
-		t.Errorf("ironOre = %d after a rotate, want the untouched %d (rotating is free)", h.ironOre, before)
+	if h.credits != before {
+		t.Errorf("credits = %d after a rotate, want the untouched %d (rotating is free)", h.credits, before)
 	}
 
 	if h.apply(wire.Command{Type: wire.CmdRotate, X: 5, Y: 2}) {
@@ -277,42 +344,64 @@ func TestRotatingIsFreeAndGuarded(t *testing.T) {
 	}
 }
 
-func TestBuyingNeedsIncome(t *testing.T) {
+func TestProductionUpgradesNeedIncome(t *testing.T) {
 	h := shopHub() // empty world: nothing earning
-	h.ironOre = 1 << 30
+	h.credits = 1 << 30
 
 	if h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeExtractorRate}) {
 		t.Fatal("upgrades should not sell while nothing is earning")
 	}
-	if h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeGridSize}) {
-		t.Fatal("upgrades should not sell while nothing is earning")
+	if !h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeGridSize}) {
+		t.Fatal("land should remain buyable after production stops")
 	}
 }
 
 func TestBuyingExtractorRate(t *testing.T) {
 	h := lineHub()
 	buy := wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeExtractorRate}
+	reserve := h.gridCost()
 
-	h.ironOre = extractorBaseCost
+	h.credits = reserve + extractorBaseCost - 1
+	if h.apply(buy) {
+		t.Fatal("a production upgrade should not spend the next land unlock's credits")
+	}
+	if h.extractorLevel != 0 || h.credits != reserve+extractorBaseCost-1 {
+		t.Fatal("a rejected production upgrade should change nothing")
+	}
+
+	h.credits++
 	if !h.apply(buy) {
-		t.Fatal("the first extractor level should be buyable at exact cost")
+		t.Fatal("the first extractor level should be buyable above the land reserve")
 	}
-	if h.extractorLevel != 1 || h.ironOre != 0 {
-		t.Fatalf("level=%d ore=%d after buying, want level 1 and 0", h.extractorLevel, h.ironOre)
+	if h.extractorLevel != 1 || h.credits != reserve {
+		t.Fatalf("level=%d credits=%d after buying, want level 1 and reserve %d", h.extractorLevel, h.credits, reserve)
 	}
-	if h.emitGap() >= oreGap {
-		t.Error("a higher level should emit ore closer together")
+	if h.emitGap() >= materialGap {
+		t.Error("a higher level should emit material closer together")
 	}
 
-	h.ironOre = 0
+	h.credits = 0
 	if h.apply(buy) {
 		t.Fatal("buying should be rejected when broke")
 	}
 }
 
-func TestOreValuePaybackSlowsEveryLevel(t *testing.T) {
+func TestProductionUpgradeHasNoReserveAtMaxGrid(t *testing.T) {
+	h := lineHub()
+	h.gridTier = len(gridTiers) - 1
+	h.credits = h.extractorCost()
+
+	if !h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeExtractorRate}) {
+		t.Fatal("a production upgrade should use the full balance once all land is open")
+	}
+	if h.credits != 0 || h.extractorLevel != 1 {
+		t.Fatalf("credits=%d level=%d after buying, want 0 and 1", h.credits, h.extractorLevel)
+	}
+}
+
+func TestSaleValuePaybackSlowsEveryLevel(t *testing.T) {
 	// The heart of the rebalance: prices double but payouts step up linearly,
-	// so each Ore Value level takes longer to pay for itself than the last.
+	// so each Sale Value level takes longer to pay for itself than the last.
 	h := lineHub()
 	var last float64
 	for level := 0; level < 12; level++ {
@@ -335,52 +424,56 @@ func TestRateUpgradesNeverMaxOut(t *testing.T) {
 	}
 }
 
-func TestBuyingBeltSpeedAndOreValue(t *testing.T) {
+func TestBuyingBeltSpeedAndSaleValue(t *testing.T) {
 	h := lineHub()
+	reserve := h.gridCost()
 
-	h.ironOre = beltBaseCost
+	h.credits = reserve + beltBaseCost
 	if !h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeBeltSpeed}) {
-		t.Fatal("the first belt level should be buyable at exact cost")
+		t.Fatal("the first belt level should be buyable above the land reserve")
 	}
-	if h.beltLevel != 1 || h.ironOre != 0 {
-		t.Fatalf("beltLevel=%d ore=%d after buying, want level 1 and 0", h.beltLevel, h.ironOre)
+	if h.beltLevel != 1 || h.credits != reserve {
+		t.Fatalf("beltLevel=%d credits=%d after buying, want level 1 and reserve %d", h.beltLevel, h.credits, reserve)
 	}
-	if h.beltSpeed() <= oreSpeed {
-		t.Error("a higher belt level should carry ore faster")
+	if h.beltSpeed() <= materialSpeed {
+		t.Error("a higher belt level should carry material faster")
 	}
 
-	h.ironOre = valueBaseCost
-	if !h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeOreValue}) {
-		t.Fatal("the first value level should be buyable at exact cost")
+	h.credits = reserve + valueBaseCost
+	if !h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeSaleValue}) {
+		t.Fatal("the first value level should be buyable above the land reserve")
 	}
-	if h.valueLevel != 1 || h.oreValue() != 2 {
-		t.Fatalf("valueLevel=%d worth=%v after buying, want level 1 worth 2 (base plus one per level)", h.valueLevel, h.oreValue())
+	if h.valueLevel != 1 || h.saleValueMultiplier() != 2 || h.credits != reserve {
+		t.Fatalf(
+			"valueLevel=%d worth=%v credits=%d after buying, want level 1 worth 2 and reserve %d",
+			h.valueLevel, h.saleValueMultiplier(), h.credits, reserve,
+		)
 	}
 }
 
 func TestBuyingGridSizeExpandsTheRegion(t *testing.T) {
 	h := lineHub()
-	h.ironOre = gridTiers[1].cost
+	h.credits = gridTiers[1].cost
 	buy := wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeGridSize}
 
-	if h.unlocked(3, 2) {
-		t.Fatal("cell (3,2) should start locked on the 3x3 tier")
+	if h.unlocked(1, 2) {
+		t.Fatal("cell (1,2) should start locked on the 8x8 tier")
 	}
 	if !h.apply(buy) {
 		t.Fatal("buying the next grid tier should succeed at exact cost")
 	}
-	if h.ironOre != 0 || h.gridTier != 1 {
-		t.Fatalf("ore=%d tier=%d after buying, want 0 and 1", h.ironOre, h.gridTier)
+	if h.credits != 0 || h.gridTier != 1 {
+		t.Fatalf("credits=%d tier=%d after buying, want 0 and 1", h.credits, h.gridTier)
 	}
-	if !h.unlocked(3, 2) {
-		t.Error("cell (3,2) should be unlocked on the 5x4 tier")
+	if !h.unlocked(1, 2) {
+		t.Error("cell (1,2) should be unlocked on the 12x12 tier")
 	}
 
 	if h.apply(buy) {
 		t.Fatal("buying should be rejected when broke")
 	}
 
-	h.ironOre = 1 << 30
+	h.credits = 1 << 30
 	h.gridTier = len(gridTiers) - 1
 	if h.apply(buy) {
 		t.Fatal("buying past the last tier should be rejected")
