@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { flowPaths, drainRuns } from "./flow";
+import { drainRuns, flowConnections, flowPaths } from "./flow";
 import type { Dir, StateMessage, TileView } from "../net/types";
 
 // grid builds a snapshot from a map of "x,y" -> tile; missing cells are empty.
@@ -67,6 +67,7 @@ describe("flowPaths", () => {
     const runs = flowPaths(snap);
     expect(runs.length).toBe(2);
     expect(runs.every((r) => r.complete)).toBe(true);
+    expect(flowConnections(snap).get(4)).toEqual(["north", "east", "south"]);
   });
 
   it("routes along connected belts whichever way a belt faces", () => {

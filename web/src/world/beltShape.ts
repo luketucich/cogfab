@@ -1,5 +1,6 @@
 import type { Dir, StateMessage } from "../net/types";
 import { OPPOSITE, SIDES, STEP } from "./dir";
+import { flowConnections } from "./flow";
 import { BELT_ROTATION, cellIndex, cornerRotation, teeRotation } from "./grid";
 
 // isBelt is true when (x, y) is on the grid and holds a belt.
@@ -23,21 +24,23 @@ function perpendicular(a: Dir, b: Dir): boolean {
   return a !== b && a !== OPPOSITE[b];
 }
 
-// beltShape decides how the belt at (x, y) should be drawn from its neighbours
-// alone: a side is connected when the next cell is also a belt, whichever way
-// either one faces. The connected sides pick the piece, so dropping a belt
-// between two others always joins them:
+// beltShape prefers the sides used by the live ore route, including connections
+// to extractors and sellers. Belts outside a route still join their belt
+// neighbours, which keeps incomplete construction readable. The chosen sides
+// pick the piece:
 //   0 or 1 side, or 2 opposite sides -> straight
 //   2 perpendicular sides            -> corner joining those edges
 //   3 sides                          -> tee with those arms
 //   4 sides                          -> cross
-// A lone or end belt keeps its own facing; a straight run lies along its
-// neighbours.
 export function beltShape(snap: StateMessage, x: number, y: number, dir: Dir): BeltShape {
-  const sides = SIDES.filter((side) => {
-    const [dx, dy] = STEP[side];
-    return isBelt(snap, x + dx, y + dy);
-  });
+  const index = cellIndex(snap, x, y);
+  const routed = flowConnections(snap).get(index);
+  const sides = routed
+    ? [...routed]
+    : SIDES.filter((side) => {
+        const [dx, dy] = STEP[side];
+        return isBelt(snap, x + dx, y + dy);
+      });
 
   if (sides.length === 4) return { kind: "cross" };
   if (sides.length === 3) return { kind: "tee", edges: sides as [Dir, Dir, Dir] };

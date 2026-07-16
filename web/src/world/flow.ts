@@ -26,17 +26,51 @@ export type FlowRun = { steps: FlowStep[]; complete: boolean };
 // the side each faces; between belts facing does not gate flow, so the run is just
 // the connected path the ore travels.
 //
-// The ore and the arrows both ask for the same snapshot's runs on every world
-// change, so the last answer is cached by snapshot: build bursts cost one walk,
-// not two.
+// Ore, arrows, and belt models share the cached result for each snapshot, so a
+// world change walks the grid once.
 let cachedSnap: StateMessage | null = null;
 let cachedRuns: FlowRun[] = [];
+let cachedConnections: ReadonlyMap<number, readonly Dir[]> = new Map();
+
+function refreshFlow(snap: StateMessage): void {
+  if (snap === cachedSnap) return;
+  cachedRuns = computeFlowPaths(snap);
+  cachedConnections = connectionsFor(snap, cachedRuns);
+  cachedSnap = snap;
+}
 
 export function flowPaths(snap: StateMessage): FlowRun[] {
-  if (snap === cachedSnap) return cachedRuns;
-  cachedRuns = computeFlowPaths(snap);
-  cachedSnap = snap;
+  refreshFlow(snap);
   return cachedRuns;
+}
+
+// flowConnections returns the sides ore crosses on each routed belt. Belt
+// models use the same answer as the moving ore, including machine endpoints.
+export function flowConnections(snap: StateMessage): ReadonlyMap<number, readonly Dir[]> {
+  refreshFlow(snap);
+  return cachedConnections;
+}
+
+function connectionsFor(snap: StateMessage, runs: FlowRun[]): ReadonlyMap<number, readonly Dir[]> {
+  const collected = new Map<number, Set<Dir>>();
+  for (const run of runs) {
+    for (const step of run.steps) {
+      const index = step.y * snap.width + step.x;
+      const sides = collected.get(index) ?? new Set<Dir>();
+      sides.add(step.entry);
+      sides.add(step.exit);
+      collected.set(index, sides);
+    }
+  }
+
+  const connections = new Map<number, readonly Dir[]>();
+  for (const [index, sides] of collected) {
+    connections.set(
+      index,
+      SIDES.filter((side) => sides.has(side)),
+    );
+  }
+  return connections;
 }
 
 function computeFlowPaths(snap: StateMessage): FlowRun[] {

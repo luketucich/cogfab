@@ -24,7 +24,8 @@ You start with enough ore to build an extractor, a belt, and a seller. Delivered
 ore pays for upgrades and more land. Everyone in a room shares the same grid and
 economy. Live cursors and color-coded build previews show what every player is
 about to place. Accepted buildings appear immediately with a small particle
-burst.
+burst. Belts choose straight, corner, and junction models from the route the ore
+actually follows.
 
 Build previews are temporary presence, not reservations. Dragged buildings
 cross the wire as one batch, and the server validates every cell before changing
