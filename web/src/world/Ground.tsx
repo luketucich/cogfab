@@ -1,7 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
 import { connection } from "../net/connection";
-import type { BeltPlacement, BuildPreview, Dir, PlaceableKind, StateMessage } from "../net/types";
+import type { BuildPreview, PlaceableKind, Placement, StateMessage } from "../net/types";
 import { sfx } from "../sfx";
 import {
   getFacing,
@@ -12,7 +12,7 @@ import {
   subscribe as subscribeTools,
 } from "../toolbar/tools";
 import { isTyping } from "../ui";
-import { beltPlacements, extendBeltStroke } from "./beltStroke";
+import { extendBuildStroke, strokePlacements } from "./buildStroke";
 import { setBuildPreview } from "./buildPreviewStore";
 import { addBurst } from "./burst";
 import { addPendingSpend, getStats, spendableOre } from "./economy";
@@ -21,7 +21,6 @@ import {
   cellIndex,
   cellOffsets,
   cellsBetween,
-  dirBetween,
   dirFromDelta,
   isUnlocked,
   unlockedRect,
@@ -49,7 +48,9 @@ function placeableKind(id: string): PlaceableKind | null {
 export function Ground() {
   const target = useRef<Cell | null>(null);
   const stroke = useRef<Cell[] | null>(null);
-  const strokeAnchor = useRef<Cell | null>(null); // occupied start used only to aim the first belt
+  const strokeKind = useRef<PlaceableKind | null>(null);
+  const strokeCost = useRef(0);
+  const strokeAnchor = useRef<Cell | null>(null); // occupied start used only to aim the first new building
   const aimFrom = useRef<{ x: number; z: number } | null>(null);
   const shiftLock = useRef(false);
   const latest = useSyncExternalStore(subscribe, getLatest);
@@ -65,14 +66,6 @@ export function Ground() {
     };
   }
 
-  function canApply(cell: Cell): boolean {
-    const snap = getLatest();
-    if (!snap || !cellUnlocked(snap, cell)) return false;
-    const tool = getSelectedTool();
-    if (tool.id === "destroy") return kindAt(snap, cell) !== "empty";
-    return kindAt(snap, cell) === "empty" && (tool.cost ?? 0) <= spendableOre();
-  }
-
   function hoverPreview(cell: Cell | null): BuildPreview | null {
     const snap = getLatest();
     const kind = placeableKind(getSelectedId());
@@ -84,37 +77,35 @@ export function Ground() {
     setBuildPreview(hoverPreview(cell));
   }
 
-  function showBeltPreview(cells: Cell[]) {
-    const placements = beltPlacements(cells, getFacing(), shiftLock.current);
-    setBuildPreview(placements.length > 0 ? { kind: "belt", placements } : null);
+  function showBuildPreview(cells: Cell[]) {
+    const kind = strokeKind.current;
+    const placements = strokePlacements(cells, getFacing(), shiftLock.current);
+    setBuildPreview(kind && placements.length > 0 ? { kind, placements } : null);
   }
 
   function clearStroke() {
     stroke.current = null;
+    strokeKind.current = null;
+    strokeCost.current = 0;
     strokeAnchor.current = null;
     setBuildPreview(null);
   }
 
-  function sendOne(cell: Cell, dir: Dir) {
+  function sendDestroy(cell: Cell) {
     const snap = getLatest();
-    if (!snap || !canApply(cell)) return;
-    const tool = getSelectedTool();
-    connection.send(tool.command(cell.x, cell.y, dir));
-    addPendingSpend(tool.cost ?? 0);
-    if (tool.id === "destroy") {
-      const { offX, offZ } = cellOffsets(snap);
-      sfx.destroy();
-      addBurst({ x: cell.x - offX, z: cell.y - offZ, color: "#8a8f9a", count: 10 });
-    }
+    if (!snap || !cellUnlocked(snap, cell) || kindAt(snap, cell) === "empty") return;
+    connection.send({ type: "destroy", x: cell.x, y: cell.y });
+    const { offX, offZ } = cellOffsets(snap);
+    sfx.destroy();
+    addBurst({ x: cell.x - offX, z: cell.y - offZ, color: "#8a8f9a", count: 10 });
   }
 
-  function canPlaceBeltStroke(placements: BeltPlacement[]): boolean {
+  function canPlaceBatch(placements: Placement[], unitCost: number): boolean {
     const snap = getLatest();
-    const cost = getSelectedTool().cost ?? 0;
     return (
       !!snap &&
       placements.length > 0 &&
-      placements.length * cost <= spendableOre() &&
+      placements.length * unitCost <= spendableOre() &&
       placements.every((cell) => cellUnlocked(snap, cell) && kindAt(snap, cell) === "empty")
     );
   }
@@ -122,51 +113,54 @@ export function Ground() {
   function extendStroke(to: Cell) {
     const cells = stroke.current;
     if (!cells) return;
-    if (getSelectedId() === "belt") {
+    if (strokeKind.current) {
       const anchor = strokeAnchor.current;
       let next = cells;
-      if (cells.length > 0) next = extendBeltStroke(cells, to);
-      else if (anchor) next = extendBeltStroke([anchor], to).slice(1);
+      if (cells.length > 0) next = extendBuildStroke(cells, to);
+      else if (anchor) next = extendBuildStroke([anchor], to).slice(1);
       const snap = getLatest();
       if (anchor && to.x === anchor.x && to.y === anchor.y && snap && kindAt(snap, anchor) !== "empty") next = [];
+      const added = next.length - cells.length;
+      if (added > 0) sfx.preview(added);
       stroke.current = next;
-      showBeltPreview(next);
+      showBuildPreview(next);
       return;
     }
 
     let previous = cells[cells.length - 1];
     for (const step of cellsBetween(previous, to)) {
-      sendOne(previous, shiftLock.current ? getFacing() : dirBetween(previous, step));
+      sendDestroy(previous);
       cells.push(step);
       previous = step;
     }
-    showHoverPreview(to);
+    setBuildPreview(null);
   }
 
   function endStroke() {
     const cells = stroke.current;
     if (!cells) return;
-    if (getSelectedId() === "belt") {
+    const kind = strokeKind.current;
+    const unitCost = strokeCost.current;
+    if (kind) {
       if (cells.length === 0) {
         clearStroke();
         return;
       }
-      const placements = beltPlacements(cells, getFacing(), shiftLock.current);
-      const valid = canPlaceBeltStroke(placements);
+      const placements = strokePlacements(cells, getFacing(), shiftLock.current);
+      const valid = canPlaceBatch(placements, unitCost);
       clearStroke();
       if (!valid) {
         sfx.deny();
         return;
       }
-      connection.send({ type: "beltStroke", placements });
-      addPendingSpend(placements.length * (getSelectedTool().cost ?? 0));
+      connection.send({ type: "placeBatch", kind, placements });
+      addPendingSpend(placements.length * unitCost);
       return;
     }
 
     const last = cells[cells.length - 1];
-    const drag = cells.length > 1 && !shiftLock.current;
     clearStroke();
-    sendOne(last, drag ? dirBetween(cells[cells.length - 2], last) : getFacing());
+    if (last) sendDestroy(last);
   }
 
   useEffect(() => {
@@ -174,7 +168,7 @@ export function Ground() {
       if (isTyping(e)) return;
       if (e.key === "Shift") {
         shiftLock.current = true;
-        if (stroke.current && getSelectedId() === "belt") showBeltPreview(stroke.current);
+        if (stroke.current && strokeKind.current) showBuildPreview(stroke.current);
         return;
       }
       if (e.repeat || (e.key !== "r" && e.key !== "R")) return;
@@ -185,14 +179,14 @@ export function Ground() {
         sfx.select();
       } else {
         rotateFacing();
-        if (stroke.current && getSelectedId() === "belt") showBeltPreview(stroke.current);
+        if (stroke.current && strokeKind.current) showBuildPreview(stroke.current);
         else showHoverPreview();
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key !== "Shift") return;
       shiftLock.current = false;
-      if (stroke.current && getSelectedId() === "belt") showBeltPreview(stroke.current);
+      if (stroke.current && strokeKind.current) showBuildPreview(stroke.current);
     };
     const onPointerUp = (e: PointerEvent) => {
       if (e.target instanceof HTMLCanvasElement) endStroke();
@@ -241,10 +235,13 @@ export function Ground() {
         target.current = cell;
         setHover(cell, spot);
         strokeAnchor.current = cell;
-        const startsOnStructure = tool.id === "belt" && snap && kindAt(snap, cell) !== "empty";
+        const kind = placeableKind(tool.id);
+        strokeKind.current = kind;
+        strokeCost.current = tool.cost ?? 0;
+        const startsOnStructure = !!kind && !!snap && kindAt(snap, cell) !== "empty";
         stroke.current = startsOnStructure ? [] : [cell];
-        if (tool.id === "belt") showBeltPreview(stroke.current);
-        else showHoverPreview(cell);
+        if (kind) showBuildPreview(stroke.current);
+        else setBuildPreview(null);
       }}
       onPointerMove={(e) => {
         const { cell, spot } = pointerAt(e);

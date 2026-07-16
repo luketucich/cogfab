@@ -1,26 +1,21 @@
-import type { Command, Dir, PlaceableKind } from "../net/types";
+import type { Dir } from "../net/types";
 import { SIDES } from "../world/dir";
 
-// A Tool is one toolbar entry: an id, a label, the number key that selects it,
-// what placing costs (destroy costs nothing), and the command it makes for a
-// cell facing a direction. "cell + direction in -> command out."
+// A Tool is one toolbar entry: its id, label, number key, and build cost.
 export type Tool = {
   id: string;
   label: string;
   hotkey: string;
   cost?: number;
-  command: (x: number, y: number, dir: Dir) => Command;
 };
-
-const place = (kind: PlaceableKind, x: number, y: number, dir: Dir): Command => ({ type: "place", x, y, kind, dir });
 
 // The tools. Costs mirror buildCost in internal/server/shop.go; keep them in
 // step. Add a tool here and give it an icon in Toolbar.tsx.
 export const TOOLS: Tool[] = [
-  { id: "belt", label: "Belt", hotkey: "1", cost: 10, command: (x, y, dir) => place("belt", x, y, dir) },
-  { id: "extractor", label: "Extractor", hotkey: "2", cost: 75, command: (x, y, dir) => place("extractor", x, y, dir) },
-  { id: "seller", label: "Seller", hotkey: "3", cost: 75, command: (x, y, dir) => place("seller", x, y, dir) },
-  { id: "destroy", label: "Destroy", hotkey: "4", command: (x, y) => ({ type: "destroy", x, y }) },
+  { id: "belt", label: "Belt", hotkey: "1", cost: 10 },
+  { id: "extractor", label: "Extractor", hotkey: "2", cost: 75 },
+  { id: "seller", label: "Seller", hotkey: "3", cost: 75 },
+  { id: "destroy", label: "Destroy", hotkey: "4" },
 ];
 
 // Which tool is selected. Module state (not React) so the DOM toolbar and the
@@ -43,9 +38,8 @@ export function subscribe(fn: () => void): () => void {
   };
 }
 
-// Facing decides which way a single placement points and which way the hover
-// arrow aims. The mouse-move direction and R both set it; Ground reads it each
-// frame, so no notify is needed.
+// Facing decides which way a placement and its preview point. Mouse movement
+// and R both set it; Ground reads it directly, so no notify is needed.
 let facing: Dir = "east";
 
 export const getFacing = (): Dir => facing;

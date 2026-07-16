@@ -36,7 +36,7 @@ export function Toolbar() {
   }, []);
 
   return (
-    <div style={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8 }}>
+    <div className="hud-toolbar">
       {TOOLS.map((tool) => {
         const Icon = ICONS[tool.id];
         const selected = tool.id === selectedId;

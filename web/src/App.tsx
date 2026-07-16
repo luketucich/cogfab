@@ -4,7 +4,8 @@ import { Hud } from "./Hud";
 import { OreCounter } from "./OreCounter";
 import { UpgradePanel } from "./UpgradePanel";
 import { ResetView } from "./ResetView";
-import { Controls } from "./Controls";
+import { Settings } from "./Settings";
+import { BackgroundMusic } from "./BackgroundMusic";
 import { CursorOverlay } from "./CursorOverlay";
 import { RoomFull } from "./RoomFull";
 import { Toolbar } from "./toolbar/Toolbar";
@@ -20,13 +21,14 @@ export function App() {
       }}
     >
       <Scene />
+      <BackgroundMusic />
       <Vignette />
       <Hud />
       <OreCounter />
       <UpgradePanel />
       <Toolbar />
       <ResetView />
-      <Controls />
+      <Settings />
       <CursorOverlay />
       <RoomFull />
     </div>

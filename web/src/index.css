@@ -1,5 +1,12 @@
 :root {
   color-scheme: dark;
+  --hud-edge: 20px;
+  --hud-button-size: 66px;
+  --hud-toolbar-gap: 8px;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 html,
@@ -13,6 +20,82 @@ body,
 
 canvas {
   display: block;
+}
+
+.hud-lobby {
+  top: 14px;
+  left: 14px;
+  width: 208px;
+  padding: 12px 14px;
+}
+
+.hud-ore {
+  top: 14px;
+  left: 50%;
+  min-width: 170px;
+  padding: 9px 22px;
+  transform: translateX(-50%);
+}
+
+.hud-ore__subrow {
+  gap: 8px;
+}
+
+.hud-upgrades {
+  top: 14px;
+  right: 14px;
+  width: 196px;
+  padding: 16px;
+}
+
+.hud-upgrades__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.hud-toolbar {
+  position: absolute;
+  bottom: var(--hud-edge);
+  left: 50%;
+  display: flex;
+  gap: var(--hud-toolbar-gap);
+  transform: translateX(-50%);
+}
+
+.hud-settings {
+  position: absolute;
+  bottom: var(--hud-edge);
+  left: var(--hud-edge);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.hud-settings__sheet {
+  width: min(260px, calc(100vw - 2 * var(--hud-edge)));
+  max-height: calc(100vh - var(--hud-button-size) - 3 * var(--hud-edge));
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.hud-reset {
+  position: absolute;
+  right: var(--hud-edge);
+  bottom: var(--hud-edge);
+}
+
+.hud-corner-button {
+  flex-shrink: 0;
+}
+
+.hud-volume-slider {
+  width: 100%;
+  margin: 5px 0 0;
+  accent-color: #6ea8ff;
+  cursor: pointer;
 }
 
 .cogfab-brand {
@@ -29,5 +112,91 @@ canvas {
 @media (max-width: 520px) {
   .cogfab-brand__image {
     height: 28px;
+  }
+}
+
+@media (max-width: 720px) {
+  :root {
+    --hud-edge: 10px;
+    --hud-button-size: 58px;
+    --hud-toolbar-gap: 6px;
+  }
+
+  .hud-lobby {
+    top: var(--hud-edge);
+    left: var(--hud-edge);
+    width: 184px;
+    padding: 10px 12px;
+  }
+
+  .hud-ore {
+    top: var(--hud-edge);
+    min-width: 150px;
+    padding: 8px 18px;
+  }
+
+  .hud-upgrades {
+    top: 92px;
+    right: var(--hud-edge);
+    bottom: calc(var(--hud-edge) + var(--hud-button-size) + 14px);
+    width: 180px;
+    padding: 12px;
+    overflow-y: auto;
+  }
+
+  .hud-upgrades__list {
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .hud-upgrade-card {
+    padding: 10px !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .hud-ore {
+    right: var(--hud-edge);
+    left: auto;
+    width: 142px;
+    min-width: 0;
+    padding-right: 10px;
+    padding-left: 10px;
+    transform: none;
+  }
+
+  .hud-ore__subrow {
+    gap: 4px;
+  }
+
+  .hud-upgrades {
+    top: calc(var(--hud-edge) + 94px);
+  }
+}
+
+@media (max-width: 400px) {
+  :root {
+    --hud-edge: 8px;
+    --hud-button-size: 50px;
+    --hud-toolbar-gap: 4px;
+  }
+
+  .hud-lobby {
+    width: 160px;
+  }
+
+  .hud-ore {
+    width: 128px;
+  }
+
+  .hud-upgrades {
+    width: 166px;
+  }
+}
+
+@media (max-height: 720px) {
+  .hud-upgrades {
+    bottom: calc(var(--hud-edge) + var(--hud-button-size) + 14px);
+    overflow-y: auto;
   }
 }

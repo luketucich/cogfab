@@ -49,10 +49,11 @@ func TestSnapshotJSONHasExpectedKeys(t *testing.T) {
 	}
 }
 
-func TestBeltStrokeCommandJSON(t *testing.T) {
+func TestPlaceBatchCommandJSON(t *testing.T) {
 	var cmd Command
 	err := json.Unmarshal([]byte(`{
-		"type":"beltStroke",
+		"type":"placeBatch",
+		"kind":"extractor",
 		"placements":[
 			{"x":1,"y":2,"dir":"east"},
 			{"x":2,"y":2,"dir":"south"}
@@ -61,7 +62,7 @@ func TestBeltStrokeCommandJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmd.Type != CmdBeltStroke || len(cmd.Placements) != 2 {
+	if cmd.Type != CmdPlaceBatch || cmd.Kind != KindExtractor || len(cmd.Placements) != 2 {
 		t.Fatalf("decoded command = %+v", cmd)
 	}
 	if got := cmd.Placements[1]; got.X != 2 || got.Y != 2 || got.Dir != "south" {
@@ -76,7 +77,7 @@ func TestPresenceBuildPreviewJSON(t *testing.T) {
 			Slot: 1,
 			Preview: &BuildPreview{
 				Kind:       KindSeller,
-				Placements: []BeltPlacement{{X: 4, Y: 2, Dir: "west"}},
+				Placements: []Placement{{X: 4, Y: 2, Dir: "west"}},
 			},
 		}},
 	}

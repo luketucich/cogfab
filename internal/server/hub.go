@@ -162,7 +162,7 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 		}
 		return changed
 	}
-	if sub.cmd.Type == wire.CmdPlace || sub.cmd.Type == wire.CmdBeltStroke {
+	if sub.cmd.Type == wire.CmdPlace || sub.cmd.Type == wire.CmdPlaceBatch {
 		if h.clearPreview(sub.c) {
 			h.broadcastPresence()
 		}
@@ -237,8 +237,8 @@ func (h *Hub) apply(cmd wire.Command) bool {
 	switch cmd.Type {
 	case wire.CmdPlace:
 		return h.applyPlace(cmd)
-	case wire.CmdBeltStroke:
-		return h.applyBeltStroke(cmd)
+	case wire.CmdPlaceBatch:
+		return h.applyPlaceBatch(cmd)
 	case wire.CmdDestroy:
 		return h.applyDestroy(cmd)
 	case wire.CmdRotate:

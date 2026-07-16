@@ -23,13 +23,13 @@ people can build one factory together.
 You start with enough ore to build an extractor, a belt, and a seller. Delivered
 ore pays for upgrades and more land. Everyone in a room shares the same grid and
 economy. Live cursors and color-coded build previews show what every player is
-about to place. Accepted buildings drop into the grid with a small particle
+about to place. Accepted buildings appear immediately with a small particle
 burst.
 
-Build previews are temporary presence, not reservations. Belt drags cross the
-wire as one command, and the server validates every cell before changing the
-grid. If two players overlap, the first valid action wins without leaving a
-half-built line.
+Build previews are temporary presence, not reservations. Dragged buildings
+cross the wire as one batch, and the server validates every cell before changing
+the grid. If two players overlap, the first valid action wins without leaving a
+partial build.
 
 ## Why I built it
 
@@ -58,10 +58,10 @@ not change.
 | --- | --- |
 | Simulation + server | Go (pure grid engine; hub + ore sim; WebSocket server) |
 | Transport | WebSockets (`coder/websocket`) |
-| Wire format | JSON commands and snapshots (belt strokes are atomic) |
+| Wire format | JSON commands and snapshots (placement batches are atomic) |
 | Client | React + TypeScript + Vite |
 | Rendering | Three.js via React Three Fiber |
-| Audio | WebAudio, synthesized in code (no audio files) |
+| Audio | Synthesized WebAudio effects plus a looping licensed music track |
 | Persistence | Validated JSON snapshots on disk, one file per room |
 | Observability | Prometheus-format metrics, OpenTelemetry Collector, Cloud Monitoring, Cloud Logging, and a portable Grafana dashboard |
 | TLS | the server fetches its own Let's Encrypt certificate |
@@ -108,6 +108,11 @@ npm run dev             # in web/, opens the client (usually :5173)
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/).
 Common types and scopes are listed in `.gitmessage`, which can be enabled with
 `git config commit.template .gitmessage`.
+
+## Credits
+
+- [Factory Kit](https://kenney.nl/assets/factory-kit) by Kenney, licensed under CC0.
+- ["New Direction"](https://uppbeat.io/track/kevin-macleod/new-direction) by Kevin MacLeod, licensed through Uppbeat.
 
 ## License
 

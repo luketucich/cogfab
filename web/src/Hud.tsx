@@ -23,7 +23,7 @@ export function Hud() {
   const ms = ping === null ? null : Math.round(ping);
 
   return (
-    <div style={{ ...panel, top: 14, left: 14, width: 208, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
+    <div className="hud-lobby" style={{ ...panel, display: "flex", flexDirection: "column", gap: 9 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <CogfabLogo />
         <span style={{ ...pingText, ...(connected ? null : { color: DANGER, opacity: 1 }) }}>
