@@ -3,8 +3,9 @@ export type AudioSettings = {
   effects: number;
 };
 
-const STORAGE_KEY = "cogfab.audio";
-const DEFAULT_SETTINGS: AudioSettings = { music: 0.25, effects: 0.8 };
+// The v2 values are positions on a perceptual volume curve, not direct gain.
+const STORAGE_KEY = "cogfab.audio.v2";
+const DEFAULT_SETTINGS: AudioSettings = { music: 0.6, effects: 0.7 };
 const listeners = new Set<() => void>();
 
 function clamp(value: number): number {

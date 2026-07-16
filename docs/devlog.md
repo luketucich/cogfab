@@ -12,9 +12,9 @@ What I've worked on, newest first.
 - Accepted buildings now appear immediately with a small particle burst. The
   server still decides every placement, and placed structures keep one hover
   treatment.
-- Added looping background music, subtle build-preview ticks, and separate
-  music and sound-effect controls. The HUD now scales down cleanly before its
-  panels or controls can overlap.
+- Added looping background music and subtle build-preview ticks, balanced
+  through one mixer with separate music and sound-effect controls. The HUD now
+  scales down cleanly before its panels or controls can overlap.
 
 ## 2026-07-14
 

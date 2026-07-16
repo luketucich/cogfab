@@ -7,7 +7,7 @@ import { BuildPathIndicator } from "./BuildPathIndicator";
 import { cellOffsets, MACHINE_ROTATION } from "./grid";
 import type { FactoryModels, MeshParts } from "./models";
 
-const MODEL_OPACITY = 0.5;
+const MODEL_OPACITY = 0.25;
 const BELT_INDICATOR_Y = 0.52;
 const MACHINE_INDICATOR_Y = 1.3;
 
