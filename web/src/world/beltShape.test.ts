@@ -2,16 +2,21 @@ import { describe, it, expect } from "vitest";
 import { beltShape } from "./beltShape";
 import type { Dir, StateMessage, TileView } from "../net/types";
 
-// grid builds a tiny snapshot from a map of "x,y" -> belt direction.
-function grid(width: number, height: number, belts: Record<string, Dir>): StateMessage {
+// snapshot builds a tiny factory from a map of "x,y" -> tile.
+function snapshot(width: number, height: number, cells: Record<string, TileView>): StateMessage {
   const tiles: TileView[] = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const dir = belts[`${x},${y}`];
-      tiles.push(dir ? { kind: "belt", dir } : { kind: "empty", dir: "north" });
+      tiles.push(cells[`${x},${y}`] ?? { kind: "empty", dir: "north" });
     }
   }
   return { type: "state", width, height, tiles };
+}
+
+function grid(width: number, height: number, belts: Record<string, Dir>): StateMessage {
+  const cells: Record<string, TileView> = {};
+  for (const [cell, dir] of Object.entries(belts)) cells[cell] = { kind: "belt", dir };
+  return snapshot(width, height, cells);
 }
 
 // The cell under test is the centre (1,1) of a 3x3 grid. Each side maps to its
@@ -77,5 +82,18 @@ describe("beltShape", () => {
 
   it("is a cross with four neighbours", () => {
     expect(shapeAt(centre("north", ["north", "east", "south", "west"]), "north")).toEqual({ kind: "cross" });
+  });
+
+  it("curves through the sides used by the ore route", () => {
+    const snap = snapshot(4, 3, {
+      "1,0": { kind: "belt", dir: "north" }, // nearby, but not part of the route
+      "1,1": { kind: "belt", dir: "north" },
+      "2,1": { kind: "belt", dir: "east" },
+      "3,1": { kind: "seller", dir: "west" },
+      "1,2": { kind: "extractor", dir: "north" },
+    });
+
+    expect(beltShape(snap, 1, 1, "north")).toEqual({ kind: "corner", edges: ["east", "south"] });
+    expect(beltShape(snap, 2, 1, "east")).toEqual({ kind: "straight", dir: "east" });
   });
 });

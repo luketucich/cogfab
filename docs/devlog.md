@@ -4,6 +4,9 @@ What I've worked on, newest first.
 
 ## 2026-07-15
 
+- Made belt models follow the same route as the moving ore. Connections to
+  extractors and sellers now form the correct corner automatically, while
+  disconnected construction keeps the existing neighbour-based shapes.
 - Added color-coded build previews for every player and placeable. Build drags
   share their full path as tinted building models. Subtle arrow-shaped pulses
   keep the full path readable without stacking tile highlights.
