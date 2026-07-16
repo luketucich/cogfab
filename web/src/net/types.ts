@@ -97,7 +97,7 @@ export type PlaceCommand = {
   dir: Dir;
 };
 
-export type BeltPlacement = {
+export type Placement = {
   x: number;
   y: number;
   dir: Dir;
@@ -105,18 +105,19 @@ export type BeltPlacement = {
 
 export type BuildPreview = {
   kind: PlaceableKind;
-  placements: BeltPlacement[];
+  placements: Placement[];
 };
 
-export type BeltStrokeCommand = {
-  type: "beltStroke";
-  placements: BeltPlacement[];
+export type PlaceBatchCommand = {
+  type: "placeBatch";
+  kind: PlaceableKind;
+  placements: Placement[];
 };
 
 export type PreviewCommand = {
   type: "preview";
   kind: PlaceableKind | "";
-  placements: BeltPlacement[];
+  placements: Placement[];
 };
 
 export type DestroyCommand = {
@@ -154,4 +155,4 @@ export type ProfileCommand = {
 
 // Ping is deliberately not in this union: connection.ts sends it raw and the
 // server answers it in the transport layer, before commands reach the game.
-export type Command = PlaceCommand | BeltStrokeCommand | PreviewCommand | DestroyCommand | RotateCommand | BuyCommand | HoverCommand | ProfileCommand;
+export type Command = PlaceCommand | PlaceBatchCommand | PreviewCommand | DestroyCommand | RotateCommand | BuyCommand | HoverCommand | ProfileCommand;

@@ -19,9 +19,9 @@ export function UpgradePanel() {
   const rate = (extractor: number, belt: number, value: number) => fmtNum(perExtractorRate(extractor, belt, value));
 
   return (
-    <div style={{ ...panel, top: 14, right: 14, width: 196, padding: 16 }}>
+    <div className="hud-upgrades" style={panel}>
       <div style={heading}>Upgrades</div>
-      <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div className="hud-upgrades__list">
         <UpgradeCard
           icon={PiShovelFill}
           name="Extractor Rate"
@@ -93,7 +93,7 @@ type CardProps = {
 function UpgradeCard({ icon: Icon, name, detail, tag, cost, ironOre, earning, onBuy }: CardProps) {
   const buyable = cost > 0 && cost <= ironOre && earning;
   return (
-    <div style={card}>
+    <div className="hud-upgrade-card" style={card}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <Icon size={24} color={ACCENT} />
         <div>

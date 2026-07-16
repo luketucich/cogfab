@@ -4,11 +4,17 @@ What I've worked on, newest first.
 
 ## 2026-07-15
 
-- Added color-coded build previews for every player and placeable. Belt drags
-  share the full path, while extractors and sellers use tinted copies of their
-  models. The server bounds the preview data but still decides every placement.
-- Accepted buildings now settle into the grid with a short drop and particle
-  burst. Re-recorded the README demo around the shared preview flow.
+- Added color-coded build previews for every player and placeable. Build drags
+  share their full path as tinted building models. Subtle arrow-shaped pulses
+  keep the full path readable without stacking tile highlights.
+- Extended atomic drag batches to extractors and sellers. Every build tool now
+  previews the full stroke and commits it together when the player releases.
+- Accepted buildings now appear immediately with a small particle burst. The
+  server still decides every placement, and placed structures keep one hover
+  treatment.
+- Added looping background music, subtle build-preview ticks, and separate
+  music and sound-effect controls. The HUD now scales down cleanly before its
+  panels or controls can overlap.
 
 ## 2026-07-14
 

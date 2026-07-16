@@ -52,7 +52,7 @@ func TestRejectedWorldCommandReturnsCurrentStats(t *testing.T) {
 		send: make(chan []byte, 2),
 		preview: wire.BuildPreview{
 			Kind:       wire.KindBelt,
-			Placements: []wire.BeltPlacement{{X: 0, Y: 0, Dir: "east"}},
+			Placements: []wire.Placement{{X: 0, Y: 0, Dir: "east"}},
 		},
 	}
 	h.clients[c] = true
@@ -177,8 +177,8 @@ func TestPresenceRosterTracksBuildPreviews(t *testing.T) {
 	h.addClient(c)
 	cmd := wire.Command{
 		Type: wire.CmdPreview,
-		Kind: wire.KindBelt,
-		Placements: []wire.BeltPlacement{
+		Kind: wire.KindSeller,
+		Placements: []wire.Placement{
 			{X: 1, Y: 0, Dir: "east"},
 			{X: 2, Y: 0, Dir: "south"},
 		},
@@ -200,8 +200,8 @@ func TestPresenceRosterTracksBuildPreviews(t *testing.T) {
 		t.Fatal(err)
 	}
 	preview := msg.Players[0].Preview
-	if preview == nil || preview.Kind != wire.KindBelt || len(preview.Placements) != 2 {
-		t.Fatalf("presence preview = %+v, want two belts", preview)
+	if preview == nil || preview.Kind != wire.KindSeller || len(preview.Placements) != 2 {
+		t.Fatalf("presence preview = %+v, want two sellers", preview)
 	}
 
 	if !h.clearPreview(c) || c.preview.Kind != "" {
@@ -218,11 +218,11 @@ func TestBuildPreviewRejectsUnsafeInput(t *testing.T) {
 		name string
 		cmd  wire.Command
 	}{
-		{"unknown kind", wire.Command{Kind: "factory", Placements: []wire.BeltPlacement{{X: 0, Y: 0, Dir: "east"}}}},
-		{"off grid", wire.Command{Kind: wire.KindBelt, Placements: []wire.BeltPlacement{{X: 3, Y: 0, Dir: "east"}}}},
-		{"bad direction", wire.Command{Kind: wire.KindBelt, Placements: []wire.BeltPlacement{{X: 0, Y: 0, Dir: "sideways"}}}},
-		{"duplicate", wire.Command{Kind: wire.KindBelt, Placements: []wire.BeltPlacement{{X: 0, Y: 0, Dir: "east"}, {X: 0, Y: 0, Dir: "east"}}}},
-		{"multiple machines", wire.Command{Kind: wire.KindExtractor, Placements: []wire.BeltPlacement{{X: 0, Y: 0, Dir: "east"}, {X: 1, Y: 0, Dir: "east"}}}},
+		{"empty", wire.Command{Kind: wire.KindBelt}},
+		{"unknown kind", wire.Command{Kind: "factory", Placements: []wire.Placement{{X: 0, Y: 0, Dir: "east"}}}},
+		{"off grid", wire.Command{Kind: wire.KindBelt, Placements: []wire.Placement{{X: 3, Y: 0, Dir: "east"}}}},
+		{"bad direction", wire.Command{Kind: wire.KindBelt, Placements: []wire.Placement{{X: 0, Y: 0, Dir: "sideways"}}}},
+		{"duplicate", wire.Command{Kind: wire.KindBelt, Placements: []wire.Placement{{X: 0, Y: 0, Dir: "east"}, {X: 0, Y: 0, Dir: "east"}}}},
 	}
 
 	for _, test := range tests {
@@ -234,11 +234,26 @@ func TestBuildPreviewRejectsUnsafeInput(t *testing.T) {
 	}
 }
 
+func TestBuildPreviewAllowsMachineBatches(t *testing.T) {
+	h := NewHub(engine.NewWorld(3, 1))
+	cmd := wire.Command{
+		Kind: wire.KindExtractor,
+		Placements: []wire.Placement{
+			{X: 0, Y: 0, Dir: "east"},
+			{X: 1, Y: 0, Dir: "east"},
+		},
+	}
+	preview, valid := h.buildPreview(cmd)
+	if !valid || preview.Kind != wire.KindExtractor || len(preview.Placements) != 2 {
+		t.Fatalf("machine batch preview = %+v valid=%v, want two extractors", preview, valid)
+	}
+}
+
 func TestInvalidBuildPreviewClearsPreviousIntent(t *testing.T) {
 	h := NewHub(engine.NewWorld(2, 1))
 	c := &Client{}
-	valid := wire.Command{Kind: wire.KindBelt, Placements: []wire.BeltPlacement{{X: 0, Y: 0, Dir: "east"}}}
-	invalid := wire.Command{Kind: wire.KindBelt, Placements: []wire.BeltPlacement{{X: 2, Y: 0, Dir: "east"}}}
+	valid := wire.Command{Kind: wire.KindBelt, Placements: []wire.Placement{{X: 0, Y: 0, Dir: "east"}}}
+	invalid := wire.Command{Kind: wire.KindBelt, Placements: []wire.Placement{{X: 2, Y: 0, Dir: "east"}}}
 
 	if !h.applyPreview(c, valid) || !h.applyPreview(c, invalid) {
 		t.Fatal("new and cleared previews should both count as changes")

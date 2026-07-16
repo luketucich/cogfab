@@ -1,11 +1,16 @@
-// Tiny synthesized sound effects. No audio files: each effect is a couple of
-// oscillators or a noise burst shaped by a gain envelope, and everything runs
-// through a lowpass so cues sound soft and physical instead of chiptune. The
-// context starts on the first effect, which always happens inside a click or
-// key press, so the browser's autoplay rules are satisfied.
+import { getAudioSettings, subscribeAudioSettings } from "./audioSettings";
+
+// Tiny synthesized sound effects shaped to sound soft and physical instead of
+// chiptune. The audio context starts with the first player interaction.
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
+
+function syncEffectsVolume(): void {
+  if (master) master.gain.value = 0.25 * getAudioSettings().effects;
+}
+
+subscribeAudioSettings(syncEffectsVolume);
 
 // ensure lazily creates the audio context and wakes it if the browser
 // suspended it, returning null only when WebAudio is unavailable.
@@ -14,7 +19,7 @@ function ensure(): AudioContext | null {
     if (typeof AudioContext === "undefined") return null;
     ctx = new AudioContext();
     master = ctx.createGain();
-    master.gain.value = 0.25; // lower the overall effect volume
+    syncEffectsVolume();
     master.connect(ctx.destination);
   }
   if (ctx.state === "suspended") void ctx.resume();
@@ -76,11 +81,24 @@ function rumble(cutoff: number, length: number, peak: number) {
 const DELIVER_GAP = 0.14;
 let nextDeliverAt = 0;
 
+const PREVIEW_GAP = 0.03;
+let nextPreviewAt = 0;
+
 // The game's sound board. Each is a short, distinct cue for one action.
 export const sfx = {
   // Tool selection: a short high note.
   select(): void {
     tone("sine", 880, 620, 0, 0.05, 0.25, 1600);
+  },
+  // Build preview: one quiet tick for each new cell added to a drag.
+  preview(count = 1): void {
+    const c = ensure();
+    if (!c) return;
+    for (let i = 0; i < count; i++) {
+      const startsAt = Math.max(c.currentTime, nextPreviewAt);
+      tone("triangle", jitter(520), 410, startsAt - c.currentTime, 0.045, 0.11, 1800);
+      nextPreviewAt = startsAt + PREVIEW_GAP;
+    }
   },
   // Placement: a low impact.
   place(): void {

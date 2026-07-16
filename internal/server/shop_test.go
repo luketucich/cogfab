@@ -29,8 +29,8 @@ func place(kind string, x, y int) wire.Command {
 	return wire.Command{Type: wire.CmdPlace, X: x, Y: y, Kind: kind, Dir: "east"}
 }
 
-func beltStroke(placements ...wire.BeltPlacement) wire.Command {
-	return wire.Command{Type: wire.CmdBeltStroke, Placements: placements}
+func placeBatch(kind string, placements ...wire.Placement) wire.Command {
+	return wire.Command{Type: wire.CmdPlaceBatch, Kind: kind, Placements: placements}
 }
 
 // applyAndSettle runs a command the way Run does: apply, then recompute the
@@ -138,52 +138,68 @@ func TestPlacingCannotOverwrite(t *testing.T) {
 	}
 }
 
-func TestBeltStrokePlacesEveryCellForOnePrice(t *testing.T) {
-	h := shopHub()
-	before := h.ironOre
-	cmd := beltStroke(
-		wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
-		wire.BeltPlacement{X: 5, Y: 2, Dir: "south"},
-		wire.BeltPlacement{X: 5, Y: 3, Dir: "south"},
-	)
+func TestPlaceBatchBuildsEveryKindAtomically(t *testing.T) {
+	placements := []wire.Placement{
+		{X: 4, Y: 2, Dir: "east"},
+		{X: 5, Y: 2, Dir: "south"},
+		{X: 5, Y: 3, Dir: "south"},
+	}
+	tests := []struct {
+		name     string
+		kindName string
+		kind     engine.TileKind
+	}{
+		{"belts", wire.KindBelt, engine.Belt},
+		{"extractors", wire.KindExtractor, engine.Extractor},
+		{"sellers", wire.KindSeller, engine.Seller},
+	}
 
-	if !h.apply(cmd) {
-		t.Fatal("a valid belt stroke should succeed")
-	}
-	want := []engine.Direction{engine.East, engine.South, engine.South}
-	for i, placement := range cmd.Placements {
-		got := h.world.At(placement.X, placement.Y)
-		if got.Kind != engine.Belt || got.Dir != want[i] {
-			t.Errorf("belt %d = %+v, want belt facing %v", i, got, want[i])
-		}
-	}
-	if wantOre := before - len(cmd.Placements)*buildCost[engine.Belt]; h.ironOre != wantOre {
-		t.Fatalf("ironOre = %d after stroke, want %d", h.ironOre, wantOre)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := shopHub()
+			before := h.ironOre
+			cmd := placeBatch(test.kindName, placements...)
+			if !h.apply(cmd) {
+				t.Fatal("a valid placement batch should succeed")
+			}
+			wantDirections := []engine.Direction{engine.East, engine.South, engine.South}
+			for i, placement := range placements {
+				got := h.world.At(placement.X, placement.Y)
+				if got.Kind != test.kind || got.Dir != wantDirections[i] {
+					t.Errorf("building %d = %+v, want %v facing %v", i, got, test.kind, wantDirections[i])
+				}
+			}
+			if want := before - len(placements)*buildCost[test.kind]; h.ironOre != want {
+				t.Fatalf("ironOre = %d after batch, want %d", h.ironOre, want)
+			}
+		})
 	}
 }
 
-func TestInvalidBeltStrokeChangesNothing(t *testing.T) {
+func TestInvalidPlaceBatchChangesNothing(t *testing.T) {
 	tests := []struct {
 		name    string
 		prepare func(*Hub)
 		command wire.Command
 	}{
-		{"empty", nil, beltStroke()},
-		{"duplicate cell", nil, beltStroke(
-			wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
-			wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
+		{"empty", nil, placeBatch(wire.KindBelt)},
+		{"unknown kind", nil, placeBatch("factory", wire.Placement{X: 4, Y: 2, Dir: "east"})},
+		{"bad direction", nil, placeBatch(wire.KindBelt, wire.Placement{X: 4, Y: 2, Dir: "sideways"})},
+		{"duplicate cell", nil, placeBatch(wire.KindBelt,
+			wire.Placement{X: 4, Y: 2, Dir: "east"},
+			wire.Placement{X: 4, Y: 2, Dir: "east"},
 		)},
-		{"locked cell", nil, beltStroke(
-			wire.BeltPlacement{X: 4, Y: 2, Dir: "west"},
-			wire.BeltPlacement{X: 3, Y: 2, Dir: "west"},
+		{"locked cell", nil, placeBatch(wire.KindBelt,
+			wire.Placement{X: 4, Y: 2, Dir: "west"},
+			wire.Placement{X: 3, Y: 2, Dir: "west"},
 		)},
-		{"occupied cell", func(h *Hub) { h.world.PlaceExtractor(5, 2, engine.East) }, beltStroke(
-			wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
-			wire.BeltPlacement{X: 5, Y: 2, Dir: "east"},
+		{"occupied cell", func(h *Hub) { h.world.PlaceExtractor(5, 2, engine.East) }, placeBatch(wire.KindSeller,
+			wire.Placement{X: 4, Y: 2, Dir: "east"},
+			wire.Placement{X: 5, Y: 2, Dir: "east"},
 		)},
-		{"not enough ore", func(h *Hub) { h.ironOre = 19 }, beltStroke(
-			wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
-			wire.BeltPlacement{X: 5, Y: 2, Dir: "east"},
+		{"not enough ore", func(h *Hub) { h.ironOre = 149 }, placeBatch(wire.KindExtractor,
+			wire.Placement{X: 4, Y: 2, Dir: "east"},
+			wire.Placement{X: 5, Y: 2, Dir: "east"},
 		)},
 	}
 
@@ -195,35 +211,35 @@ func TestInvalidBeltStrokeChangesNothing(t *testing.T) {
 			}
 			before := h.snapshot()
 			if h.apply(test.command) {
-				t.Fatal("invalid belt stroke should be rejected")
+				t.Fatal("invalid placement batch should be rejected")
 			}
 			if after := h.snapshot(); !reflect.DeepEqual(after, before) {
-				t.Fatalf("rejected stroke changed the room\nbefore: %+v\nafter:  %+v", before, after)
+				t.Fatalf("rejected batch changed the room\nbefore: %+v\nafter:  %+v", before, after)
 			}
 		})
 	}
 }
 
-func TestOverlappingBeltStrokesDoNotPartlyApply(t *testing.T) {
+func TestOverlappingPlaceBatchesDoNotPartlyApply(t *testing.T) {
 	h := shopHub()
-	first := beltStroke(
-		wire.BeltPlacement{X: 4, Y: 2, Dir: "east"},
-		wire.BeltPlacement{X: 5, Y: 2, Dir: "east"},
+	first := placeBatch(wire.KindBelt,
+		wire.Placement{X: 4, Y: 2, Dir: "east"},
+		wire.Placement{X: 5, Y: 2, Dir: "east"},
 	)
-	second := beltStroke(
-		wire.BeltPlacement{X: 5, Y: 2, Dir: "east"},
-		wire.BeltPlacement{X: 6, Y: 2, Dir: "east"},
+	second := placeBatch(wire.KindSeller,
+		wire.Placement{X: 5, Y: 2, Dir: "east"},
+		wire.Placement{X: 6, Y: 2, Dir: "east"},
 	)
 
 	if !h.apply(first) {
-		t.Fatal("the first stroke should succeed")
+		t.Fatal("the first batch should succeed")
 	}
 	beforeSecond := h.snapshot()
 	if h.apply(second) {
-		t.Fatal("the overlapping stroke should be rejected")
+		t.Fatal("the overlapping batch should be rejected")
 	}
 	if after := h.snapshot(); !reflect.DeepEqual(after, beforeSecond) {
-		t.Fatal("the overlapping stroke partly changed the room")
+		t.Fatal("the overlapping batch partly changed the room")
 	}
 }
 

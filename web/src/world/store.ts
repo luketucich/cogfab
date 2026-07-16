@@ -1,5 +1,5 @@
 import type { StateMessage } from "../net/types";
-import { addPlacementEffects, resetPlacementEffects } from "./placementEffectStore";
+import { showPlacementFeedback } from "./placementFeedback";
 
 // The latest snapshot from the server. Kept outside React so the socket can
 // update it without owning a component; subscribe() lets components re-render
@@ -12,15 +12,14 @@ const listeners = new Set<() => void>();
 export function setLatest(msg: StateMessage): void {
   const previous = current;
   current = msg;
-  addPlacementEffects(previous, msg);
+  showPlacementFeedback(previous, msg);
   for (const fn of listeners) fn();
 }
 
 // resetLatest clears room-specific client state before the server sends a
-// reconnect snapshot. Existing buildings should never animate as fresh ones.
+// reconnect snapshot. Existing buildings should never replay placement feedback.
 export function resetLatest(): void {
   current = null;
-  resetPlacementEffects();
   for (const fn of listeners) fn();
 }
 

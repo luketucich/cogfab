@@ -29,7 +29,7 @@ func newTestServerWithWorld(t *testing.T, newWorld func() *engine.World) string 
 	return "ws" + strings.TrimPrefix(srv.URL, "http")
 }
 
-func TestBeltStrokeBroadcastsOneCompleteState(t *testing.T) {
+func TestPlaceBatchBroadcastsOneCompleteState(t *testing.T) {
 	url := newTestServerWithWorld(t, func() *engine.World { return engine.NewWorld(3, 1) })
 	conn, read := dial(t, url+"?room=STROKE")
 	readWelcome(t, read)
@@ -40,7 +40,8 @@ func TestBeltStrokeBroadcastsOneCompleteState(t *testing.T) {
 	wctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err := conn.Write(wctx, websocket.MessageText, []byte(`{
-		"type":"beltStroke",
+		"type":"placeBatch",
+		"kind":"extractor",
 		"placements":[
 			{"x":0,"y":0,"dir":"east"},
 			{"x":1,"y":0,"dir":"east"},
@@ -48,16 +49,16 @@ func TestBeltStrokeBroadcastsOneCompleteState(t *testing.T) {
 		]
 	}`))
 	if err != nil {
-		t.Fatalf("write belt stroke: %v", err)
+		t.Fatalf("write placement batch: %v", err)
 	}
 
 	var state wire.StateMessage
 	if data := read(); json.Unmarshal(data, &state) != nil || state.Type != "state" {
-		t.Fatalf("belt stroke should broadcast state first, got %s", data)
+		t.Fatalf("placement batch should broadcast state first, got %s", data)
 	}
 	for i, tile := range state.Tiles {
-		if tile.Kind != wire.KindBelt || tile.Dir != "east" {
-			t.Errorf("tile %d = %+v, want east belt", i, tile)
+		if tile.Kind != wire.KindExtractor || tile.Dir != "east" {
+			t.Errorf("tile %d = %+v, want east extractor", i, tile)
 		}
 	}
 }

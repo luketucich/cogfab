@@ -1,11 +1,11 @@
-import type { BeltPlacement, Dir } from "../net/types";
+import type { Dir, Placement } from "../net/types";
 import { cellsBetween, dirBetween, type Cell } from "./grid";
 
 const sameCell = (a: Cell, b: Cell): boolean => a.x === b.x && a.y === b.y;
 
-// extendBeltStroke fills fast pointer jumps and lets dragging backward shorten
+// extendBuildStroke fills fast pointer jumps and lets dragging backward shorten
 // the preview before anything is sent to the server.
-export function extendBeltStroke(cells: Cell[], to: Cell): Cell[] {
+export function extendBuildStroke(cells: Cell[], to: Cell): Cell[] {
   let next = [...cells];
   for (const step of cellsBetween(next[next.length - 1], to)) {
     const existing = next.findIndex((cell) => sameCell(cell, step));
@@ -14,9 +14,9 @@ export function extendBeltStroke(cells: Cell[], to: Cell): Cell[] {
   return next;
 }
 
-// beltPlacements gives every preview cell its final facing. The last belt
-// follows the drag into it; a single click uses the player's current aim.
-export function beltPlacements(cells: Cell[], facing: Dir, locked: boolean): BeltPlacement[] {
+// strokePlacements gives every preview cell its final facing. The last building
+// follows the drag into it; a click uses the player's current aim.
+export function strokePlacements(cells: Cell[], facing: Dir, locked: boolean): Placement[] {
   return cells.map((cell, index) => {
     let dir = facing;
     if (!locked && cells.length > 1) {

@@ -99,10 +99,6 @@ func (h *Hub) buildPreview(cmd wire.Command) (wire.BuildPreview, bool) {
 		len(cmd.Placements) > h.world.Width()*h.world.Height() {
 		return wire.BuildPreview{}, false
 	}
-	if cmd.Kind != wire.KindBelt && len(cmd.Placements) != 1 {
-		return wire.BuildPreview{}, false
-	}
-
 	seen := make(map[int]bool, len(cmd.Placements))
 	for _, placement := range cmd.Placements {
 		if placement.X < 0 || placement.X >= h.world.Width() ||

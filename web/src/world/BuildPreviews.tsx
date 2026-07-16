@@ -1,7 +1,7 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { BuildPreview } from "./BuildPreview";
+import { visibleBuildPreview } from "./buildPreviewData";
 import { getBuildPreview, subscribeBuildPreview } from "./buildPreviewStore";
-import { chevronGeometry } from "./chevron";
 import { getStats, spendableOre, subscribeStats } from "./economy";
 import { cellIndex, isUnlocked, unlockedRect } from "./grid";
 import { useFactoryModels } from "./models";
@@ -36,20 +36,19 @@ export function BuildPreviews() {
   const snap = useSyncExternalStore(subscribe, getLatest);
   useSyncExternalStore(subscribeStats, getStats);
   const models = useFactoryModels();
-  const arrow = useMemo(() => chevronGeometry(), []);
   if (!snap) return null;
 
   const me = players.find((player) => player.slot === session.slot);
   const localColor = me ? playerColor(me) : PLAYER_COLORS[session.slot];
+  const visibleLocal = local ? visibleBuildPreview(local, snap) : null;
   return (
     <>
-      {local && previewCostExists(local.kind) && (
+      {local && visibleLocal && previewCostExists(local.kind) && (
         <BuildPreview
-          preview={local}
+          preview={visibleLocal}
           color={previewIsValid(local, snap) ? localColor : DANGER}
           snap={snap}
           models={models}
-          arrow={arrow}
           owner="local"
         />
       )}
@@ -58,14 +57,15 @@ export function BuildPreviews() {
         .map((player) => {
           const preview = player.preview;
           if (!preview || !previewCostExists(preview.kind)) return null;
+          const visible = visibleBuildPreview(preview, snap);
+          if (!visible) return null;
           return (
             <BuildPreview
               key={player.slot}
-              preview={preview}
+              preview={visible}
               color={playerColor(player)}
               snap={snap}
               models={models}
-              arrow={arrow}
               owner={player.name}
             />
           );
