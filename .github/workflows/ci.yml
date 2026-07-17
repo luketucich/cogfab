@@ -93,6 +93,11 @@ jobs:
           readonly app_url=http://127.0.0.1:18080
           readonly metrics_url=http://127.0.0.1:19090
           readonly index_file="$RUNNER_TEMP/cogfab-index.html"
+          readonly index_headers="$RUNNER_TEMP/cogfab-index-headers.txt"
+          readonly asset_file="$RUNNER_TEMP/cogfab-asset.js"
+          readonly asset_headers="$RUNNER_TEMP/cogfab-asset-headers.txt"
+          readonly compressed_asset="$RUNNER_TEMP/cogfab-asset.js.gz"
+          readonly compressed_headers="$RUNNER_TEMP/cogfab-compressed-headers.txt"
           readonly metrics_file="$RUNNER_TEMP/cogfab-metrics.txt"
           readonly collector_file="$RUNNER_TEMP/cogfab-collector.yaml"
 
@@ -130,10 +135,31 @@ jobs:
           test "$ready" = true
 
           test "$(curl --fail --silent "$app_url/healthz")" = ok
-          curl --fail --silent "$app_url/" --output "$index_file"
+          curl --fail --silent --dump-header "$index_headers" \
+            "$app_url/" --output "$index_file"
           grep --quiet '<title>Cogfab' "$index_file"
+          grep --ignore-case --quiet '^cache-control: no-cache' "$index_headers"
+
+          asset_path=$(sed -n 's/.*src="\([^"]*\.js\)".*/\1/p' "$index_file")
+          test -n "$asset_path"
+          curl --fail --silent --dump-header "$asset_headers" \
+            "$app_url$asset_path" --output "$asset_file"
+          curl --fail --silent --header 'Accept-Encoding: gzip' \
+            --dump-header "$compressed_headers" \
+            "$app_url$asset_path" --output "$compressed_asset"
+          grep --ignore-case --quiet \
+            '^cache-control: public, max-age=31536000, immutable' "$asset_headers"
+          grep --ignore-case --quiet '^vary: Accept-Encoding' "$asset_headers"
+          ! grep --ignore-case --quiet '^content-encoding:' "$asset_headers"
+          grep --ignore-case --quiet '^content-encoding: gzip' "$compressed_headers"
+          grep --ignore-case --quiet '^vary: Accept-Encoding' "$compressed_headers"
+          gzip --test "$compressed_asset"
+          gzip --decompress --stdout "$compressed_asset" | cmp --silent - "$asset_file"
+
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
             "$app_url/metrics")" = 404
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            "$app_url/assets/missing.js")" = 404
           grep --quiet '^cogfab_rooms_active ' "$metrics_file"
 
           docker cp "${container}:/etc/cogfab/collector.yaml" "$collector_file"

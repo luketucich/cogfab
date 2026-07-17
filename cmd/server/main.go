@@ -72,7 +72,7 @@ func main() {
 		webDir = "web/dist"
 	}
 	if _, err := os.Stat(webDir); err == nil {
-		mux.Handle("/", http.FileServer(http.Dir(webDir)))
+		mux.Handle("/", server.NewStaticHandler(webDir))
 		slog.Info("serving web app", "dir", webDir)
 	} else {
 		slog.Info("no web app to serve, WebSocket only", "dir", webDir)
