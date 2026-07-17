@@ -49,14 +49,14 @@ One Go process hosts every room. Each room owns its grid, players, and economy
 on one goroutine, so its hot path needs no locks.
 
 The server applies commands, advances the economy, and owns each deposit's
-remaining stock. Clients receive grid snapshots, sparse resource updates, and
-economy totals, while animation stays in the browser. This keeps per-item
-positions off the wire and the server focused on authoritative state.
+remaining stock. Clients receive one grid snapshot when they join, then compact
+tile, resource, and economy updates. Animation stays in the browser, keeping
+per-item positions off the wire and the server focused on authoritative state.
 
-Accepted build batches still send one full grid snapshot. The largest 64x64
-world stays under a tested 200 KB payload budget, while the once-per-second
-stock path sends only sparse deposit updates. Delta snapshots can wait until real
-command traffic justifies the extra protocol.
+Builds, rotations, and destroys send only the tiles they changed. In the wire
+benchmark, a 64-tile update is 2.7 KB instead of a 127 KB full-world snapshot.
+Full snapshots remain the safe path for joins, reconnects, land unlocks,
+unusually large batches, and older tabs during deployment.
 
 Today, one Container-Optimized OS VM is enough. Rooms already have stable codes
 and isolated state. Scaling out would require routing each room code to one
@@ -69,7 +69,7 @@ not change.
 | --- | --- |
 | Simulation + server | Go (pure grid engine; room hubs + finite-resource sim; WebSocket server) |
 | Transport | WebSockets (`coder/websocket`) |
-| Wire format | JSON commands, snapshots, and sparse resource updates (placement batches are atomic) |
+| Wire format | JSON commands, full join snapshots, and compact tile/resource updates (placement batches are atomic) |
 | Client | React + TypeScript + Vite |
 | Rendering | Three.js via React Three Fiber |
 | Audio | Synthesized WebAudio effects plus a looping licensed music track |
@@ -101,7 +101,7 @@ Good places to start:
 - `internal/server/worldgen.go`: room codes deterministically seed deposits and ports.
 - `internal/server/economy.go`: the resource simulation stays off the wire.
 - `internal/server/save.go`: room snapshots migrate, validate, and write atomically.
-- `internal/server/bench_test.go`: the benchmark behind a 148ms-to-2ms tick fix.
+- `internal/server/bench_test.go`: simulation and wire-payload benchmarks.
 
 ## Development
 

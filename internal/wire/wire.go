@@ -23,6 +23,21 @@ type TileView struct {
 	Dir  string `json:"dir"`  // north, east, south, west
 }
 
+// TileUpdate identifies one authoritative tile changed by a player command.
+type TileUpdate struct {
+	X    int    `json:"x"`
+	Y    int    `json:"y"`
+	Kind string `json:"kind"`
+	Dir  string `json:"dir"`
+}
+
+// TileUpdateMessage carries only the tiles changed by one accepted command.
+// Full state remains the join and resync format.
+type TileUpdateMessage struct {
+	Type  string       `json:"type"`
+	Tiles []TileUpdate `json:"tiles"`
+}
+
 // CellView identifies one sparse terrain feature in the world grid.
 type CellView struct {
 	X int `json:"x"`
@@ -151,6 +166,22 @@ func Snapshot(w *engine.World, x0, y0, x1, y1 int) StateMessage {
 		Deposits: deposits,
 		Ports:    ports,
 	}
+}
+
+// TileUpdates reads the current tile at each requested cell, so clients receive
+// the server's accepted result rather than an echo of untrusted command data.
+func TileUpdates(w *engine.World, cells []Placement) TileUpdateMessage {
+	tiles := make([]TileUpdate, 0, len(cells))
+	for _, cell := range cells {
+		if cell.X < 0 || cell.X >= w.Width() || cell.Y < 0 || cell.Y >= w.Height() {
+			continue
+		}
+		tile := w.At(cell.X, cell.Y)
+		tiles = append(tiles, TileUpdate{
+			X: cell.X, Y: cell.Y, Kind: tile.Kind.String(), Dir: tile.Dir.String(),
+		})
+	}
+	return TileUpdateMessage{Type: "tiles", Tiles: tiles}
 }
 
 // Resources builds the small stock update sent after active extractors run.

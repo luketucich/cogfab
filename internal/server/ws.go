@@ -18,6 +18,10 @@ const (
 	// clientReadLimit fits a full-world placement batch while still bounding
 	// memory used by an untrusted WebSocket frame.
 	clientReadLimit = 256 << 10
+
+	// Current clients request compact authoritative tile updates. Missing this
+	// value identifies an older tab that still needs full snapshots.
+	tileUpdateProtocol = "2"
 )
 
 // acceptOptions is shared by every upgrade. Only the game's own pages may open
@@ -57,7 +61,10 @@ func (h *Hub) serve(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	client := &Client{send: make(chan []byte, clientBuffer)}
+	client := &Client{
+		send:                make(chan []byte, clientBuffer),
+		supportsTileUpdates: r.URL.Query().Get("protocol") == tileUpdateProtocol,
+	}
 	h.Register(client)
 	defer h.Unregister(client)
 

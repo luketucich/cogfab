@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
@@ -52,6 +53,167 @@ func TestResourceWorldStatePayloadStaysBounded(t *testing.T) {
 	h.gridTier = len(gridTiers) - 1
 	if size := len(h.stateBytes()); size > 200_000 {
 		t.Fatalf("full 64x64 state is %d bytes, want at most 200000", size)
+	}
+}
+
+func TestWorldCommandsBroadcastAuthoritativeTileUpdates(t *testing.T) {
+	tests := []struct {
+		name       string
+		world      func() *engine.World
+		cmd        wire.Command
+		want       []wire.TileUpdate
+		wantFrames int
+	}{
+		{
+			name:       "place",
+			world:      func() *engine.World { return engine.NewWorld(2, 1) },
+			cmd:        wire.Command{Type: wire.CmdPlace, X: 0, Y: 0, Kind: wire.KindBelt, Dir: "east"},
+			want:       []wire.TileUpdate{{X: 0, Y: 0, Kind: wire.KindBelt, Dir: "east"}},
+			wantFrames: 2, // tiles, then changed credits
+		},
+		{
+			name:  "place batch",
+			world: func() *engine.World { return engine.NewWorld(2, 1) },
+			cmd: wire.Command{Type: wire.CmdPlaceBatch, Kind: wire.KindBelt, Placements: []wire.Placement{
+				{X: 0, Y: 0, Dir: "east"},
+				{X: 1, Y: 0, Dir: "south"},
+			}},
+			want: []wire.TileUpdate{
+				{X: 0, Y: 0, Kind: wire.KindBelt, Dir: "east"},
+				{X: 1, Y: 0, Kind: wire.KindBelt, Dir: "south"},
+			},
+			wantFrames: 2,
+		},
+		{
+			name: "destroy",
+			world: func() *engine.World {
+				w := engine.NewWorld(2, 1)
+				w.PlaceBelt(0, 0, engine.East)
+				return w
+			},
+			cmd:        wire.Command{Type: wire.CmdDestroy, X: 0, Y: 0},
+			want:       []wire.TileUpdate{{X: 0, Y: 0, Kind: "empty", Dir: "north"}},
+			wantFrames: 2,
+		},
+		{
+			name: "rotate",
+			world: func() *engine.World {
+				w := engine.NewWorld(2, 1)
+				w.PlaceBelt(0, 0, engine.East)
+				return w
+			},
+			cmd:        wire.Command{Type: wire.CmdRotate, X: 0, Y: 0},
+			want:       []wire.TileUpdate{{X: 0, Y: 0, Kind: wire.KindBelt, Dir: "south"}},
+			wantFrames: 1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := NewHub(test.world())
+			c := &Client{send: make(chan []byte, 4), supportsTileUpdates: true}
+			h.clients[c] = true
+
+			if !h.handleCommand(clientCommand{c: c, cmd: test.cmd}) {
+				t.Fatal("valid world command was rejected")
+			}
+			if len(c.send) != test.wantFrames {
+				t.Fatalf("queued frames = %d, want %d", len(c.send), test.wantFrames)
+			}
+			var msg wire.TileUpdateMessage
+			if data := <-c.send; json.Unmarshal(data, &msg) != nil || msg.Type != "tiles" {
+				t.Fatalf("first command result = %s, want tiles", data)
+			}
+			if !reflect.DeepEqual(msg.Tiles, test.want) {
+				t.Fatalf("tiles = %+v, want %+v", msg.Tiles, test.want)
+			}
+		})
+	}
+}
+
+func TestTileUpdatesKeepLegacyClientsInSync(t *testing.T) {
+	h := NewHub(engine.NewWorld(2, 1))
+	legacy := &Client{send: make(chan []byte, 2)}
+	current := &Client{send: make(chan []byte, 2), supportsTileUpdates: true}
+	h.clients[legacy] = true
+	h.clients[current] = true
+
+	cmd := wire.Command{Type: wire.CmdPlace, X: 0, Y: 0, Kind: wire.KindBelt, Dir: "east"}
+	if !h.handleCommand(clientCommand{c: current, cmd: cmd}) {
+		t.Fatal("valid placement was rejected")
+	}
+
+	var state wire.StateMessage
+	if data := <-legacy.send; json.Unmarshal(data, &state) != nil || state.Type != "state" {
+		t.Fatalf("legacy client result = %s, want full state", data)
+	}
+	if state.Tiles[0].Kind != wire.KindBelt {
+		t.Fatalf("legacy tile = %+v, want belt", state.Tiles[0])
+	}
+	var update wire.TileUpdateMessage
+	if data := <-current.send; json.Unmarshal(data, &update) != nil || update.Type != "tiles" {
+		t.Fatalf("current client result = %s, want tile update", data)
+	}
+}
+
+func TestProductionUpgradeBroadcastsOnlyStats(t *testing.T) {
+	w := engine.NewWorld(3, 1)
+	w.SetDeposit(0, 0, engine.Iron, 4_000)
+	w.SetPort(2, 0, true)
+	w.PlaceExtractor(0, 0, engine.East)
+	w.PlaceBelt(1, 0, engine.East)
+	w.PlaceSeller(2, 0, engine.West)
+	h := NewHub(w)
+	h.credits = 1_000
+	c := &Client{send: make(chan []byte, 2)}
+	h.clients[c] = true
+
+	cmd := wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeExtractorRate}
+	if !h.handleCommand(clientCommand{c: c, cmd: cmd}) {
+		t.Fatal("affordable production upgrade was rejected")
+	}
+	if len(c.send) != 1 {
+		t.Fatalf("queued frames = %d, want one stats update", len(c.send))
+	}
+	var stats wire.StatsMessage
+	if data := <-c.send; json.Unmarshal(data, &stats) != nil || stats.Type != "stats" {
+		t.Fatalf("production upgrade result = %s, want stats", data)
+	}
+}
+
+func TestGridUpgradeBroadcastsFullStateAndStats(t *testing.T) {
+	h := NewHub(NewResourceWorld("REVEAL"))
+	h.credits = 1_000
+	c := &Client{send: make(chan []byte, 2)}
+	h.clients[c] = true
+
+	cmd := wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeGridSize}
+	if !h.handleCommand(clientCommand{c: c, cmd: cmd}) {
+		t.Fatal("affordable grid upgrade was rejected")
+	}
+	var state wire.StateMessage
+	if data := <-c.send; json.Unmarshal(data, &state) != nil || state.Type != "state" {
+		t.Fatalf("grid upgrade first result = %s, want full state", data)
+	}
+	var stats wire.StatsMessage
+	if data := <-c.send; json.Unmarshal(data, &stats) != nil || stats.Type != "stats" {
+		t.Fatalf("grid upgrade second result = %s, want stats", data)
+	}
+	if stats.GridWidth != gridTiers[1].w || stats.GridHeight != gridTiers[1].h {
+		t.Fatalf("unlocked grid = %dx%d, want %dx%d", stats.GridWidth, stats.GridHeight, gridTiers[1].w, gridTiers[1].h)
+	}
+}
+
+func TestTileUpdatePayloadStaysSmall(t *testing.T) {
+	h := NewHub(engine.NewWorld(resourceWorldSize, resourceWorldSize))
+	placements := make([]wire.Placement, 0, resourceWorldSize)
+	for x := 0; x < resourceWorldSize; x++ {
+		h.world.PlaceBelt(x, 0, engine.East)
+		placements = append(placements, wire.Placement{X: x, Y: 0, Dir: "east"})
+	}
+	cmd := wire.Command{Type: wire.CmdPlaceBatch, Kind: wire.KindBelt, Placements: placements}
+	if size := len(h.tileUpdatesBytes(cmd)); size > 5_000 {
+		t.Fatalf("64-tile update is %d bytes, want at most 5000", size)
 	}
 }
 

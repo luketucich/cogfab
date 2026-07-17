@@ -16,11 +16,17 @@ import (
 // treated as too slow and dropped.
 const clientBuffer = 16
 
+// Incremental updates stay comfortably below a full 64x64 snapshot at this
+// size. Exceptional larger batches use the existing full-state path instead.
+const maxTileUpdateBatch = 1024
+
 // Client is one connected player: its outbound queue, identity, cursor, and
 // temporary build preview. The WebSocket plumbing lives in the transport
 // layer; these fields belong to the hub goroutine and need no locks.
 type Client struct {
 	send chan []byte
+
+	supportsTileUpdates bool // negotiated by current web clients; legacy tabs receive full state
 
 	slot  int    // 0-3; picks the default colour (PLAYER_COLORS in ui.ts)
 	name  string // "Player N" until the player picks one
@@ -180,8 +186,17 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 		h.sendTo(sub.c, h.statsBytes())
 		return false
 	}
-	h.broadcast(h.stateBytes())
-	h.recompute()
+	switch sub.cmd.Type {
+	case wire.CmdPlace, wire.CmdPlaceBatch, wire.CmdDestroy, wire.CmdRotate:
+		h.broadcastTileUpdates(sub.cmd)
+		h.recompute()
+	case wire.CmdBuy:
+		// Expanding the grid reveals new terrain. The other upgrades change only
+		// the economy, so their stats message is enough.
+		if sub.cmd.Upgrade == wire.UpgradeGridSize {
+			h.broadcast(h.stateBytes())
+		}
+	}
 	if h.credits != credits || h.currentRate() != rate {
 		h.broadcastStats() // the command spent credits or changed the rate
 	}
@@ -261,6 +276,37 @@ func (h *Hub) stateBytes() []byte {
 	return b
 }
 
+// tileUpdatesBytes is the compact authoritative result of one world command.
+func (h *Hub) tileUpdatesBytes(cmd wire.Command) []byte {
+	cells := cmd.Placements
+	if cmd.Type != wire.CmdPlaceBatch {
+		cells = []wire.Placement{{X: cmd.X, Y: cmd.Y}}
+	}
+	b, _ := json.Marshal(wire.TileUpdates(h.world, cells))
+	return b
+}
+
+// broadcastTileUpdates sends compact results to current clients and full state
+// to tabs that connected before the tile-update protocol was introduced.
+func (h *Hub) broadcastTileUpdates(cmd wire.Command) {
+	if cmd.Type == wire.CmdPlaceBatch && len(cmd.Placements) > maxTileUpdateBatch {
+		h.broadcast(h.stateBytes())
+		return
+	}
+	updates := h.tileUpdatesBytes(cmd)
+	var state []byte
+	for c := range h.clients {
+		data := updates
+		if !c.supportsTileUpdates {
+			if state == nil {
+				state = h.stateBytes()
+			}
+			data = state
+		}
+		h.queueBroadcast(c, data)
+	}
+}
+
 func (h *Hub) resourcesBytes() []byte {
 	x0, y0, x1, y1 := h.unlockedRect()
 	b, _ := json.Marshal(wire.Resources(h.world, x0, y0, x1, y1))
@@ -303,12 +349,16 @@ func (h *Hub) broadcastStats() {
 // to keep up, so it is dropped rather than allowed to stall the hub.
 func (h *Hub) broadcast(b []byte) {
 	for c := range h.clients {
-		select {
-		case c.send <- b:
-		default:
-			h.metrics.slowClientDisconnected()
-			h.removeClient(c)
-		}
+		h.queueBroadcast(c, b)
+	}
+}
+
+func (h *Hub) queueBroadcast(c *Client, b []byte) {
+	select {
+	case c.send <- b:
+	default:
+		h.metrics.slowClientDisconnected()
+		h.removeClient(c)
 	}
 }
 

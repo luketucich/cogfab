@@ -1,11 +1,12 @@
 import type { Command, ServerMessage } from "./types";
-import { resetLatest, setLatest, setResources } from "../world/store";
+import { applyTiles, resetLatest, setLatest, setResources } from "../world/store";
 import { setStats } from "../world/economy";
 import { setPresence } from "../world/presence";
 import { setRoomFull, setSession } from "./session";
 import { setPing } from "./ping";
 
 const PING_INTERVAL = 2000; // ms between round-trip probes
+const WIRE_PROTOCOL = "2";
 
 // wsUrl is where the game server lives: derived from the page in production,
 // a localhost fallback in dev (Vite serves the page, Go serves the game). The
@@ -15,7 +16,26 @@ export function wsUrl(loc: Pick<Location, "protocol" | "host" | "search"> = loca
   const proto = loc.protocol === "https:" ? "wss:" : "ws:";
   const host = dev ? "localhost:8080" : loc.host;
   const room = new URLSearchParams(loc.search).get("room");
-  return `${proto}//${host}/ws${room ? `?room=${room}` : ""}`;
+  const params = new URLSearchParams();
+  if (room) params.set("room", room);
+  params.set("protocol", WIRE_PROTOCOL);
+  return `${proto}//${host}/ws?${params}`;
+}
+
+export function handleServerMessage(msg: ServerMessage): void {
+  if (msg.type === "state") setLatest(msg);
+  else if (msg.type === "tiles") applyTiles(msg);
+  else if (msg.type === "stats") setStats(msg);
+  else if (msg.type === "resources") setResources(msg);
+  else if (msg.type === "welcome") {
+    resetLatest();
+    setSession(msg.room, msg.slot);
+    // The server's code is authoritative: write it into the address bar so
+    // the URL is the invite link and a reconnect rejoins the same room.
+    history.replaceState(null, "", `${location.pathname}?room=${msg.room}`);
+  } else if (msg.type === "presence") setPresence(msg.players);
+  else if (msg.type === "roomFull") setRoomFull();
+  else if (msg.type === "pong") setPing(performance.now() - msg.t);
 }
 
 type StatusListener = (connected: boolean) => void;
@@ -66,20 +86,8 @@ class Connection {
     };
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data as string) as ServerMessage;
-      if (msg.type === "state") setLatest(msg);
-      else if (msg.type === "stats") setStats(msg);
-      else if (msg.type === "resources") setResources(msg);
-      else if (msg.type === "welcome") {
-        resetLatest();
-        setSession(msg.room, msg.slot);
-        // The server's code is authoritative: write it into the address bar so
-        // the URL is the invite link and a reconnect rejoins the same room.
-        history.replaceState(null, "", `${location.pathname}?room=${msg.room}`);
-      } else if (msg.type === "presence") setPresence(msg.players);
-      else if (msg.type === "roomFull") {
-        this.refused = true;
-        setRoomFull();
-      } else if (msg.type === "pong") setPing(performance.now() - msg.t);
+      if (msg.type === "roomFull") this.refused = true;
+      handleServerMessage(msg);
     };
     ws.onclose = () => {
       this.stopPinging();

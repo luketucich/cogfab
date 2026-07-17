@@ -29,7 +29,7 @@ func newTestServerWithWorld(t *testing.T, newWorld func() *engine.World) string 
 	return "ws" + strings.TrimPrefix(srv.URL, "http")
 }
 
-func TestPlaceBatchBroadcastsOneCompleteState(t *testing.T) {
+func TestPlaceBatchBroadcastsOneCompactTileUpdate(t *testing.T) {
 	url := newTestServerWithWorld(t, func() *engine.World {
 		world := engine.NewWorld(3, 1)
 		for x := 0; x < 3; x++ {
@@ -37,7 +37,7 @@ func TestPlaceBatchBroadcastsOneCompleteState(t *testing.T) {
 		}
 		return world
 	})
-	conn, read := dial(t, url+"?room=STROKE")
+	conn, read := dial(t, url+"?room=STROKE&protocol=2")
 	readWelcome(t, read)
 	read() // initial state
 	read() // initial stats
@@ -58,12 +58,15 @@ func TestPlaceBatchBroadcastsOneCompleteState(t *testing.T) {
 		t.Fatalf("write placement batch: %v", err)
 	}
 
-	var state wire.StateMessage
-	if data := read(); json.Unmarshal(data, &state) != nil || state.Type != "state" {
-		t.Fatalf("placement batch should broadcast state first, got %s", data)
+	var update wire.TileUpdateMessage
+	if data := read(); json.Unmarshal(data, &update) != nil || update.Type != "tiles" {
+		t.Fatalf("placement batch should broadcast tiles first, got %s", data)
 	}
-	for i, tile := range state.Tiles {
-		if tile.Kind != wire.KindExtractor || tile.Dir != "east" {
+	if len(update.Tiles) != 3 {
+		t.Fatalf("tile update has %d tiles, want 3", len(update.Tiles))
+	}
+	for i, tile := range update.Tiles {
+		if tile.X != i || tile.Y != 0 || tile.Kind != wire.KindExtractor || tile.Dir != "east" {
 			t.Errorf("tile %d = %+v, want east extractor", i, tile)
 		}
 	}
@@ -88,7 +91,7 @@ func TestLargeLegalPlaceBatchFitsTheReadLimit(t *testing.T) {
 		rooms.Shutdown()
 	})
 
-	conn, read := dial(t, "ws"+strings.TrimPrefix(srv.URL, "http")+"?room="+roomCode)
+	conn, read := dial(t, "ws"+strings.TrimPrefix(srv.URL, "http")+"?room="+roomCode+"&protocol=2")
 	readWelcome(t, read)
 	read() // initial state
 	read() // initial stats
@@ -120,7 +123,7 @@ func TestLargeLegalPlaceBatchFitsTheReadLimit(t *testing.T) {
 
 	var state wire.StateMessage
 	if data := read(); json.Unmarshal(data, &state) != nil || state.Type != "state" {
-		t.Fatalf("large placement batch should broadcast state, got %s", data)
+		t.Fatalf("large placement batch should fall back to full state, got %s", data)
 	}
 	placed := 0
 	for _, tile := range state.Tiles {
@@ -195,6 +198,29 @@ func TestEndToEndClientReceivesWelcomeThenState(t *testing.T) {
 	}
 }
 
+func TestLegacyClientReceivesFullStateAfterPlacement(t *testing.T) {
+	url := newTestServerWithWorld(t, func() *engine.World { return engine.NewWorld(2, 1) })
+	conn, read := dial(t, url+"?room=LEGACY")
+	readWelcome(t, read)
+	read() // initial state
+	read() // initial stats
+	read() // initial presence
+
+	wctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := conn.Write(wctx, websocket.MessageText, []byte(`{"type":"place","x":0,"y":0,"kind":"belt","dir":"east"}`)); err != nil {
+		t.Fatalf("write placement: %v", err)
+	}
+
+	var state wire.StateMessage
+	if data := read(); json.Unmarshal(data, &state) != nil || state.Type != "state" {
+		t.Fatalf("legacy placement result = %s, want full state", data)
+	}
+	if state.Tiles[0].Kind != wire.KindBelt {
+		t.Fatalf("legacy tile = %+v, want belt", state.Tiles[0])
+	}
+}
+
 func TestEndToEndPingIsEchoedAsPong(t *testing.T) {
 	url := newTestServer(t)
 	conn, read := dial(t, url)
@@ -254,9 +280,9 @@ func TestPlayersShareARoomAndSeeEachOthersHover(t *testing.T) {
 
 func TestPlayersShareBuildPreviewsUntilPlacement(t *testing.T) {
 	url := newTestServerWithWorld(t, func() *engine.World { return engine.NewWorld(3, 1) })
-	connA, readA := dial(t, url+"?room=PREVUE")
+	connA, readA := dial(t, url+"?room=PREVUE&protocol=2")
 	readWelcome(t, readA)
-	_, readB := dial(t, url+"?room=PREVUE")
+	_, readB := dial(t, url+"?room=PREVUE&protocol=2")
 	readWelcome(t, readB)
 
 	wctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -296,8 +322,9 @@ previewSeen:
 				}
 			}
 		}
-		var state wire.StateMessage
-		if json.Unmarshal(data, &state) == nil && state.Type == "state" && state.Tiles[0].Kind == wire.KindBelt {
+		var update wire.TileUpdateMessage
+		if json.Unmarshal(data, &update) == nil && update.Type == "tiles" &&
+			len(update.Tiles) == 1 && update.Tiles[0].Kind == wire.KindBelt {
 			placed = true
 		}
 	}

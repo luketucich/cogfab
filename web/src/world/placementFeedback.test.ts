@@ -25,8 +25,13 @@ describe("placement feedback", () => {
 
   it("finds every empty-to-building transition", () => {
     const previous = state(tile("empty"), tile("empty"), tile("belt"));
-    const next = state(tile("extractor"), tile("belt"), tile("belt"));
-    expect(newPlacements(previous, next)).toEqual([
+    expect(
+      newPlacements(previous, [
+        { x: 0, y: 0, kind: "extractor", dir: "east" },
+        { x: 1, y: 0, kind: "belt", dir: "east" },
+        { x: 2, y: 0, kind: "belt", dir: "south" },
+      ]),
+    ).toEqual([
       { x: 0, y: 0, kind: "extractor" },
       { x: 1, y: 0, kind: "belt" },
     ]);
@@ -34,19 +39,24 @@ describe("placement feedback", () => {
 
   it("adds immediate bursts and one sound for a placement batch", () => {
     const previous = state(tile("empty"), tile("empty"));
-    const next = state(tile("extractor"), tile("belt"));
-    showPlacementFeedback(previous, next);
+    showPlacementFeedback(previous, [
+      { x: 0, y: 0, kind: "extractor", dir: "east" },
+      { x: 1, y: 0, kind: "belt", dir: "east" },
+    ]);
     expect(burstSpy).toHaveBeenCalledTimes(2);
     expect(burstSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({ radius: 0.62, count: 12 }));
     expect(burstSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({ radius: 0.38, count: 7 }));
     expect(placeSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("ignores initial loads, rotations, and destroyed tiles", () => {
-    const next = state(tile("belt", "south"), tile("empty"));
-    expect(newPlacements(null, next)).toEqual([]);
-    expect(newPlacements(state(tile("belt", "east"), tile("seller")), next)).toEqual([]);
-    showPlacementFeedback(null, next);
+  it("ignores rotations and destroyed tiles", () => {
+    const previous = state(tile("belt", "east"), tile("seller"));
+    const entries = [
+      { x: 0, y: 0, kind: "belt", dir: "south" },
+      { x: 1, y: 0, kind: "empty", dir: "north" },
+    ] as const;
+    expect(newPlacements(previous, [...entries])).toEqual([]);
+    showPlacementFeedback(previous, [...entries]);
     expect(burstSpy).not.toHaveBeenCalled();
     expect(placeSpy).not.toHaveBeenCalled();
   });

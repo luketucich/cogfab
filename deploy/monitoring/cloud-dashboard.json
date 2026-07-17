@@ -132,7 +132,7 @@
       },
       {
         "widget": {
-          "title": "Command latency p95",
+          "title": "Server command processing p95",
           "xyChart": {
             "dataSets": [
               {
