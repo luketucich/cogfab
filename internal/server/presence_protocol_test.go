@@ -6,6 +6,7 @@ import (
 
 	"github.com/luketucich/cogfab/internal/engine"
 	"github.com/luketucich/cogfab/internal/wire"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func testProtocolClient(slot, protocol int) *Client {
@@ -17,6 +18,7 @@ func testProtocolClient(slot, protocol int) *Client {
 
 func TestCursorUpdatesUseEachRecipientsProtocol(t *testing.T) {
 	h := NewHub(engine.NewWorld(2, 1))
+	h.metrics = NewMetrics()
 	source := testProtocolClient(0, compactPresenceProtocol)
 	compact := testProtocolClient(1, compactPresenceProtocol)
 	tileEra := testProtocolClient(2, tileUpdateProtocol)
@@ -52,6 +54,12 @@ func TestCursorUpdatesUseEachRecipientsProtocol(t *testing.T) {
 		if len(presence.Players) != 4 || !presence.Players[0].Hovering {
 			t.Fatalf("legacy presence = %+v, want four players and source hover", presence.Players)
 		}
+	}
+	if got := testutil.ToFloat64(h.metrics.outboundMessages.WithLabelValues("cursor")); got != 1 {
+		t.Errorf("compact cursor messages = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(h.metrics.outboundMessages.WithLabelValues("presence")); got != 2 {
+		t.Errorf("legacy presence messages = %v, want 2", got)
 	}
 }
 

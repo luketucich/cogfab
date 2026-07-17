@@ -243,6 +243,9 @@ deploy/monitoring/apply.sh
 Open the [Cogfab Operations dashboard](https://console.cloud.google.com/monitoring/dashboards/builder/cogfab-operations?project=cogfab-io)
 to view the live charts.
 
+The WebSocket panels count each payload after it is queued for one recipient.
+Payload bytes exclude WebSocket framing and TLS overhead.
+
 The production policies notify the primary operator by email. The script
 preserves attached notification channels. New projects must add their own
 destination under **Monitoring > Alerting > Edit notification channels**.

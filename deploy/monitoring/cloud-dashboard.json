@@ -232,6 +232,48 @@
         "yPos": 20,
         "height": 8,
         "width": 12
+      },
+      {
+        "widget": {
+          "title": "WebSocket messages per second",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "STACKED_AREA",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (message) (rate(cogfab_websocket_messages_queued_total[5m]))",
+                  "unitOverride": "1/s"
+                },
+                "legendTemplate": "${message}"
+              }
+            ]
+          }
+        },
+        "xPos": 0,
+        "yPos": 28,
+        "height": 8,
+        "width": 12
+      },
+      {
+        "widget": {
+          "title": "WebSocket payload bytes per second",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "STACKED_AREA",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (message) (rate(cogfab_websocket_payload_bytes_queued_total[5m]))",
+                  "unitOverride": "By/s"
+                },
+                "legendTemplate": "${message}"
+              }
+            ]
+          }
+        },
+        "xPos": 12,
+        "yPos": 28,
+        "height": 8,
+        "width": 12
       }
     ]
   },

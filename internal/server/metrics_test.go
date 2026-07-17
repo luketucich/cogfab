@@ -29,12 +29,15 @@ func TestMetricsEndpointUsesBoundedLabels(t *testing.T) {
 	metrics.commandProcessed("a-client-invented-this", false, time.Millisecond)
 	metrics.commandProcessed(wire.CmdPlaceBatch, true, time.Millisecond)
 	metrics.commandProcessed(wire.CmdPreview, true, time.Millisecond)
+	metrics.outboundQueued(outboundMessage("invented-message"), 7)
 	body := scrapeMetrics(t, metrics)
 
 	for _, want := range []string{
 		`cogfab_commands_total{command="unknown",outcome="ignored"} 1`,
 		`cogfab_commands_total{command="placeBatch",outcome="applied"} 1`,
 		`cogfab_commands_total{command="preview",outcome="applied"} 1`,
+		`cogfab_websocket_messages_queued_total{message="unknown"} 1`,
+		`cogfab_websocket_payload_bytes_queued_total{message="unknown"} 7`,
 		"cogfab_rooms_active 0",
 		"go_goroutines",
 	} {
@@ -42,8 +45,59 @@ func TestMetricsEndpointUsesBoundedLabels(t *testing.T) {
 			t.Errorf("metrics output does not contain %q", want)
 		}
 	}
-	if strings.Contains(body, "a-client-invented-this") {
-		t.Error("metrics output contains an unbounded client-supplied label")
+	for _, forbidden := range []string{"a-client-invented-this", "invented-message"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("metrics output contains unbounded label %q", forbidden)
+		}
+	}
+}
+
+func TestMetricsTrackQueuedWebSocketTrafficPerRecipient(t *testing.T) {
+	metrics := NewMetrics()
+	hub := NewHub(engine.NewWorld(1, 1))
+	hub.metrics = metrics
+	first := &Client{send: make(chan []byte, 1)}
+	second := &Client{send: make(chan []byte, 1)}
+	hub.clients[first] = true
+	hub.clients[second] = true
+	payload := []byte(`{"type":"stats"}`)
+
+	hub.broadcast(outboundStats, payload)
+
+	if got := testutil.ToFloat64(metrics.outboundMessages.WithLabelValues("stats")); got != 2 {
+		t.Errorf("queued stats messages = %v, want 2", got)
+	}
+	if got := testutil.ToFloat64(metrics.outboundBytes.WithLabelValues("stats")); got != float64(2*len(payload)) {
+		t.Errorf("queued stats bytes = %v, want %d", got, 2*len(payload))
+	}
+}
+
+func TestMetricsTrackProtocolSpecificTilePayloads(t *testing.T) {
+	metrics := NewMetrics()
+	hub := NewHub(engine.NewWorld(2, 1))
+	hub.metrics = metrics
+	legacy := &Client{send: make(chan []byte, 1)}
+	current := &Client{send: make(chan []byte, 1), protocol: tileUpdateProtocol}
+	hub.clients[legacy] = true
+	hub.clients[current] = true
+	hub.world.PlaceBelt(0, 0, engine.East)
+	cmd := wire.Command{Type: wire.CmdPlace, X: 0, Y: 0}
+	wantStateBytes := len(hub.stateBytes())
+	wantTileBytes := len(hub.tileUpdatesBytes(cmd))
+
+	hub.broadcastTileUpdates(cmd)
+
+	if got := testutil.ToFloat64(metrics.outboundMessages.WithLabelValues("state")); got != 1 {
+		t.Errorf("legacy state messages = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(metrics.outboundMessages.WithLabelValues("tiles")); got != 1 {
+		t.Errorf("current tile messages = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(metrics.outboundBytes.WithLabelValues("state")); got != float64(wantStateBytes) {
+		t.Errorf("legacy state bytes = %v, want %d", got, wantStateBytes)
+	}
+	if got := testutil.ToFloat64(metrics.outboundBytes.WithLabelValues("tiles")); got != float64(wantTileBytes) {
+		t.Errorf("current tile bytes = %v, want %d", got, wantTileBytes)
 	}
 }
 
@@ -97,10 +151,10 @@ func TestMetricsTrackPlayersAndSlowClients(t *testing.T) {
 	hub.metrics = metrics
 	slow := &Client{send: make(chan []byte, 4)}
 
-	hub.addClient(slow)            // welcome, state, and stats occupy three slots
-	slow.send <- []byte("backlog") // the fourth slot makes the client fall behind
-	hub.broadcast([]byte("next"))  // a full queue disconnects it
-	hub.removeClient(slow)         // a later unregister must not count it twice
+	hub.addClient(slow)                          // welcome, state, and stats occupy three slots
+	slow.send <- []byte("backlog")               // the fourth slot makes the client fall behind
+	hub.broadcast(outboundStats, []byte("next")) // a full queue disconnects it
+	hub.removeClient(slow)                       // a later unregister must not count it twice
 
 	checks := []struct {
 		name string
@@ -111,6 +165,7 @@ func TestMetricsTrackPlayersAndSlowClients(t *testing.T) {
 		{"connections", testutil.ToFloat64(metrics.playerConnections), 1},
 		{"disconnections", testutil.ToFloat64(metrics.playerDisconnections), 1},
 		{"slow-client disconnections", testutil.ToFloat64(metrics.slowClientDisconnections), 1},
+		{"queued stats messages", testutil.ToFloat64(metrics.outboundMessages.WithLabelValues("stats")), 1},
 	}
 	for _, check := range checks {
 		if check.got != check.want {

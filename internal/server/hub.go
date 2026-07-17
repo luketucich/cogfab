@@ -20,6 +20,20 @@ const clientBuffer = 16
 // size. Exceptional larger batches use the existing full-state path instead.
 const maxTileUpdateBatch = 1024
 
+// outboundMessage is the fixed metric label for one queued game payload.
+type outboundMessage string
+
+const (
+	outboundWelcome      outboundMessage = "welcome"
+	outboundState        outboundMessage = "state"
+	outboundTiles        outboundMessage = "tiles"
+	outboundStats        outboundMessage = "stats"
+	outboundResources    outboundMessage = "resources"
+	outboundPresence     outboundMessage = "presence"
+	outboundCursor       outboundMessage = "cursor"
+	outboundBuildPreview outboundMessage = "buildPreview"
+)
+
 // Client is one connected player: its outbound queue, identity, cursor, and
 // temporary build preview. The WebSocket plumbing lives in the transport
 // layer; these fields belong to the hub goroutine and need no locks.
@@ -139,7 +153,7 @@ func (h *Hub) runEconomyTick() {
 	resourcesChanged := h.tick()
 	h.broadcastStats()
 	if resourcesChanged {
-		h.broadcast(h.resourcesBytes())
+		h.broadcast(outboundResources, h.resourcesBytes())
 	}
 	if !started.IsZero() {
 		h.metrics.economyTick(time.Since(started))
@@ -183,7 +197,7 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 	if !h.apply(sub.cmd) {
 		// A rejected build may have reserved credits on the client while another
 		// player changed the room. Return the authoritative total so it clears.
-		h.sendTo(sub.c, h.statsBytes())
+		h.sendTo(sub.c, outboundStats, h.statsBytes())
 		return false
 	}
 	switch sub.cmd.Type {
@@ -194,7 +208,7 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 		// Expanding the grid reveals new terrain. The other upgrades change only
 		// the economy, so their stats message is enough.
 		if sub.cmd.Upgrade == wire.UpgradeGridSize {
-			h.broadcast(h.stateBytes())
+			h.broadcast(outboundState, h.stateBytes())
 		}
 	}
 	if h.credits != credits || h.currentRate() != rate {
@@ -290,20 +304,22 @@ func (h *Hub) tileUpdatesBytes(cmd wire.Command) []byte {
 // to tabs that connected before the tile-update protocol was introduced.
 func (h *Hub) broadcastTileUpdates(cmd wire.Command) {
 	if cmd.Type == wire.CmdPlaceBatch && len(cmd.Placements) > maxTileUpdateBatch {
-		h.broadcast(h.stateBytes())
+		h.broadcast(outboundState, h.stateBytes())
 		return
 	}
 	updates := h.tileUpdatesBytes(cmd)
 	var state []byte
 	for c := range h.clients {
 		data := updates
+		message := outboundTiles
 		if c.protocol < tileUpdateProtocol {
 			if state == nil {
 				state = h.stateBytes()
 			}
 			data = state
+			message = outboundState
 		}
-		h.queueBroadcast(c, data)
+		h.queueBroadcast(c, message, data)
 	}
 }
 
@@ -342,20 +358,21 @@ func (h *Hub) statsBytes() []byte {
 
 // broadcastStats sends the current economy to every client.
 func (h *Hub) broadcastStats() {
-	h.broadcast(h.statsBytes())
+	h.broadcast(outboundStats, h.statsBytes())
 }
 
-// broadcast queues b to every client. A client whose buffer is full is too slow
-// to keep up, so it is dropped rather than allowed to stall the hub.
-func (h *Hub) broadcast(b []byte) {
+// broadcast queues a payload to every client. A client whose buffer is full is
+// too slow to keep up, so it is dropped rather than allowed to stall the hub.
+func (h *Hub) broadcast(message outboundMessage, payload []byte) {
 	for c := range h.clients {
-		h.queueBroadcast(c, b)
+		h.queueBroadcast(c, message, payload)
 	}
 }
 
-func (h *Hub) queueBroadcast(c *Client, b []byte) {
+func (h *Hub) queueBroadcast(c *Client, message outboundMessage, payload []byte) {
 	select {
-	case c.send <- b:
+	case c.send <- payload:
+		h.metrics.outboundQueued(message, len(payload))
 	default:
 		h.metrics.slowClientDisconnected()
 		h.removeClient(c)
@@ -370,16 +387,17 @@ func (h *Hub) addClient(c *Client) {
 	c.name = defaultName(c.slot)
 	h.clients[c] = true
 	h.metrics.playerConnected()
-	h.sendTo(c, h.welcomeBytes(c))
-	h.sendTo(c, h.stateBytes())
-	h.sendTo(c, h.statsBytes())
+	h.sendTo(c, outboundWelcome, h.welcomeBytes(c))
+	h.sendTo(c, outboundState, h.stateBytes())
+	h.sendTo(c, outboundStats, h.statsBytes())
 }
 
 // sendTo queues one message to a single client, dropping it if the client's
 // buffer is full (a client that stays behind is cleaned up on the next broadcast).
-func (h *Hub) sendTo(c *Client, b []byte) {
+func (h *Hub) sendTo(c *Client, message outboundMessage, payload []byte) {
 	select {
-	case c.send <- b:
+	case c.send <- payload:
+		h.metrics.outboundQueued(message, len(payload))
 	default:
 	}
 }
