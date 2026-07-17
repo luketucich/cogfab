@@ -344,6 +344,68 @@ func TestRotatingIsFreeAndGuarded(t *testing.T) {
 	}
 }
 
+func TestDestroyAndRotateHonorExpectedTile(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  wire.Command
+	}{
+		{
+			name: "destroy kind changed",
+			cmd: wire.Command{
+				Type: wire.CmdDestroy, X: 4, Y: 2,
+				ExpectedKind: wire.KindSeller, ExpectedDir: "east",
+			},
+		},
+		{
+			name: "destroy direction changed",
+			cmd: wire.Command{
+				Type: wire.CmdDestroy, X: 4, Y: 2,
+				ExpectedKind: wire.KindBelt, ExpectedDir: "south",
+			},
+		},
+		{
+			name: "rotate kind changed",
+			cmd: wire.Command{
+				Type: wire.CmdRotate, X: 4, Y: 2,
+				ExpectedKind: wire.KindExtractor, ExpectedDir: "east",
+			},
+		},
+		{
+			name: "rotate direction changed",
+			cmd: wire.Command{
+				Type: wire.CmdRotate, X: 4, Y: 2,
+				ExpectedKind: wire.KindBelt, ExpectedDir: "south",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := shopHub()
+			h.world.PlaceBelt(4, 2, engine.East)
+			before := h.snapshot()
+			if h.apply(test.cmd) {
+				t.Fatal("stale command should be rejected")
+			}
+			if after := h.snapshot(); !reflect.DeepEqual(after, before) {
+				t.Fatal("stale command changed the room")
+			}
+		})
+	}
+
+	h := shopHub()
+	h.world.PlaceBelt(4, 2, engine.East)
+	if !h.apply(wire.Command{
+		Type: wire.CmdRotate, X: 4, Y: 2,
+		ExpectedKind: wire.KindBelt, ExpectedDir: "east",
+	}) {
+		t.Fatal("matching precondition should be accepted")
+	}
+	if got := h.world.At(4, 2).Dir; got != engine.South {
+		t.Fatalf("matching rotate produced %v, want south", got)
+	}
+}
+
 func TestProductionUpgradesNeedIncome(t *testing.T) {
 	h := shopHub() // empty world: nothing earning
 	h.credits = 1 << 30

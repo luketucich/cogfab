@@ -45,24 +45,26 @@ type BuildPreview struct {
 	Placements []Placement `json:"placements"`
 }
 
-// Command is a client request selected by Type. Place uses X, Y, Kind, and Dir;
-// placeBatch and preview use Placements; buy uses Upgrade; hover uses On with
-// SX/SY for the screen and Hovering with CX/CY for the grid; profile uses Name
-// and Color.
+// Command is a client request selected by Type. Predicted world commands use
+// ActionID; destroy and rotate may guard against a stale tile with ExpectedKind
+// and ExpectedDir. The remaining fields carry each command's payload.
 type Command struct {
-	Type       string      `json:"type"`
-	X          int         `json:"x"`
-	Y          int         `json:"y"`
-	Kind       string      `json:"kind"`
-	Dir        string      `json:"dir"`
-	Placements []Placement `json:"placements"`
-	Upgrade    string      `json:"upgrade"`
-	Hovering   bool        `json:"hovering"`
-	CX         float64     `json:"cx"`
-	CY         float64     `json:"cy"`
-	SX         float64     `json:"sx"`
-	SY         float64     `json:"sy"`
-	On         bool        `json:"on"`
-	Name       string      `json:"name"`
-	Color      string      `json:"color"`
+	Type         string      `json:"type"`
+	ActionID     uint64      `json:"actionId,omitempty"`
+	X            int         `json:"x"`
+	Y            int         `json:"y"`
+	Kind         string      `json:"kind"`
+	Dir          string      `json:"dir"`
+	ExpectedKind string      `json:"expectedKind,omitempty"`
+	ExpectedDir  string      `json:"expectedDir,omitempty"`
+	Placements   []Placement `json:"placements"`
+	Upgrade      string      `json:"upgrade"`
+	Hovering     bool        `json:"hovering"`
+	CX           float64     `json:"cx"`
+	CY           float64     `json:"cy"`
+	SX           float64     `json:"sx"`
+	SY           float64     `json:"sy"`
+	On           bool        `json:"on"`
+	Name         string      `json:"name"`
+	Color        string      `json:"color"`
 }

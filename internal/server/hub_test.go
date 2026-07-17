@@ -273,6 +273,170 @@ func TestRejectedWorldCommandReturnsCurrentStats(t *testing.T) {
 	}
 }
 
+func TestPredictedWorldCommandReturnsOrderedSourceResult(t *testing.T) {
+	h := NewHub(engine.NewWorld(2, 1))
+	source := &Client{send: make(chan []byte, 4), protocol: predictedActionProtocol}
+	peer := &Client{send: make(chan []byte, 4), protocol: predictedActionProtocol}
+	h.clients[source] = true
+	h.clients[peer] = true
+	cmd := wire.Command{
+		Type: wire.CmdPlace, ActionID: 42,
+		X: 0, Y: 0, Kind: wire.KindBelt, Dir: "east",
+	}
+
+	if !h.handleCommand(clientCommand{c: source, cmd: cmd}) {
+		t.Fatal("valid predicted placement was rejected")
+	}
+
+	var tiles wire.TileUpdateMessage
+	if data := <-source.send; json.Unmarshal(data, &tiles) != nil || tiles.Type != "tiles" {
+		t.Fatalf("source first result = %s, want tiles", data)
+	}
+	var result wire.ActionResultMessage
+	if data := <-source.send; json.Unmarshal(data, &result) != nil || result.Type != "actionResult" {
+		t.Fatalf("source second result = %s, want actionResult", data)
+	}
+	if result.ActionID != 42 || !result.Applied || result.Credits != startingCredits-buildCost[engine.Belt] {
+		t.Fatalf("action result = %+v", result)
+	}
+	var stats wire.StatsMessage
+	if data := <-source.send; json.Unmarshal(data, &stats) != nil || stats.Type != "stats" {
+		t.Fatalf("source third result = %s, want stats", data)
+	}
+
+	if data := <-peer.send; json.Unmarshal(data, &tiles) != nil || tiles.Type != "tiles" {
+		t.Fatalf("peer first result = %s, want tiles", data)
+	}
+	if data := <-peer.send; json.Unmarshal(data, &stats) != nil || stats.Type != "stats" {
+		t.Fatalf("peer second result = %s, want stats", data)
+	}
+	if len(peer.send) != 0 {
+		t.Fatal("peer received a source-only action result")
+	}
+}
+
+func TestPredictedRotationStillEndsWithStats(t *testing.T) {
+	w := engine.NewWorld(2, 1)
+	w.PlaceBelt(0, 0, engine.East)
+	h := NewHub(w)
+	source := &Client{send: make(chan []byte, 3), protocol: predictedActionProtocol}
+	h.clients[source] = true
+	cmd := wire.Command{
+		Type: wire.CmdRotate, ActionID: 7, X: 0, Y: 0,
+		ExpectedKind: wire.KindBelt, ExpectedDir: "east",
+	}
+
+	if !h.handleCommand(clientCommand{c: source, cmd: cmd}) {
+		t.Fatal("matching rotation was rejected")
+	}
+	for i, want := range []string{"tiles", "actionResult", "stats"} {
+		var envelope struct {
+			Type string `json:"type"`
+		}
+		if data := <-source.send; json.Unmarshal(data, &envelope) != nil || envelope.Type != want {
+			t.Fatalf("frame %d = %s, want %s", i, data, want)
+		}
+	}
+}
+
+func TestRejectedPredictedCommandReturnsResultThenStats(t *testing.T) {
+	h := NewHub(engine.NewWorld(2, 1))
+	source := &Client{send: make(chan []byte, 2), protocol: predictedActionProtocol}
+	peer := &Client{send: make(chan []byte, 1), protocol: predictedActionProtocol}
+	h.clients[source] = true
+	h.clients[peer] = true
+	cmd := wire.Command{
+		Type: wire.CmdPlace, ActionID: 99,
+		X: 3, Y: 0, Kind: wire.KindBelt, Dir: "east",
+	}
+
+	if h.handleCommand(clientCommand{c: source, cmd: cmd}) {
+		t.Fatal("off-grid placement should be rejected")
+	}
+	var result wire.ActionResultMessage
+	if data := <-source.send; json.Unmarshal(data, &result) != nil || result.Type != "actionResult" {
+		t.Fatalf("first rejection frame = %s, want actionResult", data)
+	}
+	if result.ActionID != 99 || result.Applied || result.Credits != startingCredits {
+		t.Fatalf("rejected action result = %+v", result)
+	}
+	var stats wire.StatsMessage
+	if data := <-source.send; json.Unmarshal(data, &stats) != nil || stats.Type != "stats" {
+		t.Fatalf("second rejection frame = %s, want stats", data)
+	}
+	if len(peer.send) != 0 {
+		t.Fatal("peer received a rejected action")
+	}
+}
+
+func TestStalePredictedRotationReturnsRejectedResult(t *testing.T) {
+	w := engine.NewWorld(2, 1)
+	w.PlaceBelt(0, 0, engine.South)
+	h := NewHub(w)
+	source := &Client{send: make(chan []byte, 2), protocol: predictedActionProtocol}
+	h.clients[source] = true
+	cmd := wire.Command{
+		Type: wire.CmdRotate, ActionID: 101, X: 0, Y: 0,
+		ExpectedKind: wire.KindBelt, ExpectedDir: "east",
+	}
+
+	if h.handleCommand(clientCommand{c: source, cmd: cmd}) {
+		t.Fatal("stale rotation should be rejected")
+	}
+	var result wire.ActionResultMessage
+	if data := <-source.send; json.Unmarshal(data, &result) != nil || result.Type != "actionResult" || result.Applied {
+		t.Fatalf("stale rotation result = %s", data)
+	}
+	if got := h.world.At(0, 0).Dir; got != engine.South {
+		t.Fatalf("stale rotation changed direction to %v", got)
+	}
+}
+
+func TestProtocolThreeIgnoresPredictionAcknowledgements(t *testing.T) {
+	h := NewHub(engine.NewWorld(2, 1))
+	source := &Client{send: make(chan []byte, 2), protocol: compactPresenceProtocol}
+	h.clients[source] = true
+	cmd := wire.Command{
+		Type: wire.CmdPlace, ActionID: 5,
+		X: 0, Y: 0, Kind: wire.KindBelt, Dir: "east",
+	}
+
+	if !h.handleCommand(clientCommand{c: source, cmd: cmd}) {
+		t.Fatal("valid protocol 3 placement was rejected")
+	}
+	for i, want := range []string{"tiles", "stats"} {
+		var envelope struct {
+			Type string `json:"type"`
+		}
+		if data := <-source.send; json.Unmarshal(data, &envelope) != nil || envelope.Type != want {
+			t.Fatalf("frame %d = %s, want %s", i, data, want)
+		}
+	}
+}
+
+func TestActionResultBackpressureDisconnectsForResync(t *testing.T) {
+	w := engine.NewWorld(2, 1)
+	w.PlaceBelt(0, 0, engine.East)
+	h := NewHub(w)
+	source := &Client{send: make(chan []byte, 1), protocol: predictedActionProtocol}
+	h.clients[source] = true
+	cmd := wire.Command{Type: wire.CmdRotate, ActionID: 6, X: 0, Y: 0}
+
+	if !h.handleCommand(clientCommand{c: source, cmd: cmd}) {
+		t.Fatal("valid rotation was rejected")
+	}
+	if h.clients[source] {
+		t.Fatal("client that could not queue its action result stayed connected")
+	}
+	var tiles wire.TileUpdateMessage
+	if data := <-source.send; json.Unmarshal(data, &tiles) != nil || tiles.Type != "tiles" {
+		t.Fatalf("queued frame = %s, want authoritative tiles", data)
+	}
+	if _, open := <-source.send; open {
+		t.Fatal("disconnected client's queue remained open")
+	}
+}
+
 func TestDisconnectedClientCommandsAreIgnored(t *testing.T) {
 	tests := []struct {
 		name string

@@ -211,6 +211,26 @@ func TestEndToEndClientReceivesWelcomeThenState(t *testing.T) {
 	}
 }
 
+func TestWelcomeAdvertisesNegotiatedProtocol(t *testing.T) {
+	for _, test := range []struct {
+		requested string
+		want      int
+	}{
+		{requested: "3", want: compactPresenceProtocol},
+		{requested: "4", want: predictedActionProtocol},
+		{requested: "99", want: predictedActionProtocol},
+	} {
+		t.Run(test.requested, func(t *testing.T) {
+			url := newTestServer(t)
+			_, read := dial(t, url+"?protocol="+test.requested)
+			welcome := readWelcome(t, read)
+			if welcome.Protocol != test.want {
+				t.Fatalf("welcome protocol = %d, want %d", welcome.Protocol, test.want)
+			}
+		})
+	}
+}
+
 func TestLegacyClientReceivesFullStateAfterPlacement(t *testing.T) {
 	url := newTestServerWithWorld(t, func() *engine.World { return engine.NewWorld(2, 1) })
 	conn, read := dial(t, url+"?room=LEGACY")

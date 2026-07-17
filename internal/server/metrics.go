@@ -227,6 +227,7 @@ func outboundMessageLabel(message outboundMessage) string {
 	case outboundWelcome,
 		outboundState,
 		outboundTiles,
+		outboundActionResult,
 		outboundStats,
 		outboundResources,
 		outboundPresence,

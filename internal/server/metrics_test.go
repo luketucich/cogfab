@@ -29,6 +29,7 @@ func TestMetricsEndpointUsesBoundedLabels(t *testing.T) {
 	metrics.commandProcessed("a-client-invented-this", false, time.Millisecond)
 	metrics.commandProcessed(wire.CmdPlaceBatch, true, time.Millisecond)
 	metrics.commandProcessed(wire.CmdPreview, true, time.Millisecond)
+	metrics.outboundQueued(outboundActionResult, 67)
 	metrics.outboundQueued(outboundMessage("invented-message"), 7)
 	body := scrapeMetrics(t, metrics)
 
@@ -36,6 +37,8 @@ func TestMetricsEndpointUsesBoundedLabels(t *testing.T) {
 		`cogfab_commands_total{command="unknown",outcome="ignored"} 1`,
 		`cogfab_commands_total{command="placeBatch",outcome="applied"} 1`,
 		`cogfab_commands_total{command="preview",outcome="applied"} 1`,
+		`cogfab_websocket_messages_queued_total{message="actionResult"} 1`,
+		`cogfab_websocket_payload_bytes_queued_total{message="actionResult"} 67`,
 		`cogfab_websocket_messages_queued_total{message="unknown"} 1`,
 		`cogfab_websocket_payload_bytes_queued_total{message="unknown"} 7`,
 		"cogfab_rooms_active 0",

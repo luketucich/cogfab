@@ -139,7 +139,9 @@ func validColor(color string) bool {
 
 // welcomeBytes is the greeting for one client: its room code and its slot.
 func (h *Hub) welcomeBytes(c *Client) []byte {
-	b, _ := json.Marshal(wire.WelcomeMessage{Type: "welcome", Room: h.code, Slot: c.slot})
+	b, _ := json.Marshal(wire.WelcomeMessage{
+		Type: "welcome", Room: h.code, Slot: c.slot, Protocol: min(c.protocol, predictedActionProtocol),
+	})
 	return b
 }
 

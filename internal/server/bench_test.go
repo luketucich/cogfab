@@ -132,6 +132,7 @@ func BenchmarkOutboundQueueMetrics(b *testing.B) {
 				h.metrics = NewMetrics()
 			}
 			client := &Client{send: make(chan []byte, 1)}
+			h.clients[client] = true
 			payload := []byte(`{"type":"tiles"}`)
 			h.queueBroadcast(client, outboundTiles, payload)
 			<-client.send // initialize the metric label before timing steady state

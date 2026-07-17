@@ -21,9 +21,10 @@ const (
 	clientReadLimit = 256 << 10
 
 	// Protocol 2 introduced compact authoritative tile updates. Protocol 3 adds
-	// compact collaborative cursor and build-preview updates.
+	// compact presence updates. Protocol 4 acknowledges predicted world actions.
 	tileUpdateProtocol      = 2
 	compactPresenceProtocol = 3
+	predictedActionProtocol = 4
 )
 
 // acceptOptions is shared by every upgrade. Only the game's own pages may open
