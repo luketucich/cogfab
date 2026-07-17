@@ -2,6 +2,13 @@
 
 What I've worked on, newest first.
 
+## 2026-07-17
+
+- Separated client belt routing from once-per-second stock updates and replaced
+  one search per extractor with a shared seller-distance pass. On a
+  121-extractor stress layout, stock refreshes fell from about 49 ms to less
+  than 0.05 ms, while fresh routing fell to a 1.45 ms median.
+
 ## 2026-07-16
 
 - Replaced action-time 64x64 snapshots with authoritative tile updates. A

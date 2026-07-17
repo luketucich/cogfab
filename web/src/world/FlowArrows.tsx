@@ -6,7 +6,7 @@ import { beltMultiplier, getStats, MAX_SIM_LEVEL } from "./economy";
 import { cellOffsets } from "./grid";
 import { chevronGeometry } from "./chevron";
 import { makeCurve, curvePoint, curveHeading, type Curve } from "./beltCurve";
-import { flowPaths, runKey, drainRuns } from "./flow";
+import { drainRuns, flowPaths, removeDrainedRuns, runKey } from "./flow";
 
 const MAX_CHEVRONS = 8192;
 const CHEVRON_Y = 0.46; // ride just above the belt surface
@@ -38,6 +38,8 @@ export function FlowArrows() {
     [],
   );
   const snap = useSyncExternalStore(subscribeResources, getTerrain);
+  // Stock-only updates keep this reference stable, avoiding curve rebuilds.
+  const flow = snap ? flowPaths(snap) : null;
 
   // Reconcile runs with the world, then colour each chevron. A run whose belts
   // were deleted is kept on briefly so it can fade out instead of snapping off.
@@ -46,7 +48,7 @@ export function FlowArrows() {
     const live: Run[] = [];
     if (snap) {
       const { offX, offZ } = cellOffsets(snap);
-      for (const run of flowPaths(snap)) {
+      for (const run of flow ?? []) {
         if (!run.active) continue;
         const segs = run.steps.map((s) => makeCurve(s.x - offX, s.y - offZ, s.entry, s.exit));
         live.push({ key: runKey(run), segs, color: run.complete ? COMPLETE : BROKEN, death: null });
@@ -62,13 +64,14 @@ export function FlowArrows() {
       }
     }
     if (mesh.current.instanceColor) mesh.current.instanceColor.needsUpdate = true;
-  }, [snap]);
+  }, [flow, snap?.width, snap?.height]);
 
   // Drift the chevrons along their curves and face them the way they travel, off a
   // shared clock. A deleted run keeps drifting while it shrinks to nothing.
   useFrame(({ clock }, delta) => {
     const now = clock.elapsedTime;
     clockNow.current = now;
+    runs.current = removeDrainedRuns(runs.current, now, FADE);
     // One shared offset so every chevron drifts together, hurrying up a little
     // with each Belt Speed level up to the sim cap.
     phase.current = (phase.current + delta * SPEED * beltMultiplier(Math.min(getStats().beltLevel, MAX_SIM_LEVEL))) % 1;

@@ -3,12 +3,11 @@ import { OPPOSITE, SIDES, STEP } from "./dir";
 import { cellIndex } from "./grid";
 import { depositAt } from "./resources";
 
-// neighbour is the tiles index of the cell one step from i toward s, or -1 off
-// the grid.
-const neighbour = (snap: StateMessage, i: number, s: Dir): number => {
-  const x = i % snap.width;
-  const y = Math.floor(i / snap.width);
-  const [dx, dy] = STEP[s];
+// neighbour is the tile index one step from a cell, or -1 past the grid edge.
+const neighbour = (snap: StateMessage, index: number, side: Dir): number => {
+  const x = index % snap.width;
+  const y = Math.floor(index / snap.width);
+  const [dx, dy] = STEP[side];
   return cellIndex(snap, x + dx, y + dy);
 };
 
@@ -26,38 +25,83 @@ export type FlowRun = {
   active: boolean;
 };
 
+type FlowTopologyRun = Pick<FlowRun, "steps" | "complete" | "source">;
+type DepositMembership = { width: number; key: string; sources: Set<number> };
+
 // flowPaths returns a run for the belt at each extractor's mouth: the shortest
 // path to a seller's mouth when one is reachable (complete), otherwise the path to
 // the farthest belt (broken). Material leaves an extractor and enters a seller only on
 // the side each faces; between belts facing does not gate flow, so the run is just
 // the connected path the material travels.
 //
-// Material, arrows, and belt models share the cached result for each snapshot, so a
-// world change walks the grid once.
-let cachedSnap: StateMessage | null = null;
-let cachedRuns: FlowRun[] = [];
-let cachedConnections: ReadonlyMap<number, readonly Dir[]> = new Map();
+// Material, arrows, and belt models share this result. Resource updates keep the
+// same tile array, so they reuse the routed steps and only refresh run state.
+// Preview tile arrays get their own entries and can be collected when discarded.
+type FlowCache = {
+  width: number;
+  height: number;
+  topology: FlowTopologyRun[];
+  runsSnap: StateMessage | null;
+  runs: FlowRun[];
+  connectionMembership: string | null;
+  connections: ReadonlyMap<number, readonly Dir[]>;
+};
 
-function refreshFlow(snap: StateMessage): void {
-  if (snap === cachedSnap) return;
-  cachedRuns = computeFlowPaths(snap);
-  cachedConnections = connectionsFor(snap, cachedRuns);
-  cachedSnap = snap;
+const flowCache = new WeakMap<StateMessage["tiles"], FlowCache>();
+const depositMembershipCache = new WeakMap<StateMessage["deposits"], DepositMembership>();
+
+function depositMembershipFor(snap: StateMessage): DepositMembership {
+  const cached = depositMembershipCache.get(snap.deposits);
+  if (cached?.width === snap.width) return cached;
+
+  const sourceList = snap.deposits.map((deposit) => deposit.y * snap.width + deposit.x);
+  const membership = { width: snap.width, key: sourceList.join(","), sources: new Set(sourceList) };
+  depositMembershipCache.set(snap.deposits, membership);
+  return membership;
+}
+
+function topologyFor(snap: StateMessage): FlowCache {
+  let cache = flowCache.get(snap.tiles);
+  if (!cache || cache.width !== snap.width || cache.height !== snap.height) {
+    cache = {
+      width: snap.width,
+      height: snap.height,
+      topology: computeFlowTopology(snap),
+      runsSnap: null,
+      runs: [],
+      connectionMembership: null,
+      connections: new Map(),
+    };
+    flowCache.set(snap.tiles, cache);
+  }
+  return cache;
 }
 
 export function flowPaths(snap: StateMessage): FlowRun[] {
-  refreshFlow(snap);
-  return cachedRuns;
+  const cache = topologyFor(snap);
+  if (snap !== cache.runsSnap) {
+    cache.runs = runsFor(snap, cache.topology, cache.runs);
+    cache.runsSnap = snap;
+  }
+  return cache.runs;
 }
 
 // flowConnections returns the sides material crosses on each routed belt. Belt
 // models use the same answer as the moving material, including machine endpoints.
 export function flowConnections(snap: StateMessage): ReadonlyMap<number, readonly Dir[]> {
-  refreshFlow(snap);
-  return cachedConnections;
+  const cache = topologyFor(snap);
+  const membership = depositMembershipFor(snap);
+  if (membership.key !== cache.connectionMembership) {
+    cache.connections = connectionsFor(
+      snap,
+      cache.topology.filter((route) => membership.sources.has(route.source)),
+    );
+    cache.connectionMembership = membership.key;
+  }
+  return cache.connections;
 }
 
-function connectionsFor(snap: StateMessage, runs: FlowRun[]): ReadonlyMap<number, readonly Dir[]> {
+function connectionsFor(snap: StateMessage, runs: FlowTopologyRun[]): ReadonlyMap<number, readonly Dir[]> {
   const collected = new Map<number, Set<Dir>>();
   for (const run of runs) {
     for (const step of run.steps) {
@@ -79,85 +123,166 @@ function connectionsFor(snap: StateMessage, runs: FlowRun[]): ReadonlyMap<number
   return connections;
 }
 
-function computeFlowPaths(snap: StateMessage): FlowRun[] {
-  const w = snap.width;
-  const tiles = snap.tiles;
+function runsFor(snap: StateMessage, topology: FlowTopologyRun[], previous: FlowRun[]): FlowRun[] {
   const runs: FlowRun[] = [];
+  for (const route of topology) {
+    const source = depositAt(snap, route.source % snap.width, Math.floor(route.source / snap.width));
+    if (!source) continue;
+
+    const active = source.remaining > 0;
+    const prior = previous[runs.length];
+    if (
+      prior?.source === route.source &&
+      prior.steps === route.steps &&
+      prior.complete === route.complete &&
+      prior.resource === source.kind &&
+      prior.active === active
+    ) {
+      runs.push(prior);
+    } else {
+      runs.push({ ...route, resource: source.kind, active });
+    }
+  }
+
+  if (runs.length === previous.length && runs.every((run, index) => run === previous[index])) return previous;
+  return runs;
+}
+
+function computeFlowTopology(snap: StateMessage): FlowTopologyRun[] {
+  const width = snap.width;
+  const tiles = snap.tiles;
+  const runs: FlowTopologyRun[] = [];
+
+  // Every complete route shares one distance field. Broken routes still need
+  // their own search because the farthest belt depends on where they start.
+  const sellerDistance = new Int32Array(tiles.length);
+  const previous = new Int32Array(tiles.length);
+  const seen = new Int32Array(tiles.length);
+  const queue = new Int32Array(tiles.length);
+  sellerDistance.fill(-1);
+  let visit = 0;
 
   const dirTo = (from: number, to: number): Dir => {
-    const fx = from % w;
-    const tx = to % w;
-    if (tx > fx) return "east";
-    if (tx < fx) return "west";
+    const fromX = from % width;
+    const toX = to % width;
+    if (toX > fromX) return "east";
+    if (toX < fromX) return "west";
     return to > from ? "south" : "north";
   };
 
-  // route walks belts out from a source belt: it heads for the nearest seller, or
-  // failing that the farthest belt, and returns the ordered path either way.
-  const route = (
-    start: number,
+  const runFor = (
+    cells: number[],
+    complete: boolean,
+    sellerDir: Dir,
     fromExtractor: Dir,
     source: number,
-    resource: ResourceKind,
-    active: boolean,
-  ): FlowRun => {
-    const prev = new Map<number, number>();
-    const seen = new Set<number>([start]);
-    const queue = [start];
-    let sellerCell = -1;
-    let sellerDir: Dir = "north";
-    let farthest = start;
-    while (queue.length) {
-      const cur = queue.shift()!;
-      farthest = cur; // breadth-first, so the last cell dequeued is the deepest
-      let done = false;
-      for (const s of SIDES) {
-        const n = neighbour(snap, cur, s);
-        if (n < 0) continue;
-        // a seller only takes material on the side it faces, so the belt must sit at its
-        // mouth (the seller faces back toward this belt), not just touch a side
-        if (tiles[n].kind === "seller" && tiles[n].dir === OPPOSITE[s]) {
-          sellerCell = cur;
-          sellerDir = s;
-          done = true;
-          break;
-        }
-        if (tiles[n].kind === "belt" && !seen.has(n)) {
-          seen.add(n);
-          prev.set(n, cur);
-          queue.push(n);
-        }
-      }
-      if (done) break;
-    }
-
-    const complete = sellerCell >= 0;
-    const order = [complete ? sellerCell : farthest];
-    let c = order[0];
-    while (c !== start) {
-      c = prev.get(c)!;
-      order.push(c);
-    }
-    order.reverse();
-
-    const steps = order.map((cur, k) => {
-      const entry = k === 0 ? fromExtractor : dirTo(cur, order[k - 1]);
-      const last = k === order.length - 1;
-      const exit = last ? (complete ? sellerDir : OPPOSITE[entry]) : dirTo(cur, order[k + 1]);
-      return { x: cur % w, y: Math.floor(cur / w), entry, exit };
+  ): FlowTopologyRun => {
+    const steps = cells.map((cell, position) => {
+      const entry = position === 0 ? fromExtractor : dirTo(cell, cells[position - 1]);
+      const last = position === cells.length - 1;
+      const exit = last ? (complete ? sellerDir : OPPOSITE[entry]) : dirTo(cell, cells[position + 1]);
+      return { x: cell % width, y: Math.floor(cell / width), entry, exit };
     });
-    return { steps, complete, source, resource, active };
+    return { steps, complete, source };
   };
 
-  for (let i = 0; i < tiles.length; i++) {
-    if (tiles[i].kind !== "extractor") continue;
-    const source = depositAt(snap, i % w, Math.floor(i / w));
-    if (!source) continue;
+  let head = 0;
+  let tail = 0;
+  for (let index = 0; index < tiles.length; index++) {
+    if (tiles[index].kind !== "belt") continue;
+    for (const side of SIDES) {
+      const next = neighbour(snap, index, side);
+      if (next >= 0 && tiles[next].kind === "seller" && tiles[next].dir === OPPOSITE[side]) {
+        sellerDistance[index] = 0;
+        queue[tail++] = index;
+        break;
+      }
+    }
+  }
+  while (head < tail) {
+    const current = queue[head++];
+    for (const side of SIDES) {
+      const next = neighbour(snap, current, side);
+      if (next >= 0 && tiles[next].kind === "belt" && sellerDistance[next] < 0) {
+        sellerDistance[next] = sellerDistance[current] + 1;
+        queue[tail++] = next;
+      }
+    }
+  }
+
+  // Following the first side that gets one step closer preserves the original
+  // north, east, south, west tie order without searching once per extractor.
+  const completeRoute = (start: number, fromExtractor: Dir, source: number): FlowTopologyRun => {
+    const cells = [start];
+    let current = start;
+    while (sellerDistance[current] > 0) {
+      let next = -1;
+      for (const side of SIDES) {
+        const candidate = neighbour(snap, current, side);
+        if (
+          candidate >= 0 &&
+          tiles[candidate].kind === "belt" &&
+          sellerDistance[candidate] === sellerDistance[current] - 1
+        ) {
+          next = candidate;
+          break;
+        }
+      }
+      if (next < 0) throw new Error("seller distance has no next belt");
+      current = next;
+      cells.push(current);
+    }
+
+    let sellerDir: Dir = "north";
+    for (const side of SIDES) {
+      const next = neighbour(snap, current, side);
+      if (next >= 0 && tiles[next].kind === "seller" && tiles[next].dir === OPPOSITE[side]) {
+        sellerDir = side;
+        break;
+      }
+    }
+    return runFor(cells, true, sellerDir, fromExtractor, source);
+  };
+
+  const brokenRoute = (start: number, fromExtractor: Dir, source: number): FlowTopologyRun => {
+    visit += 1;
+    head = 0;
+    tail = 0;
+    queue[tail++] = start;
+    seen[start] = visit;
+    let farthest = start;
+    while (head < tail) {
+      const current = queue[head++];
+      farthest = current; // breadth-first, so the last cell dequeued is the deepest
+      for (const side of SIDES) {
+        const next = neighbour(snap, current, side);
+        if (next >= 0 && tiles[next].kind === "belt" && seen[next] !== visit) {
+          seen[next] = visit;
+          previous[next] = current;
+          queue[tail++] = next;
+        }
+      }
+    }
+
+    const cells = [farthest];
+    let current = farthest;
+    while (current !== start) {
+      current = previous[current];
+      cells.push(current);
+    }
+    cells.reverse();
+    return runFor(cells, false, "north", fromExtractor, source);
+  };
+
+  for (let index = 0; index < tiles.length; index++) {
+    if (tiles[index].kind !== "extractor") continue;
     // material leaves an extractor only from the side it faces, so the run starts at the
     // belt at its mouth, not a belt touching a side
-    const out = tiles[i].dir;
-    const b = neighbour(snap, i, out);
-    if (b >= 0 && tiles[b].kind === "belt") runs.push(route(b, OPPOSITE[out], i, source.kind, source.remaining > 0));
+    const out = tiles[index].dir;
+    const start = neighbour(snap, index, out);
+    if (start < 0 || tiles[start].kind !== "belt") continue;
+    const route = sellerDistance[start] >= 0 ? completeRoute : brokenRoute;
+    runs.push(route(start, OPPOSITE[out], index));
   }
   return runs;
 }
@@ -187,4 +312,16 @@ export function drainRuns<T extends { key: string; death: number | null }>(
     if (now - death <= drainSeconds) next.push({ ...run, death });
   }
   return next;
+}
+
+// removeDrainedRuns drops visual runs once their fade has finished. It returns
+// the same array while nothing has expired, avoiding a per-frame allocation.
+export function removeDrainedRuns<T extends { death: number | null }>(
+  runs: T[],
+  now: number,
+  drainSeconds: number,
+): T[] {
+  const expired = runs.some((run) => run.death !== null && now - run.death > drainSeconds);
+  if (!expired) return runs;
+  return runs.filter((run) => run.death === null || now - run.death <= drainSeconds);
 }

@@ -51,6 +51,8 @@ export function FlowItems() {
     [],
   );
   const snap = useSyncExternalStore(subscribeResources, getTerrain);
+  // Stock-only updates keep this reference stable, avoiding route rebuilds.
+  const flow = snap ? flowPaths(snap) : null;
 
   // Track the live extractor-to-seller paths. A path that persists keeps its Route
   // object, so the chunks already riding it carry on uninterrupted; a path that is
@@ -59,7 +61,7 @@ export function FlowItems() {
     const next = new Map<string, Route>();
     if (snap) {
       const { offX, offZ } = cellOffsets(snap);
-      for (const run of flowPaths(snap)) {
+      for (const run of flow ?? []) {
         if (!run.complete) continue; // material only rides paths that reach a seller
         const key = runKey(run);
         const previous = routes.current.get(key);
@@ -78,7 +80,7 @@ export function FlowItems() {
     }
     routes.current = next;
     live.current = new Set(next.values());
-  }, [snap]);
+  }, [flow, snap?.width, snap?.height]);
 
   useFrame(({ clock }) => {
     const now = clock.elapsedTime;
