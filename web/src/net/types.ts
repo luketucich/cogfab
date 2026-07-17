@@ -54,6 +54,16 @@ export type WelcomeMessage = {
   type: "welcome";
   room: string;
   slot: number;
+  protocol?: number;
+};
+
+// Action results settle one predicted world edit for the player who sent it.
+// Confirmed tile changes still arrive through the shared tiles message.
+export type ActionResultMessage = {
+  type: "actionResult";
+  actionId: number;
+  applied: boolean;
+  credits: number;
 };
 
 // PresencePlayer is one connected player: identity, cursor, and any temporary
@@ -132,6 +142,7 @@ export type ServerMessage =
   | StatsMessage
   | ResourcesMessage
   | TilesMessage
+  | ActionResultMessage
   | WelcomeMessage
   | PresenceMessage
   | CursorMessage
@@ -153,6 +164,7 @@ export type PlaceCommand = {
   y: number;
   kind: PlaceableKind;
   dir: Dir;
+  actionId?: number;
 };
 
 export type Placement = {
@@ -170,6 +182,7 @@ export type PlaceBatchCommand = {
   type: "placeBatch";
   kind: PlaceableKind;
   placements: Placement[];
+  actionId?: number;
 };
 
 export type PreviewCommand = {
@@ -182,12 +195,18 @@ export type DestroyCommand = {
   type: "destroy";
   x: number;
   y: number;
+  actionId?: number;
+  expectedKind?: PlaceableKind;
+  expectedDir?: Dir;
 };
 
 export type RotateCommand = {
   type: "rotate"; // turn the structure at (x, y) a quarter clockwise
   x: number;
   y: number;
+  actionId?: number;
+  expectedKind?: PlaceableKind;
+  expectedDir?: Dir;
 };
 
 export type BuyCommand = {
@@ -214,3 +233,5 @@ export type ProfileCommand = {
 // Ping is deliberately not in this union: connection.ts sends it raw and the
 // server answers it in the transport layer, before commands reach the game.
 export type Command = PlaceCommand | PlaceBatchCommand | PreviewCommand | DestroyCommand | RotateCommand | BuyCommand | HoverCommand | ProfileCommand;
+
+export type WorldActionCommand = PlaceCommand | PlaceBatchCommand | DestroyCommand | RotateCommand;

@@ -1,19 +1,31 @@
-import { describe, expect, it, vi } from "vitest";
-import type { BuildPreviewMessage, CursorMessage, TilesMessage } from "./types";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ActionResultMessage, BuildPreviewMessage, CursorMessage, TilesMessage } from "./types";
 
-const { applyTilesSpy, setCursorSpy, setPresencePreviewSpy } = vi.hoisted(() => ({
+const { applyTilesSpy, denySpy, resolveActionSpy, setCursorSpy, setPresencePreviewSpy, settleSpendSpy } = vi.hoisted(() => ({
   applyTilesSpy: vi.fn(),
+  denySpy: vi.fn(),
+  resolveActionSpy: vi.fn(),
   setCursorSpy: vi.fn(),
   setPresencePreviewSpy: vi.fn(),
+  settleSpendSpy: vi.fn(),
 }));
 
 vi.mock("../world/store", () => ({
   applyTiles: applyTilesSpy,
+  clearPredictions: vi.fn(),
+  predictAction: vi.fn(),
   resetLatest: vi.fn(),
+  resolveAction: resolveActionSpy,
   setLatest: vi.fn(),
   setResources: vi.fn(),
 }));
-vi.mock("../world/economy", () => ({ setStats: vi.fn() }));
+vi.mock("../world/economy", () => ({
+  clearPendingSpend: vi.fn(),
+  releaseSpend: vi.fn(),
+  reserveSpend: vi.fn(),
+  setStats: vi.fn(),
+  settleSpend: settleSpendSpy,
+}));
 vi.mock("../world/presence", () => ({
   setCursor: setCursorSpy,
   setPresence: vi.fn(),
@@ -21,10 +33,15 @@ vi.mock("../world/presence", () => ({
 }));
 vi.mock("./session", () => ({ setRoomFull: vi.fn(), setSession: vi.fn() }));
 vi.mock("./ping", () => ({ setPing: vi.fn() }));
+vi.mock("../sfx", () => ({ sfx: { deny: denySpy } }));
 
 import { handleServerMessage } from "./connection";
 
 describe("server message routing", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("routes one atomic tile batch to the world store", () => {
     const message: TilesMessage = {
       type: "tiles",
@@ -55,5 +72,36 @@ describe("server message routing", () => {
     expect(setCursorSpy).toHaveBeenCalledWith(cursor);
     expect(setPresencePreviewSpy).toHaveBeenCalledOnce();
     expect(setPresencePreviewSpy).toHaveBeenCalledWith(buildPreview);
+  });
+
+  it("settles one predicted action by its ID", () => {
+    resolveActionSpy.mockReturnValue(true);
+    settleSpendSpy.mockReturnValue(true);
+    const message: ActionResultMessage = { type: "actionResult", actionId: 17, applied: true, credits: 825 };
+
+    handleServerMessage(message);
+
+    expect(resolveActionSpy).toHaveBeenCalledWith(17);
+    expect(settleSpendSpy).toHaveBeenCalledWith(17, 825);
+    expect(denySpy).not.toHaveBeenCalled();
+  });
+
+  it("plays one denial for a rejected known action", () => {
+    resolveActionSpy.mockReturnValue(true);
+    settleSpendSpy.mockReturnValue(true);
+    const message: ActionResultMessage = { type: "actionResult", actionId: 18, applied: false, credits: 900 };
+
+    handleServerMessage(message);
+
+    expect(denySpy).toHaveBeenCalledOnce();
+  });
+
+  it("ignores a stale rejected result after reconnect", () => {
+    resolveActionSpy.mockReturnValue(false);
+    settleSpendSpy.mockReturnValue(false);
+
+    handleServerMessage({ type: "actionResult", actionId: 99, applied: false, credits: 900 });
+
+    expect(denySpy).not.toHaveBeenCalled();
   });
 });

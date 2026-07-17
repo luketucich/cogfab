@@ -63,6 +63,11 @@ Local build previews update on every pointer move. Routine shared updates are
 coalesced to 20 per second and sent separately from cursor movement, so a long
 drag stays responsive without repeatedly broadcasting the whole room roster.
 
+Places, rotations, and destroys are predicted in the local browser, then
+settled by the authoritative server with a small confirmation message. Other
+players see only confirmed changes. If two actions conflict, the server keeps
+the first valid one and the losing browser restores the confirmed world cleanly.
+
 The browser caches factory routes separately from changing deposit stock. One
 shared distance pass routes every productive extractor, so dense factories and
 once-per-second stock updates do not repeat the same path searches.

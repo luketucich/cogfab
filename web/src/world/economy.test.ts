@@ -1,5 +1,42 @@
-import { describe, expect, it } from "vitest";
-import { creditsAfterReserve, fmtNum } from "./economy";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { StatsMessage } from "../net/types";
+import {
+  clearPendingSpend,
+  creditsAfterReserve,
+  fmtNum,
+  getStats,
+  pendingSpendTotal,
+  releaseSpend,
+  reserveSpend,
+  setStats,
+  settleSpend,
+  spendableCredits,
+  subscribeStats,
+} from "./economy";
+
+function stats(credits: number): StatsMessage {
+  return {
+    type: "stats",
+    credits,
+    ratePerSec: 0,
+    extractorLevel: 0,
+    extractorCost: 150,
+    beltLevel: 0,
+    beltCost: 200,
+    valueLevel: 0,
+    valueCost: 400,
+    gridWidth: 8,
+    gridHeight: 8,
+    gridCost: 300,
+    nextGridWidth: 12,
+    nextGridHeight: 12,
+  };
+}
+
+beforeEach(() => {
+  clearPendingSpend();
+  setStats(stats(250));
+});
 
 describe("fmtNum", () => {
   it("keeps small numbers exact, with separators", () => {
@@ -27,5 +64,106 @@ describe("creditsAfterReserve", () => {
     expect(creditsAfterReserve(900, 500)).toBe(400);
     expect(creditsAfterReserve(300, 500)).toBe(0);
     expect(creditsAfterReserve(300, 0)).toBe(300);
+  });
+});
+
+describe("pending spend", () => {
+  it("reserves credits independently by action", () => {
+    const before = getStats();
+    expect(reserveSpend(1, 75)).toBe(true);
+    expect(reserveSpend(2, 30)).toBe(true);
+
+    expect(pendingSpendTotal()).toBe(105);
+    expect(getStats()).not.toBe(before);
+    expect(spendableCredits()).toBe(145);
+    expect(reserveSpend(1, 10)).toBe(false);
+    expect(reserveSpend(3, 200)).toBe(false);
+    expect(pendingSpendTotal()).toBe(105);
+  });
+
+  it("tracks zero-cost actions so their results can update credits", () => {
+    const listener = vi.fn();
+    const off = subscribeStats(listener);
+    expect(reserveSpend(1, 0)).toBe(true);
+    expect(listener).not.toHaveBeenCalled();
+    expect(settleSpend(1, 300)).toBe(true);
+    expect(spendableCredits()).toBe(300);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(reserveSpend(2, 0)).toBe(true);
+    expect(settleSpend(2, 300)).toBe(true);
+    expect(listener).toHaveBeenCalledOnce();
+    off();
+  });
+
+  it("keeps reservations through interleaved stats updates", () => {
+    reserveSpend(1, 75);
+    reserveSpend(2, 30);
+
+    setStats(stats(200));
+
+    expect(pendingSpendTotal()).toBe(105);
+    expect(spendableCredits()).toBe(95);
+  });
+
+  it("settles one action with the authoritative balance", () => {
+    reserveSpend(1, 75);
+    reserveSpend(2, 30);
+    const listener = vi.fn();
+    const off = subscribeStats(listener);
+
+    expect(settleSpend(1, 175)).toBe(true);
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(pendingSpendTotal()).toBe(30);
+    expect(spendableCredits()).toBe(145);
+    expect(settleSpend(99, 0)).toBe(false);
+    expect(listener).toHaveBeenCalledOnce();
+    off();
+  });
+
+  it("does not strand a reservation at a large server balance", () => {
+    reserveSpend(1, 75);
+
+    expect(settleSpend(1, Number.MAX_SAFE_INTEGER + 1_000)).toBe(true);
+    expect(pendingSpendTotal()).toBe(0);
+  });
+
+  it("releases one reservation without changing the confirmed balance", () => {
+    reserveSpend(1, 75);
+    reserveSpend(2, 30);
+
+    expect(releaseSpend(1)).toBe(true);
+
+    expect(pendingSpendTotal()).toBe(30);
+    expect(spendableCredits()).toBe(220);
+    expect(releaseSpend(1)).toBe(false);
+  });
+
+  it("clears all reservations with one notification", () => {
+    reserveSpend(1, 75);
+    reserveSpend(2, 30);
+    const listener = vi.fn();
+    const off = subscribeStats(listener);
+
+    clearPendingSpend();
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(pendingSpendTotal()).toBe(0);
+    expect(spendableCredits()).toBe(250);
+    clearPendingSpend();
+    expect(listener).toHaveBeenCalledOnce();
+    off();
+  });
+
+  it("rejects invalid reservations without notifying", () => {
+    const listener = vi.fn();
+    const off = subscribeStats(listener);
+
+    expect(reserveSpend(0, 10)).toBe(false);
+    expect(reserveSpend(1, -1)).toBe(false);
+    expect(reserveSpend(1, 1.5)).toBe(false);
+    expect(reserveSpend(1, Number.NaN)).toBe(false);
+    expect(listener).not.toHaveBeenCalled();
+    off();
   });
 });

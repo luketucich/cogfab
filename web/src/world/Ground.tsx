@@ -15,7 +15,8 @@ import { isTyping } from "../ui";
 import { extendBuildStroke, strokePlacements } from "./buildStroke";
 import { setBuildPreview } from "./buildPreviewStore";
 import { addBurst } from "./burst";
-import { addPendingSpend, getStats, spendableCredits } from "./economy";
+import { getStats, spendableCredits } from "./economy";
+import { clockwise } from "./dir";
 import {
   cellFromWorld,
   cellIndex,
@@ -29,10 +30,12 @@ import {
 import { getHover, setHover } from "./hover";
 import { getTerrain, subscribeResources } from "./store";
 import { placementTerrainAllows } from "./resources";
+import { showPlacementFeedback } from "./placementFeedback";
 
 const AIM_STEP = 0.15; // cursor distance (in cells) before placement direction changes
 
-const kindAt = (snap: StateMessage, cell: Cell) => snap.tiles[cellIndex(snap, cell.x, cell.y)].kind;
+const tileAt = (snap: StateMessage, cell: Cell) => snap.tiles[cellIndex(snap, cell.x, cell.y)];
+const kindAt = (snap: StateMessage, cell: Cell) => tileAt(snap, cell).kind;
 const cellUnlocked = (snap: StateMessage, cell: Cell) => {
   const stats = getStats();
   return isUnlocked(unlockedRect(snap, stats.gridWidth, stats.gridHeight), cell.x, cell.y);
@@ -102,8 +105,17 @@ export function Ground() {
 
   function sendDestroy(cell: Cell) {
     const snap = getTerrain();
-    if (!snap || !cellUnlocked(snap, cell) || kindAt(snap, cell) === "empty") return;
-    connection.send({ type: "destroy", x: cell.x, y: cell.y });
+    if (!snap || !cellUnlocked(snap, cell)) return;
+    const tile = tileAt(snap, cell);
+    if (tile.kind === "empty") return;
+    const sent = connection.sendAction(
+      { type: "destroy", x: cell.x, y: cell.y, expectedKind: tile.kind, expectedDir: tile.dir },
+      [{ x: cell.x, y: cell.y, kind: "empty", dir: "north" }],
+    );
+    if (!sent) {
+      sfx.deny();
+      return;
+    }
     const { offX, offZ } = cellOffsets(snap);
     sfx.destroy();
     addBurst({ x: cell.x - offX, z: cell.y - offZ, color: "#8a8f9a", count: 10 });
@@ -167,13 +179,20 @@ export function Ground() {
       }
       const placements = strokePlacements(cells, getFacing(), shiftLock.current);
       const valid = canPlaceBatch(kind, placements, unitCost);
-      clearStroke();
       if (!valid) {
+        clearStroke();
         sfx.deny();
         return;
       }
-      connection.send({ type: "placeBatch", kind, placements });
-      addPendingSpend(placements.length * unitCost);
+      const snap = getTerrain();
+      const updates = placements.map((placement) => ({ ...placement, kind }));
+      const sent = connection.sendAction({ type: "placeBatch", kind, placements }, updates, placements.length * unitCost);
+      clearStroke();
+      if (!sent) {
+        sfx.deny();
+        return;
+      }
+      if (sent.predicted && snap) showPlacementFeedback(snap, updates);
       return;
     }
 
@@ -193,14 +212,21 @@ export function Ground() {
       if (e.repeat || (e.key !== "r" && e.key !== "R")) return;
       const snap = getTerrain();
       const cell = getHover();
-      if (snap && cell && cellUnlocked(snap, cell) && kindAt(snap, cell) !== "empty") {
-        connection.send({ type: "rotate", x: cell.x, y: cell.y });
-        sfx.select();
-      } else {
-        rotateFacing();
-        if (stroke.current && strokeKind.current) showBuildPreview(stroke.current);
-        else showHoverPreview();
+      if (snap && cell && cellUnlocked(snap, cell)) {
+        const tile = tileAt(snap, cell);
+        if (tile.kind !== "empty") {
+          const sent = connection.sendAction(
+            { type: "rotate", x: cell.x, y: cell.y, expectedKind: tile.kind, expectedDir: tile.dir },
+            [{ x: cell.x, y: cell.y, kind: tile.kind, dir: clockwise(tile.dir) }],
+          );
+          if (sent) sfx.select();
+          else sfx.deny();
+          return;
+        }
       }
+      rotateFacing();
+      if (stroke.current && strokeKind.current) showBuildPreview(stroke.current);
+      else showHoverPreview();
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key !== "Shift") return;
