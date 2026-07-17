@@ -1,6 +1,23 @@
 package engine
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
+
+func assertProducerRoute(t *testing.T, w *World, wantPath []int, wantSeller int) {
+	t.Helper()
+	runs := w.Producers()
+	if len(runs) != 1 {
+		t.Fatalf("producers = %+v, want one route", runs)
+	}
+	if !slices.Equal(runs[0].Path, wantPath) {
+		t.Fatalf("path = %v, want %v", runs[0].Path, wantPath)
+	}
+	if runs[0].Seller != wantSeller {
+		t.Errorf("seller = %d, want %d", runs[0].Seller, wantSeller)
+	}
+}
 
 func TestProducers(t *testing.T) {
 	t.Run("extractor through belts to a seller is productive", func(t *testing.T) {
@@ -83,5 +100,46 @@ func TestProducers(t *testing.T) {
 		if len(runs[0].Path) != 3 {
 			t.Errorf("path = %d belts, want 3", len(runs[0].Path))
 		}
+	})
+
+	t.Run("the nearest seller wins across a branch", func(t *testing.T) {
+		w := NewWorld(5, 5)
+		w.PlaceExtractor(2, 4, North)
+		w.PlaceBelt(2, 3, North)
+		w.PlaceBelt(2, 2, North)
+		w.PlaceBelt(2, 1, North)
+		w.PlaceSeller(2, 0, South)
+		w.PlaceBelt(3, 3, East)
+		w.PlaceSeller(4, 3, West)
+
+		want := []int{w.index(2, 3), w.index(3, 3)}
+		assertProducerRoute(t, w, want, w.index(4, 3))
+	})
+
+	t.Run("equal routes keep north east south west order", func(t *testing.T) {
+		w := NewWorld(5, 5)
+		w.PlaceExtractor(2, 4, North)
+		w.PlaceBelt(2, 3, North)
+		w.PlaceBelt(2, 2, North)
+		w.PlaceSeller(2, 1, South)
+		w.PlaceBelt(3, 3, East)
+		w.PlaceSeller(4, 3, West)
+
+		want := []int{w.index(2, 3), w.index(2, 2)}
+		assertProducerRoute(t, w, want, w.index(2, 1))
+	})
+
+	t.Run("a failed search does not affect the next extractor", func(t *testing.T) {
+		w := NewWorld(8, 2)
+		w.PlaceExtractor(0, 0, East)
+		w.PlaceBelt(1, 0, East)
+		w.PlaceBelt(2, 0, East)
+		w.PlaceExtractor(4, 1, East)
+		w.PlaceBelt(5, 1, East)
+		w.PlaceBelt(6, 1, East)
+		w.PlaceSeller(7, 1, West)
+
+		want := []int{w.index(5, 1), w.index(6, 1)}
+		assertProducerRoute(t, w, want, w.index(7, 1))
 	})
 }

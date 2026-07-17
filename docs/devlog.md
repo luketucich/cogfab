@@ -8,6 +8,9 @@ What I've worked on, newest first.
   one search per extractor with a shared seller-distance pass. On a
   121-extractor stress layout, stock refreshes fell from about 49 ms to less
   than 0.05 ms, while fresh routing fell to a 1.45 ms median.
+- Reused one set of server route-search buffers across every extractor in a
+  factory update. The generated 121-extractor benchmark fell from about 11.4 ms
+  and 13.8 MB allocated to 1.1 ms and 0.2 MB.
 
 ## 2026-07-16
 

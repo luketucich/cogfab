@@ -31,6 +31,25 @@ type Producer struct {
 	Seller int
 }
 
+// pathSearch holds the reusable work buffers for one Producers pass. Before a
+// new extractor search it clears only the cells the previous search touched.
+type pathSearch struct {
+	previous []int
+	queue    []int
+	visited  int
+}
+
+func newPathSearch(cells int) *pathSearch {
+	search := &pathSearch{
+		previous: make([]int, cells),
+		queue:    make([]int, cells),
+	}
+	for i := range search.previous {
+		search.previous[i] = -1
+	}
+	return search
+}
+
 // Producers lists every extractor whose material reaches a seller. Material
 // leaves an extractor only from the side it faces and enters a seller only on
 // the side it faces, so the run starts at the belt at the extractor's mouth and
@@ -38,6 +57,7 @@ type Producer struct {
 // the two in step.
 func (w *World) Producers() []Producer {
 	var out []Producer
+	var search *pathSearch
 	for i := range w.tiles {
 		if w.tiles[i].Kind != Extractor {
 			continue
@@ -46,7 +66,10 @@ func (w *World) Producers() []Producer {
 		if mouth < 0 || w.tiles[mouth].Kind != Belt {
 			continue // the extractor is not facing a belt
 		}
-		if path, seller, reached := w.pathToSeller(mouth); reached {
+		if search == nil {
+			search = newPathSearch(len(w.tiles))
+		}
+		if path, seller, reached := w.pathToSeller(mouth, search); reached {
 			out = append(out, Producer{Cell: i, Path: path, Seller: seller})
 		}
 	}
@@ -57,38 +80,42 @@ func (w *World) Producers() []Producer {
 // nearest seller mouth, returning the ordered belts on that path, the seller cell,
 // and whether a seller was reached. A seller counts only when it faces the belt
 // feeding it.
-func (w *World) pathToSeller(start int) (path []int, seller int, reached bool) {
-	prev := map[int]int{}
-	seen := map[int]bool{start: true}
-	queue := []int{start}
+func (w *World) pathToSeller(start int, search *pathSearch) (path []int, seller int, reached bool) {
+	for i := 0; i < search.visited; i++ {
+		search.previous[search.queue[i]] = -1
+	}
+	search.previous[start] = start
+	search.queue[0] = start
+	head, tail := 0, 1
 	end := -1
-	for len(queue) > 0 && end < 0 {
-		cur := queue[0]
-		queue = queue[1:]
+	for head < tail && end < 0 {
+		current := search.queue[head]
+		head++
 		for d := Direction(0); d < 4; d++ {
-			n := w.faceCell(cur, d)
-			if n < 0 {
+			next := w.faceCell(current, d)
+			if next < 0 {
 				continue
 			}
-			kind := w.tiles[n].Kind
-			if kind == Seller && w.tiles[n].Dir == opposite(d) {
-				end, seller = cur, n // cur sits at the seller's mouth
+			kind := w.tiles[next].Kind
+			if kind == Seller && w.tiles[next].Dir == opposite(d) {
+				end, seller = current, next // current sits at the seller's mouth
 				break
 			}
-			if kind == Belt && !seen[n] {
-				seen[n] = true
-				prev[n] = cur
-				queue = append(queue, n)
+			if kind == Belt && search.previous[next] < 0 {
+				search.previous[next] = current
+				search.queue[tail] = next
+				tail++
 			}
 		}
 	}
+	search.visited = tail
 	if end < 0 {
 		return nil, -1, false
 	}
 	// rebuild the path from the start belt to the seller mouth
 	order := []int{end}
 	for c := end; c != start; {
-		c = prev[c]
+		c = search.previous[c]
 		order = append(order, c)
 	}
 	for i, j := 0, len(order)-1; i < j; i, j = i+1, j-1 {
