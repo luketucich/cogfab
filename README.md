@@ -73,7 +73,7 @@ not change.
 | Client | React + TypeScript + Vite |
 | Rendering | Three.js via React Three Fiber |
 | Audio | Synthesized WebAudio effects plus a looping licensed music track |
-| Persistence | Versioned, validated JSON snapshots on disk, one file per room |
+| Persistence | Versioned, validated JSON snapshots with rollback-safe migration |
 | Observability | Prometheus-format metrics, OpenTelemetry Collector, Cloud Monitoring, Cloud Logging, and a portable Grafana dashboard |
 | TLS | the server fetches its own Let's Encrypt certificate |
 | Deploy | Small distroless Docker image on one GCP e2-micro COS VM; reference GKE manifests in `deploy/` |

@@ -10,10 +10,10 @@ import (
 	"github.com/luketucich/cogfab/internal/engine"
 )
 
-// Rooms persist as one small JSON file per room code, so a factory survives
-// server restarts and the empty-room grace running out. Periodic and shutdown
-// save attempts run on the hub's goroutine, which keeps the no-lock rule intact:
-// nothing outside that goroutine reads hub state.
+// Rooms persist as small JSON snapshots, so a factory survives server restarts
+// and the empty-room grace running out. Periodic and shutdown save attempts run
+// on the hub's goroutine, which keeps the no-lock rule intact: nothing outside
+// that goroutine reads hub state.
 
 // Version 2 adds the larger world, finite deposits, ports, and credits. Version
 // 1 remains readable so deployed rooms migrate instead of resetting.
@@ -510,9 +510,9 @@ func oneBeltRecoveryPair(world *engine.World, deposits, ports []cell) (cell, cel
 	return cell{}, cell{}, false
 }
 
-// Saves is the on-disk store, one file per room code. A nil *Saves is a valid
-// store that keeps nothing, so tests and a server without a writable disk just
-// run without saving.
+// Saves is the on-disk room store. A nil *Saves is a valid store that keeps
+// nothing, so tests and a server without a writable disk just run without
+// saving.
 type Saves struct {
 	dir string
 }
@@ -525,9 +525,14 @@ func NewSaves(dir string) (*Saves, error) {
 	return &Saves{dir: dir}, nil
 }
 
-// path is the save file for a code. Codes are uppercase letters and digits
-// (validCode), so they are safe as file names.
-func (s *Saves) path(code string) string {
+// currentPath is the current save file for a code. Version 2 lives beside the
+// legacy file so an image rollback can still read the untouched version 1
+// snapshot.
+func (s *Saves) currentPath(code string) string {
+	return filepath.Join(s.dir, code+".v2.json")
+}
+
+func (s *Saves) legacyPath(code string) string {
 	return filepath.Join(s.dir, code+".json")
 }
 
@@ -541,20 +546,27 @@ func (s *Saves) save(code string, snap snapshot) error {
 	if err != nil {
 		return err
 	}
-	tmp := s.path(code) + ".tmp"
+	tmp := s.currentPath(code) + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path(code))
+	return os.Rename(tmp, s.currentPath(code))
 }
 
-// load reads a room's save, reporting ok = false when there is none worth
-// restoring: no file, unreadable JSON, or state outside the game's bounds.
+// load prefers the current save, then falls back to the legacy file. Keeping
+// the two formats separate makes the migration safe to roll back and retry.
 func (s *Saves) load(code string) (snapshot, bool) {
 	if s == nil {
 		return snapshot{}, false
 	}
-	b, err := os.ReadFile(s.path(code))
+	if snap, ok := loadSnapshot(s.currentPath(code)); ok {
+		return snap, true
+	}
+	return loadSnapshot(s.legacyPath(code))
+}
+
+func loadSnapshot(path string) (snapshot, bool) {
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return snapshot{}, false
 	}

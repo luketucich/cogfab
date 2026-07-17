@@ -51,7 +51,7 @@ func TestLoadRejectsUnreadableFiles(t *testing.T) {
 		t.Fatal("a code never saved should not load")
 	}
 
-	if err := os.WriteFile(saves.path("BBBBBB"), []byte("not json"), 0o644); err != nil {
+	if err := os.WriteFile(saves.currentPath("BBBBBB"), []byte("not json"), 0o644); err != nil {
 		t.Fatalf("write junk: %v", err)
 	}
 	if _, ok := saves.load("BBBBBB"); ok {
@@ -118,7 +118,7 @@ func TestV1SnapshotMigratesIntoResourceWorld(t *testing.T) {
 		"valueLevel":4,
 		"gridTier":4
 	}`
-	if err := os.WriteFile(saves.path("LEGACY"), []byte(legacy), 0o644); err != nil {
+	if err := os.WriteFile(saves.legacyPath("LEGACY"), []byte(legacy), 0o644); err != nil {
 		t.Fatalf("write legacy save: %v", err)
 	}
 	snap, ok := saves.load("LEGACY")
@@ -141,6 +141,57 @@ func TestV1SnapshotMigratesIntoResourceWorld(t *testing.T) {
 	}
 	if migrated := h.snapshot(); migrated.Version != snapshotVersion || !migrated.valid() {
 		t.Fatal("migrated room did not produce a valid version 2 snapshot")
+	}
+}
+
+func TestV2SaveKeepsLegacySnapshot(t *testing.T) {
+	saves := newTestSaves(t)
+	legacy := []byte(`{"version":1,"width":1,"height":1,"tiles":[{"k":0,"d":0}],"ironOre":500,"gridTier":0}`)
+	if err := os.WriteFile(saves.legacyPath("SAFETY"), legacy, 0o644); err != nil {
+		t.Fatalf("write legacy save: %v", err)
+	}
+
+	snap := NewHub(NewResourceWorld("SAFETY")).snapshot()
+	snap.Credits = 900
+	if err := saves.save("SAFETY", snap); err != nil {
+		t.Fatalf("save version 2: %v", err)
+	}
+
+	got, err := os.ReadFile(saves.legacyPath("SAFETY"))
+	if err != nil {
+		t.Fatalf("read legacy save: %v", err)
+	}
+	if !reflect.DeepEqual(got, legacy) {
+		t.Fatal("saving version 2 changed the rollback-safe legacy snapshot")
+	}
+	loaded, ok := saves.load("SAFETY")
+	if !ok || loaded.Version != snapshotVersion || loaded.Credits != 900 {
+		t.Fatalf("load = version %d, credits %d, ok %v; want version 2 with 900 credits",
+			loaded.Version, loaded.Credits, ok)
+	}
+}
+
+func TestLoadFallsBackWhenV2SaveIsInvalid(t *testing.T) {
+	saves := newTestSaves(t)
+	legacy := `{
+		"version":1,
+		"width":1,
+		"height":1,
+		"tiles":[{"k":0,"d":0}],
+		"ironOre":321,
+		"gridTier":0
+	}`
+	if err := os.WriteFile(saves.legacyPath("FALLBK"), []byte(legacy), 0o644); err != nil {
+		t.Fatalf("write legacy save: %v", err)
+	}
+	if err := os.WriteFile(saves.currentPath("FALLBK"), []byte("not json"), 0o644); err != nil {
+		t.Fatalf("write invalid version 2 save: %v", err)
+	}
+
+	loaded, ok := saves.load("FALLBK")
+	if !ok || loaded.Version != 1 || loaded.LegacyCredits != 321 {
+		t.Fatalf("load = version %d, credits %d, ok %v; want legacy fallback",
+			loaded.Version, loaded.LegacyCredits, ok)
 	}
 }
 

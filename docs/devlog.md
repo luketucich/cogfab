@@ -13,7 +13,8 @@ What I've worked on, newest first.
   depletion check.
 - Changed the shared economy from ore to credits and added typed material on
   the belts. Version 2 saves preserve deposits, ports, stock, and material in
-  flight while safely migrating existing version 1 rooms.
+  flight. They live beside the untouched version 1 file, keeping deployment
+  rollback safe while existing rooms migrate.
 - Re-recorded the README demo in a real two-player room so the first iron line
   shows deposits, the shipping port, shared build previews, and material flow.
 - Made belt models follow the same route as the moving material. Connections to
