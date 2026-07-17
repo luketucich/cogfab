@@ -191,34 +191,34 @@ func (h *Hub) previewBytes(c *Client) []byte {
 // broadcastTransient sends a compact update to other protocol 3 clients while
 // preserving the full-roster behavior expected by older tabs. The sender has
 // already applied the change locally and does not need its compact echo.
-func (h *Hub) broadcastTransient(source *Client, compact []byte) {
+func (h *Hub) broadcastTransient(source *Client, message outboundMessage, compact []byte) {
 	var roster []byte
 	for recipient := range h.clients {
 		if recipient.protocol >= compactPresenceProtocol {
 			if recipient != source {
-				h.queueBroadcast(recipient, compact)
+				h.queueBroadcast(recipient, message, compact)
 			}
 			continue
 		}
 		if roster == nil {
 			roster = h.presenceBytes()
 		}
-		h.queueBroadcast(recipient, roster)
+		h.queueBroadcast(recipient, outboundPresence, roster)
 	}
 }
 
 func (h *Hub) broadcastCursor(c *Client) {
-	h.broadcastTransient(c, h.cursorBytes(c))
+	h.broadcastTransient(c, outboundCursor, h.cursorBytes(c))
 }
 
 func (h *Hub) broadcastPreview(c *Client) {
-	h.broadcastTransient(c, h.previewBytes(c))
+	h.broadcastTransient(c, outboundBuildPreview, h.previewBytes(c))
 }
 
 // broadcastPresence sends the authoritative roster to every client after a
 // join, leave, or profile change.
 func (h *Hub) broadcastPresence() {
-	h.broadcast(h.presenceBytes())
+	h.broadcast(outboundPresence, h.presenceBytes())
 }
 
 // defaultName is what a player is called until it picks something.

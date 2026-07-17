@@ -315,7 +315,7 @@ func TestBroadcastSendsToAllClients(t *testing.T) {
 	h.clients[c1] = true
 	h.clients[c2] = true
 
-	h.broadcast([]byte("hello"))
+	h.broadcast(outboundStats, []byte("hello"))
 
 	for i, c := range []*Client{c1, c2} {
 		select {
@@ -500,7 +500,7 @@ func TestBroadcastDropsSlowClient(t *testing.T) {
 	h.addClient(slow)              // welcome, state, and stats occupy three slots
 	slow.send <- []byte("backlog") // buffer is now full
 
-	h.broadcast([]byte("next")) // can't enqueue -> the client is dropped
+	h.broadcast(outboundStats, []byte("next")) // can't enqueue -> the client is dropped
 
 	if h.clients[slow] {
 		t.Error("slow client should have been dropped from the hub")

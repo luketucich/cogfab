@@ -120,6 +120,31 @@ func BenchmarkEconomyTickMetrics(b *testing.B) {
 	}
 }
 
+func BenchmarkOutboundQueueMetrics(b *testing.B) {
+	for _, enabled := range []bool{false, true} {
+		name := "disabled"
+		if enabled {
+			name = "enabled"
+		}
+		b.Run(name, func(b *testing.B) {
+			h := NewHub(engine.NewWorld(1, 1))
+			if enabled {
+				h.metrics = NewMetrics()
+			}
+			client := &Client{send: make(chan []byte, 1)}
+			payload := []byte(`{"type":"tiles"}`)
+			h.queueBroadcast(client, outboundTiles, payload)
+			<-client.send // initialize the metric label before timing steady state
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				h.queueBroadcast(client, outboundTiles, payload)
+				<-client.send
+			}
+		})
+	}
+}
+
 func BenchmarkRecomputeFullWorld(b *testing.B) {
 	h := denseHub(resourceWorldSize, resourceWorldSize)
 	b.ResetTimer()

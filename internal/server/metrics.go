@@ -25,11 +25,13 @@ type Metrics struct {
 	playerDisconnections     prometheus.Counter
 	slowClientDisconnections prometheus.Counter
 
-	commands        *prometheus.CounterVec
-	commandDuration *prometheus.HistogramVec
-	tickDuration    prometheus.Histogram
-	saveDuration    prometheus.Histogram
-	saveFailures    prometheus.Counter
+	commands         *prometheus.CounterVec
+	commandDuration  *prometheus.HistogramVec
+	outboundMessages *prometheus.CounterVec
+	outboundBytes    *prometheus.CounterVec
+	tickDuration     prometheus.Histogram
+	saveDuration     prometheus.Histogram
+	saveFailures     prometheus.Counter
 }
 
 // NewMetrics creates an isolated registry with Cogfab, Go runtime, and process
@@ -75,6 +77,14 @@ func NewMetrics() *Metrics {
 			Help:    "Time from submitting a decoded room command until its resulting broadcasts are queued.",
 			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 13),
 		}, []string{"command"}),
+		outboundMessages: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cogfab_websocket_messages_queued_total",
+			Help: "Total WebSocket messages successfully queued for individual clients by message type.",
+		}, []string{"message"}),
+		outboundBytes: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cogfab_websocket_payload_bytes_queued_total",
+			Help: "Total WebSocket payload bytes successfully queued for individual clients by message type, excluding protocol and TLS overhead.",
+		}, []string{"message"}),
 		tickDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name:    "cogfab_economy_tick_duration_seconds",
 			Help:    "Time to advance an active room by one economy tick and queue its updated stats.",
@@ -103,6 +113,8 @@ func NewMetrics() *Metrics {
 		m.slowClientDisconnections,
 		m.commands,
 		m.commandDuration,
+		m.outboundMessages,
+		m.outboundBytes,
 		m.tickDuration,
 		m.saveDuration,
 		m.saveFailures,
@@ -178,6 +190,15 @@ func (m *Metrics) economyTick(elapsed time.Duration) {
 	}
 }
 
+func (m *Metrics) outboundQueued(message outboundMessage, payloadBytes int) {
+	if m == nil {
+		return
+	}
+	label := outboundMessageLabel(message)
+	m.outboundMessages.WithLabelValues(label).Inc()
+	m.outboundBytes.WithLabelValues(label).Add(float64(payloadBytes))
+}
+
 func (m *Metrics) saveFinished(elapsed time.Duration, err error) {
 	if m == nil {
 		return
@@ -194,6 +215,24 @@ func commandLabel(command string) string {
 	switch command {
 	case wire.CmdPlace, wire.CmdPlaceBatch, wire.CmdPreview, wire.CmdDestroy, wire.CmdRotate, wire.CmdBuy, wire.CmdHover, wire.CmdProfile:
 		return command
+	default:
+		return "unknown"
+	}
+}
+
+// outboundMessageLabel keeps dashboard series bounded to server-owned message
+// types even if an internal caller passes an invalid value.
+func outboundMessageLabel(message outboundMessage) string {
+	switch message {
+	case outboundWelcome,
+		outboundState,
+		outboundTiles,
+		outboundStats,
+		outboundResources,
+		outboundPresence,
+		outboundCursor,
+		outboundBuildPreview:
+		return string(message)
 	default:
 		return "unknown"
 	}

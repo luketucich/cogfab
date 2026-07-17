@@ -11,6 +11,9 @@ What I've worked on, newest first.
 - Reused one set of server route-search buffers across every extractor in a
   factory update. The generated 121-extractor benchmark fell from about 11.4 ms
   and 13.8 MB allocated to 1.1 ms and 0.2 MB.
+- Added bounded WebSocket message and payload-byte counters by update type,
+  plus matching operations-dashboard panels. Compact update regressions are now
+  visible without recording room or player data.
 
 ## 2026-07-16
 
