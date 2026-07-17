@@ -30,6 +30,61 @@ func denseHub(w, h int) *Hub {
 	return hub
 }
 
+// connectedResourceHub turns every generated deposit into an extractor and
+// fills the remaining terrain with one connected belt network. It exercises
+// the largest resource world a real room can build, including long shared
+// searches toward the four shipping ports.
+func connectedResourceHub() *Hub {
+	world := NewResourceWorld("BENCHMARK")
+	deposits := 0
+	for y := 0; y < world.Height(); y++ {
+		for x := 0; x < world.Width(); x++ {
+			if world.DepositAt(x, y).Kind != engine.NoResource {
+				deposits++
+				continue
+			}
+			if !world.HasPort(x, y) {
+				world.PlaceBelt(x, y, engine.East)
+			}
+		}
+	}
+
+	directions := []struct {
+		dx, dy int
+		dir    engine.Direction
+	}{
+		{0, -1, engine.North},
+		{1, 0, engine.East},
+		{0, 1, engine.South},
+		{-1, 0, engine.West},
+	}
+	faceBelt := func(x, y int) engine.Direction {
+		for _, direction := range directions {
+			nx, ny := x+direction.dx, y+direction.dy
+			if nx >= 0 && nx < world.Width() && ny >= 0 && ny < world.Height() && world.At(nx, ny).Kind == engine.Belt {
+				return direction.dir
+			}
+		}
+		panic("benchmark machine has no belt at its mouth")
+	}
+
+	for y := 0; y < world.Height(); y++ {
+		for x := 0; x < world.Width(); x++ {
+			if world.DepositAt(x, y).Kind != engine.NoResource {
+				world.PlaceExtractor(x, y, faceBelt(x, y))
+			} else if world.HasPort(x, y) {
+				world.PlaceSeller(x, y, faceBelt(x, y))
+			}
+		}
+	}
+
+	hub := NewHub(world)
+	if len(hub.routes) != deposits {
+		panic("benchmark did not connect every resource deposit")
+	}
+	return hub
+}
+
 func BenchmarkTickSmallBoard(b *testing.B) {
 	h := denseHub(12, 8)
 	b.ResetTimer()
@@ -71,6 +126,15 @@ func BenchmarkRecomputeFullWorld(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		h.recompute()
 	}
+}
+
+func BenchmarkRecomputeConnectedResourceWorld(b *testing.B) {
+	h := connectedResourceHub()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		h.recompute()
+	}
+	b.ReportMetric(float64(len(h.routes)), "routes")
 }
 
 func BenchmarkCommandPayloads(b *testing.B) {
