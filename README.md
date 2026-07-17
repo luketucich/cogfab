@@ -63,6 +63,10 @@ Local build previews update on every pointer move. Routine shared updates are
 coalesced to 20 per second and sent separately from cursor movement, so a long
 drag stays responsive without repeatedly broadcasting the whole room roster.
 
+The browser caches factory routes separately from changing deposit stock. One
+shared distance pass routes every productive extractor, so dense factories and
+once-per-second stock updates do not repeat the same path searches.
+
 Today, one Container-Optimized OS VM is enough. Rooms already have stable codes
 and isolated state. Scaling out would require routing each room code to one
 process and moving room saves to shared storage, but the room model itself would
