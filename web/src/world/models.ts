@@ -11,9 +11,9 @@ const CONVEYOR_CROSS_URL = "/models/conveyor-cross.glb";
 const MACHINE_URL = "/models/machine.glb";
 const HOPPER_URL = "/models/hopper-square.glb";
 
-// firstMesh pulls the geometry and material out of a loaded model, so we can
+// meshParts pulls the geometry and material out of a loaded model, so we can
 // draw many copies of it with a single instanced mesh.
-function firstMesh(scene: THREE.Object3D): MeshParts {
+export function meshParts(scene: THREE.Object3D): MeshParts {
   let geometry: THREE.BufferGeometry | undefined;
   let material: THREE.Material | undefined;
   scene.traverse((obj) => {
@@ -44,12 +44,12 @@ export function useFactoryModels(): FactoryModels {
   const conveyorCross = useGLTF(CONVEYOR_CROSS_URL);
   const machine = useGLTF(MACHINE_URL);
   const hopper = useGLTF(HOPPER_URL);
-  const belt = useMemo(() => firstMesh(conveyor.scene), [conveyor.scene]);
-  const corner = useMemo(() => firstMesh(conveyorCorner.scene), [conveyorCorner.scene]);
-  const tee = useMemo(() => firstMesh(conveyorTee.scene), [conveyorTee.scene]);
-  const cross = useMemo(() => firstMesh(conveyorCross.scene), [conveyorCross.scene]);
-  const extractor = useMemo(() => firstMesh(machine.scene), [machine.scene]);
-  const seller = useMemo(() => firstMesh(hopper.scene), [hopper.scene]);
+  const belt = useMemo(() => meshParts(conveyor.scene), [conveyor.scene]);
+  const corner = useMemo(() => meshParts(conveyorCorner.scene), [conveyorCorner.scene]);
+  const tee = useMemo(() => meshParts(conveyorTee.scene), [conveyorTee.scene]);
+  const cross = useMemo(() => meshParts(conveyorCross.scene), [conveyorCross.scene]);
+  const extractor = useMemo(() => meshParts(machine.scene), [machine.scene]);
+  const seller = useMemo(() => meshParts(hopper.scene), [hopper.scene]);
   return { belt, corner, tee, cross, extractor, seller };
 }
 

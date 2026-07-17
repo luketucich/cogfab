@@ -39,14 +39,18 @@ type Tile struct {
 type World struct {
 	width, height int
 	tiles         []Tile
+	deposits      []Deposit
+	ports         []bool
 }
 
 // NewWorld makes an empty grid of the given size.
 func NewWorld(width, height int) *World {
 	return &World{
-		width:  width,
-		height: height,
-		tiles:  make([]Tile, width*height),
+		width:    width,
+		height:   height,
+		tiles:    make([]Tile, width*height),
+		deposits: make([]Deposit, width*height),
+		ports:    make([]bool, width*height),
 	}
 }
 

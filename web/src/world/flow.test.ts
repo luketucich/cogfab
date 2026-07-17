@@ -1,16 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { drainRuns, flowConnections, flowPaths } from "./flow";
+import { drainRuns, flowConnections, flowPaths, runKey } from "./flow";
 import type { Dir, StateMessage, TileView } from "../net/types";
 
 // grid builds a snapshot from a map of "x,y" -> tile; missing cells are empty.
 function grid(width: number, height: number, cells: Record<string, TileView>): StateMessage {
   const tiles: TileView[] = [];
+  const deposits: StateMessage["deposits"] = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      tiles.push(cells[`${x},${y}`] ?? { kind: "empty", dir: "north" });
+      const tile = cells[`${x},${y}`] ?? { kind: "empty", dir: "north" };
+      tiles.push(tile);
+      if (tile.kind === "extractor") deposits.push({ x, y, kind: "iron", capacity: 100, remaining: 100 });
     }
   }
-  return { type: "state", width, height, tiles };
+  return { type: "state", width, height, tiles, deposits, ports: [] };
 }
 
 const E = (dir: Dir): TileView => ({ kind: "extractor", dir });
@@ -75,6 +78,21 @@ describe("flowPaths", () => {
     const runs = flowPaths(snap);
     expect(runs.length).toBe(1);
     expect(runs[0].complete).toBe(true);
+  });
+
+  it("carries its source identity and resource kind", () => {
+    const snap = grid(4, 1, { "0,0": E("east"), "1,0": B("east"), "2,0": B("east"), "3,0": S("west") });
+    snap.deposits[0] = { ...snap.deposits[0], kind: "copper" };
+    const run = flowPaths(snap)[0];
+    expect(run.resource).toBe("copper");
+    expect(run.source).toBe(0);
+    expect(runKey({ ...run, source: 4 })).not.toBe(runKey(run));
+  });
+
+  it("keeps a depleted source route but marks it inactive", () => {
+    const snap = grid(4, 1, { "0,0": E("east"), "1,0": B("east"), "2,0": B("east"), "3,0": S("west") });
+    const depleted = { ...snap, deposits: [{ ...snap.deposits[0], remaining: 0 }] };
+    expect(flowPaths(depleted)[0].active).toBe(false);
   });
 });
 

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { getLatest, subscribe } from "./store";
+import { getTerrain, subscribeResources } from "./store";
 import { beltMultiplier, getStats, MAX_SIM_LEVEL } from "./economy";
 import { cellOffsets } from "./grid";
 import { chevronGeometry } from "./chevron";
@@ -21,9 +21,9 @@ const BROKEN = new THREE.Color("#ff6b6b"); // a run that dead-ends before one
 // null while the run still exists.
 type Run = { key: string; segs: Curve[]; color: THREE.Color; death: number | null };
 
-// FlowArrows paints the path the ore takes: a faint chevron drifts along every
+// FlowArrows paints the path material takes: a faint chevron drifts along every
 // belt of every run, white when the run reaches a seller and red when it
-// dead-ends. Built from the same runs as the ore, so an arrow flows out of each
+// dead-ends. Built from the same runs as the material, so an arrow flows out of each
 // extractor and the two always agree. When a run's belts are deleted it fades out
 // rather than snapping off. Purely cosmetic, all client-side.
 export function FlowArrows() {
@@ -37,7 +37,7 @@ export function FlowArrows() {
     () => new THREE.MeshBasicMaterial({ transparent: true, opacity: OPACITY, side: THREE.DoubleSide, toneMapped: false }),
     [],
   );
-  const snap = useSyncExternalStore(subscribe, getLatest);
+  const snap = useSyncExternalStore(subscribeResources, getTerrain);
 
   // Reconcile runs with the world, then colour each chevron. A run whose belts
   // were deleted is kept on briefly so it can fade out instead of snapping off.
@@ -47,6 +47,7 @@ export function FlowArrows() {
     if (snap) {
       const { offX, offZ } = cellOffsets(snap);
       for (const run of flowPaths(snap)) {
+        if (!run.active) continue;
         const segs = run.steps.map((s) => makeCurve(s.x - offX, s.y - offZ, s.entry, s.exit));
         live.push({ key: runKey(run), segs, color: run.complete ? COMPLETE : BROKEN, death: null });
       }

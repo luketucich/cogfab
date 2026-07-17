@@ -44,3 +44,19 @@ func ParseDirection(s string) Direction {
 		return North
 	}
 }
+
+// String returns the lowercase material name used on the wire.
+func (r ResourceKind) String() string {
+	switch r {
+	case Iron:
+		return "iron"
+	case Copper:
+		return "copper"
+	case Quartz:
+		return "quartz"
+	case Gold:
+		return "gold"
+	default:
+		return "none"
+	}
+}

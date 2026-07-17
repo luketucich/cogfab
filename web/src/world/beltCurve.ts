@@ -6,14 +6,14 @@ import { STEP } from "./dir";
 // space and the step vectors toward the sides it enters and leaves by. A point
 // traces a quadratic Bezier from the entry edge, through the centre, to the exit
 // edge, so it runs straight across opposite sides and curves through
-// perpendicular ones. Shared by the flow arrows and the ore so they move along
+// perpendicular ones. Shared by the flow arrows and material so they move along
 // belts identically.
 export type Curve = {
   centreX: number;
   centreZ: number;
-  entryX: number; // step toward the side ore enters from
+  entryX: number; // step toward the side material enters from
   entryZ: number;
-  exitX: number; // step toward the side ore leaves by
+  exitX: number; // step toward the side material leaves by
   exitZ: number;
 };
 

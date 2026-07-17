@@ -52,7 +52,7 @@ spec:
           persistentVolumeClaim:
             claimName: cogfab-data
 ---
-# Room saves use one small JSON file per room. Expand the disk if usage grows.
+# Room saves use small JSON snapshots. Expand the disk if usage grows.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

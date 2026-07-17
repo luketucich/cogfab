@@ -135,8 +135,14 @@ key and reaches the VM through IAP and OS Login.
 
 Before changing the startup script or save format, open one room in two
 browsers, make a recognizable change, and wait at least 35 seconds for the
-periodic save. Record the room code and state, then take a disk snapshot. Image
-rollback cannot repair incompatible or damaged data.
+periodic save. Record the room code and state, then take a disk snapshot.
+
+The current server writes version 2 rooms to `ROOM.v2.json` and leaves the
+legacy `ROOM.json` snapshot untouched. It prefers a valid version 2 save and
+falls back to version 1. An automatic image rollback can restart the old reader
+without overwriting the version 2 save, and a roll forward can resume the
+migrated world. Keep the disk snapshot until the migrated room has been
+verified in production as protection against unrelated disk or operator errors.
 
 ```sh
 SNAPSHOT="cogfab-predeploy-$(date +%Y%m%d-%H%M%S)"
@@ -195,7 +201,13 @@ gcloud compute ssh cogfab \
 The health check covers public HTTP and TLS. The `404` confirms that metrics
 are not exposed by the public server. For a higher-risk release, also join one
 room from two browsers and confirm that a change appears in both. After a
-startup or persistence change, also confirm that the recorded room restores.
+startup or persistence change, wait 35 seconds for the recorded room to save,
+confirm its `.v2.json` file reports version 2, and reconnect to verify it
+restores. Keep the pre-deploy disk snapshot until all three checks pass.
+
+After a rollback, roll forward before accepting new gameplay. The version 2
+server prefers its side-by-side save, so it does not merge changes made later
+by a version 1 image.
 
 Room saves and certificates live under `/var/lib/cogfab` on the VM:
 

@@ -1,19 +1,19 @@
 import type { StatsMessage } from "../net/types";
 
-// The latest economy numbers from the server: the authoritative iron-ore total,
+// The latest economy numbers from the server: the authoritative credit total,
 // the production rate, and where the upgrades stand, with the time they arrived
-// so the OreCounter can count up smoothly between the ~1/sec updates. Kept
-// outside React like the world store; the OreCounter reads it each animation
+// so the credits counter can count up smoothly between the ~1/sec updates. Kept
+// outside React like the world store; the counter reads it each animation
 // frame.
 
-// How fast ore moves and how closely it packs, in belts and belts/sec. Mirror
-// of oreSpeed and oreGap in internal/server/economy.go; keep them in step.
-export const ORE_SPEED = 2.5;
-export const ORE_GAP = 0.5;
+// How fast material moves and how closely it packs, in belts and belts/sec.
+// Mirror of materialSpeed and materialGap in internal/server/economy.go.
+export const MATERIAL_SPEED = 2.5;
+export const MATERIAL_GAP = 0.5;
 
 // MAX_SIM_LEVEL is where the visuals stop getting busier: past this the belts
-// are maxed on screen, and the server pays the difference through richer
-// chunks. Mirror of maxSimLevel in economy.go.
+// are maxed on screen, and each visible chunk represents more raw units.
+// Mirror of maxSimLevel in economy.go.
 export const MAX_SIM_LEVEL = 5;
 
 // Suffixes for big numbers, one per thousand step past a million.
@@ -48,23 +48,14 @@ export function emissionMultiplier(extractorLevel: number): number {
   return 1 + 0.5 * extractorLevel;
 }
 
-// oreValue is what one delivery is worth: the base ore plus one more per Ore
-// Value level. Mirror of oreValue in economy.go.
-export function oreValue(valueLevel: number): number {
+// saleMultiplier scales each resource's base value. Mirror of
+// saleValueMultiplier in economy.go.
+export function saleMultiplier(valueLevel: number): number {
   return 1 + valueLevel;
 }
 
-// perExtractorRate is the ore per second one extractor earns at the given
-// upgrade levels: denser emission, faster belts, and richer deliveries, with
-// no sim cap (the cap only shapes the visuals). Mirror of currentRate in
-// economy.go, expressed per extractor for the upgrade cards.
-export function perExtractorRate(extractorLevel: number, beltLevel: number, valueLevel: number): number {
-  const chunksPerSec = (ORE_SPEED * beltMultiplier(beltLevel)) / (ORE_GAP / emissionMultiplier(extractorLevel));
-  return chunksPerSec * oreValue(valueLevel);
-}
-
 type Stats = {
-  ironOre: number;
+  credits: number;
   ratePerSec: number;
   extractorLevel: number;
   extractorCost: number; // 0 = maxed
@@ -81,7 +72,7 @@ type Stats = {
 };
 
 let stats: Stats = {
-  ironOre: 0,
+  credits: 0,
   ratePerSec: 0,
   extractorLevel: 0,
   extractorCost: 0,
@@ -98,8 +89,8 @@ let stats: Stats = {
 };
 const listeners = new Set<() => void>();
 
-// pendingSpend is ore already committed to commands still in flight, so a fast
-// belt drag cannot overspend against a total the server has not re-sent yet.
+// pendingSpend is credits already committed to commands still in flight, so a
+// fast belt drag cannot overspend against a total the server has not re-sent yet.
 // Every stats update carries the true total, so it resets there.
 let pendingSpend = 0;
 
@@ -107,15 +98,21 @@ export function addPendingSpend(cost: number): void {
   pendingSpend += cost;
 }
 
-// spendableOre is the latest server total minus what is already in flight.
-export function spendableOre(): number {
-  return stats.ironOre - pendingSpend;
+// spendableCredits is the latest server total minus what is already in flight.
+export function spendableCredits(): number {
+  return stats.credits - pendingSpend;
+}
+
+// creditsAfterReserve is the part of a balance that can be spent without
+// touching credits held for a required purchase.
+export function creditsAfterReserve(credits: number, reserve: number): number {
+  return Math.max(credits - reserve, 0);
 }
 
 // setStats records a fresh economy update from the server.
 export function setStats(msg: StatsMessage): void {
   stats = {
-    ironOre: msg.ironOre,
+    credits: msg.credits,
     ratePerSec: msg.ratePerSec,
     extractorLevel: msg.extractorLevel,
     extractorCost: msg.extractorCost,
@@ -139,9 +136,8 @@ export function getStats(): Stats {
   return stats;
 }
 
-// subscribeStats notifies on each server update, for panels that show the
-// rate, costs, and levels (the ore total counts up every frame instead, see
-// OreCounter).
+// subscribeStats notifies panels that show the rate, costs, and levels. The
+// credits counter animates the total between updates.
 export function subscribeStats(fn: () => void): () => void {
   listeners.add(fn);
   return () => {

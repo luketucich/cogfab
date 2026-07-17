@@ -1,6 +1,7 @@
-import type { Dir, StateMessage } from "../net/types";
+import type { Dir, ResourceKind, StateMessage } from "../net/types";
 import { OPPOSITE, SIDES, STEP } from "./dir";
 import { cellIndex } from "./grid";
+import { depositAt } from "./resources";
 
 // neighbour is the tiles index of the cell one step from i toward s, or -1 off
 // the grid.
@@ -11,22 +12,27 @@ const neighbour = (snap: StateMessage, i: number, s: Dir): number => {
   return cellIndex(snap, x + dx, y + dy);
 };
 
-// FlowStep is one belt on a run: the cell and the sides ore enters and leaves by
+// FlowStep is one belt on a run: the cell and the sides material enters and leaves by
 // (opposite sides run straight, perpendicular sides curve).
 export type FlowStep = { x: number; y: number; entry: Dir; exit: Dir };
 
-// FlowRun is one extractor's belt run: the ordered cells ore travels, and whether
-// it reaches a seller (complete) or dead-ends (broken). Both the flowing ore and
-// the path arrows are built from these, so they always agree.
-export type FlowRun = { steps: FlowStep[]; complete: boolean };
+// FlowRun is one extractor's belt run. Source keeps separate extractors distinct
+// when they share a path; active is false once that source deposit is empty.
+export type FlowRun = {
+  steps: FlowStep[];
+  complete: boolean;
+  source: number;
+  resource: ResourceKind;
+  active: boolean;
+};
 
 // flowPaths returns a run for the belt at each extractor's mouth: the shortest
 // path to a seller's mouth when one is reachable (complete), otherwise the path to
-// the farthest belt (broken). Ore leaves an extractor and enters a seller only on
+// the farthest belt (broken). Material leaves an extractor and enters a seller only on
 // the side each faces; between belts facing does not gate flow, so the run is just
-// the connected path the ore travels.
+// the connected path the material travels.
 //
-// Ore, arrows, and belt models share the cached result for each snapshot, so a
+// Material, arrows, and belt models share the cached result for each snapshot, so a
 // world change walks the grid once.
 let cachedSnap: StateMessage | null = null;
 let cachedRuns: FlowRun[] = [];
@@ -44,8 +50,8 @@ export function flowPaths(snap: StateMessage): FlowRun[] {
   return cachedRuns;
 }
 
-// flowConnections returns the sides ore crosses on each routed belt. Belt
-// models use the same answer as the moving ore, including machine endpoints.
+// flowConnections returns the sides material crosses on each routed belt. Belt
+// models use the same answer as the moving material, including machine endpoints.
 export function flowConnections(snap: StateMessage): ReadonlyMap<number, readonly Dir[]> {
   refreshFlow(snap);
   return cachedConnections;
@@ -88,7 +94,13 @@ function computeFlowPaths(snap: StateMessage): FlowRun[] {
 
   // route walks belts out from a source belt: it heads for the nearest seller, or
   // failing that the farthest belt, and returns the ordered path either way.
-  const route = (start: number, fromExtractor: Dir): FlowRun => {
+  const route = (
+    start: number,
+    fromExtractor: Dir,
+    source: number,
+    resource: ResourceKind,
+    active: boolean,
+  ): FlowRun => {
     const prev = new Map<number, number>();
     const seen = new Set<number>([start]);
     const queue = [start];
@@ -102,7 +114,7 @@ function computeFlowPaths(snap: StateMessage): FlowRun[] {
       for (const s of SIDES) {
         const n = neighbour(snap, cur, s);
         if (n < 0) continue;
-        // a seller only takes ore on the side it faces, so the belt must sit at its
+        // a seller only takes material on the side it faces, so the belt must sit at its
         // mouth (the seller faces back toward this belt), not just touch a side
         if (tiles[n].kind === "seller" && tiles[n].dir === OPPOSITE[s]) {
           sellerCell = cur;
@@ -134,26 +146,28 @@ function computeFlowPaths(snap: StateMessage): FlowRun[] {
       const exit = last ? (complete ? sellerDir : OPPOSITE[entry]) : dirTo(cur, order[k + 1]);
       return { x: cur % w, y: Math.floor(cur / w), entry, exit };
     });
-    return { steps, complete };
+    return { steps, complete, source, resource, active };
   };
 
   for (let i = 0; i < tiles.length; i++) {
     if (tiles[i].kind !== "extractor") continue;
-    // ore leaves an extractor only from the side it faces, so the run starts at the
+    const source = depositAt(snap, i % w, Math.floor(i / w));
+    if (!source) continue;
+    // material leaves an extractor only from the side it faces, so the run starts at the
     // belt at its mouth, not a belt touching a side
     const out = tiles[i].dir;
     const b = neighbour(snap, i, out);
-    if (b >= 0 && tiles[b].kind === "belt") runs.push(route(b, OPPOSITE[out]));
+    if (b >= 0 && tiles[b].kind === "belt") runs.push(route(b, OPPOSITE[out], i, source.kind, source.remaining > 0));
   }
   return runs;
 }
 
-// runKey identifies a run by its ordered cells and the sides ore crosses them,
-// so the ore and arrows can tell a path that is still flowing from a brand new
+// runKey identifies a run by its ordered cells and the sides material crosses,
+// so the material and arrows can tell a path that is still flowing from a new
 // one. The sides matter: two extractors can feed the same belts from different
 // ends, and those runs must not collide.
 export const runKey = (run: FlowRun): string =>
-  run.steps.map((s) => `${s.x},${s.y},${s.entry},${s.exit}`).join(";");
+  `${run.source}:${run.resource}:` + run.steps.map((s) => `${s.x},${s.y},${s.entry},${s.exit}`).join(";");
 
 // drainRuns merges this frame's live runs with ones whose belts just went away. A
 // vanished run is stamped with when it was cut and kept flowing until it has had

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtNum } from "./economy";
+import { creditsAfterReserve, fmtNum } from "./economy";
 
 describe("fmtNum", () => {
   it("keeps small numbers exact, with separators", () => {
@@ -19,5 +19,13 @@ describe("fmtNum", () => {
   it("stays on the last suffix rather than inventing one", () => {
     expect(fmtNum(9_100_000_000_000_000)).toBe("9.10Q");
     expect(fmtNum(2e21)).toBe("2000000Q");
+  });
+});
+
+describe("creditsAfterReserve", () => {
+  it("keeps a required balance out of the spendable budget", () => {
+    expect(creditsAfterReserve(900, 500)).toBe(400);
+    expect(creditsAfterReserve(300, 500)).toBe(0);
+    expect(creditsAfterReserve(300, 0)).toBe(300);
   });
 });

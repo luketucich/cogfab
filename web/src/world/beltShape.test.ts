@@ -5,12 +5,15 @@ import type { Dir, StateMessage, TileView } from "../net/types";
 // snapshot builds a tiny factory from a map of "x,y" -> tile.
 function snapshot(width: number, height: number, cells: Record<string, TileView>): StateMessage {
   const tiles: TileView[] = [];
+  const deposits: StateMessage["deposits"] = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      tiles.push(cells[`${x},${y}`] ?? { kind: "empty", dir: "north" });
+      const tile = cells[`${x},${y}`] ?? { kind: "empty", dir: "north" };
+      tiles.push(tile);
+      if (tile.kind === "extractor") deposits.push({ x, y, kind: "iron", capacity: 100, remaining: 100 });
     }
   }
-  return { type: "state", width, height, tiles };
+  return { type: "state", width, height, tiles, deposits, ports: [] };
 }
 
 function grid(width: number, height: number, belts: Record<string, Dir>): StateMessage {
@@ -84,7 +87,7 @@ describe("beltShape", () => {
     expect(shapeAt(centre("north", ["north", "east", "south", "west"]), "north")).toEqual({ kind: "cross" });
   });
 
-  it("curves through the sides used by the ore route", () => {
+  it("curves through the sides used by the material route", () => {
     const snap = snapshot(4, 3, {
       "1,0": { kind: "belt", dir: "north" }, // nearby, but not part of the route
       "1,1": { kind: "belt", dir: "north" },

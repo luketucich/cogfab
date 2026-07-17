@@ -29,7 +29,7 @@ canvas {
   padding: 12px 14px;
 }
 
-.hud-ore {
+.hud-credits {
   top: 14px;
   left: 50%;
   min-width: 170px;
@@ -37,7 +37,7 @@ canvas {
   transform: translateX(-50%);
 }
 
-.hud-ore__subrow {
+.hud-credits__subrow {
   gap: 8px;
 }
 
@@ -129,7 +129,7 @@ canvas {
     padding: 10px 12px;
   }
 
-  .hud-ore {
+  .hud-credits {
     top: var(--hud-edge);
     min-width: 150px;
     padding: 8px 18px;
@@ -155,7 +155,7 @@ canvas {
 }
 
 @media (max-width: 560px) {
-  .hud-ore {
+  .hud-credits {
     right: var(--hud-edge);
     left: auto;
     width: 142px;
@@ -165,7 +165,7 @@ canvas {
     transform: none;
   }
 
-  .hud-ore__subrow {
+  .hud-credits__subrow {
     gap: 4px;
   }
 
@@ -185,7 +185,7 @@ canvas {
     width: 160px;
   }
 
-  .hud-ore {
+  .hud-credits {
     width: 128px;
   }
 

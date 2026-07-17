@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/luketucich/cogfab/internal/engine"
 )
 
 // newTestRooms is a registry over tiny test worlds with a very short grace, so
@@ -13,7 +15,7 @@ func newTestRooms(t *testing.T) *Rooms {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	return NewRooms(ctx, 20*time.Millisecond, newTestWorld, nil, nil)
+	return NewRooms(ctx, 20*time.Millisecond, func(string) *engine.World { return newTestWorld() }, nil, nil)
 }
 
 // waitTornDown fails the test unless the hub's Run loop exits soon; the done

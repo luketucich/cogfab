@@ -5,17 +5,14 @@ import (
 	"github.com/luketucich/cogfab/internal/wire"
 )
 
-// Everything ore buys lives here: placing structures, tearing them down for a
-// partial refund, and the four upgrades (denser extractors, faster belts,
-// richer ore, a bigger unlocked region). Keep the build costs in step with
-// web/src/toolbar/tools.ts; the region centring has its own mirror note on
-// unlockedRect below.
+// Everything credits buy lives here: structures, refunds, and the four
+// upgrades. Keep build costs in step with web/src/toolbar/tools.ts; the region
+// centring has its own mirror note on unlockedRect below.
 
-// startingOre covers a first extractor, belt, and seller (160 ore) with spare.
-// A line stays affordable forever: upgrades only sell while ore is flowing, and
-// a destroy that leaves nothing earning refunds in full, so a dead board always
-// liquidates back into enough for a fresh start.
-const startingOre = 250
+// startingCredits covers a first extractor, seller, and several connecting
+// belts. Production upgrades require a live line, and tearing down the last
+// productive structure refunds its full cost so the room can rebuild.
+const startingCredits = 250
 
 // buildCost is what placing each structure costs; tearing one down gives back
 // half (see refund).
@@ -25,15 +22,15 @@ var buildCost = map[engine.TileKind]int{
 	engine.Seller:    75,
 }
 
-// refund is the ore returned for tearing a structure down: half its build cost,
-// so cycling build-and-destroy always loses ore.
+// refund is the credit returned for tearing a structure down: half its build
+// cost, so cycling build-and-destroy always loses credits.
 func refund(kind engine.TileKind) int { return buildCost[kind] / 2 }
 
 // Rate upgrade prices double through every practical level while their gains
 // increase linearly, so additional production lines eventually outperform
 // another upgrade. Those lines need more land, which keeps Grid Size useful.
-// Extractor Rate changes emitGap, Belt Speed changes beltSpeed, and Ore Value
-// changes oreValue in economy.go.
+// Extractor Rate changes emitGap, Belt Speed changes beltSpeed, and Sale Value
+// changes saleValueMultiplier in economy.go.
 const (
 	extractorBaseCost = 150
 	beltBaseCost      = 200
@@ -43,11 +40,21 @@ const (
 // gridTiers are the unlockable region sizes, smallest first. Buying Grid Size
 // moves to the next tier; cost is the price of reaching that tier.
 var gridTiers = []struct{ w, h, cost int }{
-	{3, 3, 0},
-	{5, 4, 300},
-	{8, 5, 1000},
-	{10, 6, 3000},
-	{12, 8, 8000},
+	{8, 8, 0},
+	{12, 12, 300},
+	{16, 16, 500},
+	{20, 20, 800},
+	{24, 24, 1300},
+	{28, 28, 2100},
+	{32, 32, 3400},
+	{36, 36, 5500},
+	{40, 40, 8800},
+	{44, 44, 14100},
+	{48, 48, 22600},
+	{52, 52, 36200},
+	{56, 56, 58000},
+	{60, 60, 92800},
+	{64, 64, 148500},
 }
 
 // doublingCost is the price of an upgrade's next level: the base, doubling per
@@ -74,11 +81,15 @@ func (h *Hub) gridCost() int {
 // client derives the same rect from the stats message; keep the centring in
 // step with web/src/world/grid.ts.
 func (h *Hub) unlockedRect() (x0, y0, x1, y1 int) {
-	t := gridTiers[h.gridTier]
-	x0 = max((h.world.Width()-t.w)/2, 0)
-	y0 = max((h.world.Height()-t.h)/2, 0)
-	x1 = min(x0+t.w, h.world.Width()) - 1
-	y1 = min(y0+t.h, h.world.Height()) - 1
+	return tierRect(h.world, h.gridTier)
+}
+
+func tierRect(world *engine.World, tier int) (x0, y0, x1, y1 int) {
+	t := gridTiers[tier]
+	x0 = max((world.Width()-t.w)/2, 0)
+	y0 = max((world.Height()-t.h)/2, 0)
+	x1 = min(x0+t.w, world.Width()) - 1
+	y1 = min(y0+t.h, world.Height()) - 1
 	return
 }
 
@@ -121,14 +132,15 @@ func (h *Hub) applyPlacements(kindName string, placements []wire.Placement) bool
 		return false
 	}
 	cost := len(placements) * unitCost
-	if cost > h.ironOre {
+	if cost > h.credits {
 		return false
 	}
 
 	seen := make(map[int]bool, len(placements))
 	for _, placement := range placements {
 		if !validDirection(placement.Dir) || !h.unlocked(placement.X, placement.Y) ||
-			h.world.At(placement.X, placement.Y).Kind != engine.Empty {
+			h.world.At(placement.X, placement.Y).Kind != engine.Empty ||
+			!h.terrainAllows(kind, placement.X, placement.Y) {
 			return false
 		}
 		cell := placement.Y*h.world.Width() + placement.X
@@ -149,8 +161,22 @@ func (h *Hub) applyPlacements(kindName string, placements []wire.Placement) bool
 			h.world.PlaceSeller(placement.X, placement.Y, dir)
 		}
 	}
-	h.ironOre -= cost
+	h.credits -= cost
 	return true
+}
+
+func (h *Hub) terrainAllows(kind engine.TileKind, x, y int) bool {
+	deposit := h.world.DepositAt(x, y)
+	switch kind {
+	case engine.Extractor:
+		return deposit.Kind != engine.NoResource && deposit.Remaining > 0 && !h.world.HasPort(x, y)
+	case engine.Seller:
+		return h.world.HasPort(x, y) && deposit.Kind == engine.NoResource
+	case engine.Belt:
+		return !h.world.HasPort(x, y) && (deposit.Kind == engine.NoResource || deposit.Remaining == 0)
+	default:
+		return false
+	}
 }
 
 // applyDestroy tears a structure down for half its build cost back. When the
@@ -168,11 +194,21 @@ func (h *Hub) applyDestroy(cmd wire.Command) bool {
 	back := refund(kind)
 	// Ask the world, not h.routes: routes are stale here (Run recomputes them
 	// only after apply returns).
-	if len(h.world.Producers()) == 0 {
+	if !h.hasActiveProducer() {
 		back = buildCost[kind]
 	}
-	h.ironOre += back
+	h.credits += back
 	return true
+}
+
+func (h *Hub) hasActiveProducer() bool {
+	for _, producer := range h.world.Producers() {
+		x, y := producer.Cell%h.world.Width(), producer.Cell/h.world.Width()
+		if h.world.DepositAt(x, y).Remaining > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // applyRotate turns a structure a quarter clockwise, free of charge.
@@ -184,31 +220,38 @@ func (h *Hub) applyRotate(cmd wire.Command) bool {
 	return true
 }
 
-// applyBuy pays for an upgrade if the ore covers it and it is not maxed out.
-// Upgrades only sell while ore is flowing: with income the purse always
-// recovers, so no purchase can strand the game.
+// applyBuy pays for an upgrade if the shared credits cover it and it is not
+// maxed out. Production upgrades require a live route and leave the next land
+// unlock's price untouched. Grid Size can spend that reserve without income,
+// and the reserve disappears once the whole world is open.
 func (h *Hub) applyBuy(cmd wire.Command) bool {
-	if len(h.routes) == 0 {
-		return false
-	}
 	var cost int
 	var level *int
+	productionUpgrade := true
 	switch cmd.Upgrade {
 	case wire.UpgradeExtractorRate:
 		cost, level = h.extractorCost(), &h.extractorLevel
 	case wire.UpgradeBeltSpeed:
 		cost, level = h.beltCost(), &h.beltLevel
-	case wire.UpgradeOreValue:
+	case wire.UpgradeSaleValue:
 		cost, level = h.valueCost(), &h.valueLevel
 	case wire.UpgradeGridSize:
+		productionUpgrade = false
 		cost, level = h.gridCost(), &h.gridTier
 	default:
 		return false
 	}
-	if cost == 0 || cost > h.ironOre {
+	spendable := h.credits
+	if productionUpgrade {
+		if len(h.routes) == 0 {
+			return false
+		}
+		spendable -= h.gridCost()
+	}
+	if cost == 0 || cost > spendable {
 		return false
 	}
-	h.ironOre -= cost
+	h.credits -= cost
 	*level++
 	return true
 }

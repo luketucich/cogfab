@@ -12,6 +12,8 @@ const state = (...tiles: TileView[]): StateMessage => ({
   width: tiles.length,
   height: 1,
   tiles,
+  deposits: [],
+  ports: [],
 });
 const tile = (kind: TileView["kind"], dir: TileView["dir"] = "east"): TileView => ({ kind, dir });
 

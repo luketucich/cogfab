@@ -14,7 +14,7 @@ func TestSnapshotCapturesGrid(t *testing.T) {
 	w.PlaceBelt(1, 0, engine.East)
 	// (2,0) stays empty
 
-	msg := Snapshot(w)
+	msg := Snapshot(w, 0, 0, 2, 0)
 
 	if msg.Type != "state" {
 		t.Errorf("Type = %q, want %q", msg.Type, "state")
@@ -37,15 +37,60 @@ func TestSnapshotCapturesGrid(t *testing.T) {
 }
 
 func TestSnapshotJSONHasExpectedKeys(t *testing.T) {
-	b, err := json.Marshal(Snapshot(engine.NewWorld(1, 1)))
+	b, err := json.Marshal(Snapshot(engine.NewWorld(1, 1), 0, 0, 0, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(b)
-	for _, key := range []string{`"type"`, `"width"`, `"height"`, `"tiles"`, `"kind"`, `"dir"`} {
+	for _, key := range []string{`"type"`, `"width"`, `"height"`, `"tiles"`, `"deposits"`, `"ports"`, `"kind"`, `"dir"`} {
 		if !strings.Contains(s, key) {
 			t.Errorf("JSON missing key %s in: %s", key, s)
 		}
+	}
+	for _, emptyList := range []string{`"deposits":[]`, `"ports":[]`} {
+		if !strings.Contains(s, emptyList) {
+			t.Errorf("empty sparse terrain must encode as [] in: %s", s)
+		}
+	}
+}
+
+func TestSnapshotOnlyRevealsUnlockedTerrain(t *testing.T) {
+	w := engine.NewWorld(3, 2)
+	w.SetDeposit(0, 0, engine.Iron, 3000)
+	w.SetDeposit(2, 1, engine.Gold, 500)
+	w.SetPort(1, 0, true)
+	w.SetPort(2, 1, true)
+
+	msg := Snapshot(w, 0, 0, 1, 0)
+	if len(msg.Deposits) != 1 || msg.Deposits[0].Kind != "iron" {
+		t.Fatalf("visible deposits = %+v, want only iron", msg.Deposits)
+	}
+	if len(msg.Ports) != 1 || msg.Ports[0] != (CellView{X: 1, Y: 0}) {
+		t.Fatalf("visible ports = %+v, want only (1,0)", msg.Ports)
+	}
+}
+
+func TestResourcesCarriesCurrentStock(t *testing.T) {
+	w := engine.NewWorld(2, 1)
+	w.SetDeposit(0, 0, engine.Quartz, 900)
+	w.Consume(0, 0, 125)
+
+	msg := Resources(w, 0, 0, 1, 0)
+	if msg.Type != "resources" || len(msg.Deposits) != 1 {
+		t.Fatalf("resources message = %+v", msg)
+	}
+	if got := msg.Deposits[0]; got.Kind != "quartz" || got.Remaining != 775 || got.Capacity != 900 {
+		t.Fatalf("deposit update = %+v, want quartz at 775/900", got)
+	}
+}
+
+func TestEmptyResourcesUsesAnArray(t *testing.T) {
+	b, err := json.Marshal(Resources(engine.NewWorld(1, 1), 0, 0, 0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"deposits":[]`) {
+		t.Fatalf("empty resources encoded as %s, want deposits []", b)
 	}
 }
 

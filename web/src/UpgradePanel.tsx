@@ -2,21 +2,40 @@ import { useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import type { IconType } from "react-icons";
 import { PiShovelFill, PiFastForwardFill, PiCoinsFill, PiArrowsOutFill } from "react-icons/pi";
-import { beltMultiplier, fmtNum, getStats, oreValue, perExtractorRate, spendableOre, subscribeStats } from "./world/economy";
+import {
+  beltMultiplier,
+  creditsAfterReserve,
+  emissionMultiplier,
+  fmtNum,
+  getStats,
+  saleMultiplier,
+  spendableCredits,
+  subscribeStats,
+} from "./world/economy";
 import { connection } from "./net/connection";
 import { sfx } from "./sfx";
-import { panel, ACCENT, ORE_TEXT, FONT_DISPLAY, FONT_UI } from "./ui";
+import { panel, ACCENT, CREDIT_TEXT, FONT_DISPLAY, FONT_UI } from "./ui";
+
+function upgradeDetail(current: number, next: number, cost: number, label: string): string {
+  const currentValue = `x${fmtNum(current)}`;
+  return cost > 0 ? `${currentValue} to x${fmtNum(next)} ${label}` : `${currentValue} ${label}`;
+}
+
+function unavailableReason(hasRequiredIncome: boolean, reserveBlocks: boolean): string {
+  if (!hasRequiredIncome) return "Connect an active production line first";
+  if (reserveBlocks) return "Credits are being kept for the next land unlock";
+  return "Not enough credits";
+}
 
 // UpgradePanel is the upgrades sidebar in the top right: four live purchases,
 // each card spelling out exactly what the next level buys.
 export function UpgradePanel() {
   const stats = useSyncExternalStore(subscribeStats, getStats);
-  // The server only sells upgrades while ore is flowing (spending with no
-  // income could strand the game), so the buttons wait for income too.
-  const earning = stats.ratePerSec > 0;
-  const ore = spendableOre();
+  // Production upgrades require a live route and leave the next land purchase
+  // untouched. Land itself can still be unlocked after a deposit runs dry.
+  const incomeAvailable = stats.ratePerSec > 0;
+  const credits = spendableCredits();
   const { extractorLevel: el, beltLevel: bl, valueLevel: vl } = stats;
-  const rate = (extractor: number, belt: number, value: number) => fmtNum(perExtractorRate(extractor, belt, value));
 
   return (
     <div className="hud-upgrades" style={panel}>
@@ -25,11 +44,12 @@ export function UpgradePanel() {
         <UpgradeCard
           icon={PiShovelFill}
           name="Extractor Rate"
-          detail={stats.extractorCost > 0 ? `${rate(el, bl, vl)} to ${rate(el + 1, bl, vl)} ore/s per extractor` : `${rate(el, bl, vl)} ore/s per extractor`}
+          detail={upgradeDetail(emissionMultiplier(el), emissionMultiplier(el + 1), stats.extractorCost, "output")}
           tag={`LV ${el}`}
           cost={stats.extractorCost}
-          ironOre={ore}
-          earning={earning}
+          credits={credits}
+          incomeAvailable={incomeAvailable}
+          reservedCredits={stats.gridCost}
           onBuy={() => {
             sfx.buy();
             connection.send({ type: "buy", upgrade: "extractorRate" });
@@ -38,11 +58,12 @@ export function UpgradePanel() {
         <UpgradeCard
           icon={PiFastForwardFill}
           name="Belt Speed"
-          detail={stats.beltCost > 0 ? `x${fmtNum(beltMultiplier(bl))} to x${fmtNum(beltMultiplier(bl + 1))} speed` : `x${fmtNum(beltMultiplier(bl))} speed`}
+          detail={upgradeDetail(beltMultiplier(bl), beltMultiplier(bl + 1), stats.beltCost, "throughput")}
           tag={`LV ${bl}`}
           cost={stats.beltCost}
-          ironOre={ore}
-          earning={earning}
+          credits={credits}
+          incomeAvailable={incomeAvailable}
+          reservedCredits={stats.gridCost}
           onBuy={() => {
             sfx.buy();
             connection.send({ type: "buy", upgrade: "beltSpeed" });
@@ -50,12 +71,13 @@ export function UpgradePanel() {
         />
         <UpgradeCard
           icon={PiCoinsFill}
-          name="Ore Value"
-          detail={stats.valueCost > 0 ? `${fmtNum(oreValue(vl))} to ${fmtNum(oreValue(vl + 1))} ore per delivery` : `${fmtNum(oreValue(vl))} ore per delivery`}
+          name="Sale Value"
+          detail={upgradeDetail(saleMultiplier(vl), saleMultiplier(vl + 1), stats.valueCost, "resource value")}
           tag={`LV ${vl}`}
           cost={stats.valueCost}
-          ironOre={ore}
-          earning={earning}
+          credits={credits}
+          incomeAvailable={incomeAvailable}
+          reservedCredits={stats.gridCost}
           onBuy={() => {
             sfx.buy();
             connection.send({ type: "buy", upgrade: "oreValue" });
@@ -64,11 +86,16 @@ export function UpgradePanel() {
         <UpgradeCard
           icon={PiArrowsOutFill}
           name="Grid Size"
-          detail={stats.gridCost > 0 ? `${stats.gridWidth}x${stats.gridHeight} to ${stats.nextGridWidth}x${stats.nextGridHeight} land` : "The whole world is yours"}
+          detail={
+            stats.gridCost > 0
+              ? `${stats.gridWidth}x${stats.gridHeight} to ${stats.nextGridWidth}x${stats.nextGridHeight} land`
+              : "The whole world is yours"
+          }
           tag={`${stats.gridWidth}x${stats.gridHeight}`}
           cost={stats.gridCost}
-          ironOre={ore}
-          earning={earning}
+          credits={credits}
+          incomeAvailable={incomeAvailable}
+          requiresIncome={false}
           onBuy={() => {
             sfx.expand();
             connection.send({ type: "buy", upgrade: "gridSize" });
@@ -85,13 +112,30 @@ type CardProps = {
   detail: string;
   tag: string; // current level or size, shown beside the name
   cost: number; // next purchase price; 0 = maxed out
-  ironOre: number;
-  earning: boolean;
+  credits: number;
+  incomeAvailable: boolean;
+  requiresIncome?: boolean;
+  reservedCredits?: number;
   onBuy: () => void;
 };
 
-function UpgradeCard({ icon: Icon, name, detail, tag, cost, ironOre, earning, onBuy }: CardProps) {
-  const buyable = cost > 0 && cost <= ironOre && earning;
+function UpgradeCard({
+  icon: Icon,
+  name,
+  detail,
+  tag,
+  cost,
+  credits,
+  incomeAvailable,
+  requiresIncome = true,
+  reservedCredits = 0,
+  onBuy,
+}: CardProps) {
+  const hasRequiredIncome = !requiresIncome || incomeAvailable;
+  const availableCredits = creditsAfterReserve(credits, reservedCredits);
+  const buyable = cost > 0 && cost <= availableCredits && hasRequiredIncome;
+  const reserveBlocks = hasRequiredIncome && cost <= credits && cost > availableCredits;
+  const disabledTitle = unavailableReason(hasRequiredIncome, reserveBlocks);
   return (
     <div className="hud-upgrade-card" style={card}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -109,10 +153,10 @@ function UpgradeCard({ icon: Icon, name, detail, tag, cost, ironOre, earning, on
         <button
           onClick={onBuy}
           disabled={!buyable}
-          title={earning ? undefined : "Get some ore flowing first"}
+          title={buyable ? undefined : disabledTitle}
           style={{ ...buyButton, ...(!buyable && { opacity: 0.45, cursor: "default" }) }}
         >
-          Upgrade <span style={{ color: ORE_TEXT }}>· {fmtNum(cost)} ore</span>
+          Upgrade <span style={{ color: CREDIT_TEXT }}>· {fmtNum(cost)} credits</span>
         </button>
       )}
     </div>

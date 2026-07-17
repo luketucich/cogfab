@@ -15,6 +15,8 @@ import { HoverGlow } from "./world/HoverGlow";
 import { MouthMarkers } from "./world/MouthMarkers";
 import { PlayerCursors } from "./world/PlayerCursors";
 import { Region } from "./world/Region";
+import { ResourceField } from "./world/ResourceField";
+import { ResourceTooltip } from "./world/ResourceTooltip";
 
 // Scene is the whole 3D view: a locked isometric camera you pan and zoom like a
 // map, soft even lighting, the checkered floor, and the factory. The camera's
@@ -47,10 +49,12 @@ export function Scene() {
       <Ground />
 
       <Suspense fallback={null}>
+        <ResourceField />
         <BuildPreviews />
         <Factory />
         <HoverGlow />
       </Suspense>
+      <ResourceTooltip />
       <FlowItems />
       <FlowArrows />
       <MouthMarkers />

@@ -23,14 +23,20 @@ func newTestServerWithWorld(t *testing.T, newWorld func() *engine.World) string 
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	rooms := NewRooms(ctx, time.Minute, newWorld, nil, nil)
+	rooms := NewRooms(ctx, time.Minute, func(string) *engine.World { return newWorld() }, nil, nil)
 	srv := httptest.NewServer(rooms.Handler())
 	t.Cleanup(srv.Close)
 	return "ws" + strings.TrimPrefix(srv.URL, "http")
 }
 
 func TestPlaceBatchBroadcastsOneCompleteState(t *testing.T) {
-	url := newTestServerWithWorld(t, func() *engine.World { return engine.NewWorld(3, 1) })
+	url := newTestServerWithWorld(t, func() *engine.World {
+		world := engine.NewWorld(3, 1)
+		for x := 0; x < 3; x++ {
+			world.SetDeposit(x, 0, engine.Iron, 4000)
+		}
+		return world
+	})
 	conn, read := dial(t, url+"?room=STROKE")
 	readWelcome(t, read)
 	read() // initial state
@@ -63,6 +69,70 @@ func TestPlaceBatchBroadcastsOneCompleteState(t *testing.T) {
 	}
 }
 
+func TestLargeLegalPlaceBatchFitsTheReadLimit(t *testing.T) {
+	const roomCode = "BAGBAT"
+	saves := newTestSaves(t)
+	seed := NewHub(NewResourceWorld(roomCode))
+	seed.gridTier = len(gridTiers) - 1
+	seed.credits = 1_000_000
+	if err := saves.save(roomCode, seed.snapshot()); err != nil {
+		t.Fatalf("save full-world room: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	rooms := NewRooms(ctx, time.Minute, NewResourceWorld, saves, nil)
+	srv := httptest.NewServer(rooms.Handler())
+	t.Cleanup(func() {
+		srv.Close()
+		cancel()
+		rooms.Shutdown()
+	})
+
+	conn, read := dial(t, "ws"+strings.TrimPrefix(srv.URL, "http")+"?room="+roomCode)
+	readWelcome(t, read)
+	read() // initial state
+	read() // initial stats
+	read() // initial presence
+
+	placements := make([]wire.Placement, 0, resourceWorldSize*resourceWorldSize)
+	for y := 0; y < seed.world.Height(); y++ {
+		for x := 0; x < seed.world.Width(); x++ {
+			if seed.terrainAllows(engine.Belt, x, y) {
+				placements = append(placements, wire.Placement{X: x, Y: y, Dir: "east"})
+			}
+		}
+	}
+	command, err := json.Marshal(wire.Command{
+		Type: wire.CmdPlaceBatch, Kind: wire.KindBelt, Placements: placements,
+	})
+	if err != nil {
+		t.Fatalf("marshal placement batch: %v", err)
+	}
+	if len(command) <= 32<<10 || len(command) > clientReadLimit {
+		t.Fatalf("placement batch is %d bytes, want over the default limit and within %d", len(command), clientReadLimit)
+	}
+
+	wctx, wcancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer wcancel()
+	if err := conn.Write(wctx, websocket.MessageText, command); err != nil {
+		t.Fatalf("write large placement batch: %v", err)
+	}
+
+	var state wire.StateMessage
+	if data := read(); json.Unmarshal(data, &state) != nil || state.Type != "state" {
+		t.Fatalf("large placement batch should broadcast state, got %s", data)
+	}
+	placed := 0
+	for _, tile := range state.Tiles {
+		if tile.Kind == wire.KindBelt {
+			placed++
+		}
+	}
+	if placed != len(placements) {
+		t.Fatalf("placed %d belts from a batch of %d", placed, len(placements))
+	}
+}
+
 // dial connects to a test server and hands back the conn and a read helper
 // that fails the test on error.
 func dial(t *testing.T, url string) (*websocket.Conn, func() []byte) {
@@ -73,6 +143,7 @@ func dial(t *testing.T, url string) (*websocket.Conn, func() []byte) {
 	if err != nil {
 		t.Fatalf("dial %s: %v", url, err)
 	}
+	conn.SetReadLimit(1 << 20)
 	t.Cleanup(func() { _ = conn.CloseNow() })
 	read := func() []byte {
 		rctx, rcancel := context.WithTimeout(context.Background(), 5*time.Second)

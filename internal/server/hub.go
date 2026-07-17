@@ -52,16 +52,15 @@ type Hub struct {
 	saves   *Saves   // where the room persists to; nil keeps it in memory only
 	metrics *Metrics // nil when operational metrics are disabled
 
-	ironOre    int     // authoritative iron-ore total: earned at the seller, spent on builds
-	orePartial float64 // fractional ore carried between ticks (chunk values go fractional past the sim cap)
+	credits int // authoritative purse: earned at sellers and spent on the factory
 
-	extractorLevel int // global Extractor Rate level; higher emits ore denser
-	beltLevel      int // global Belt Speed level; higher carries ore faster
-	valueLevel     int // global Ore Value level; higher makes each delivery worth more
+	extractorLevel int // global Extractor Rate level; higher emits material denser
+	beltLevel      int // global Belt Speed level; higher carries material faster
+	valueLevel     int // global Sale Value level; higher makes each delivery worth more
 	gridTier       int // index into gridTiers: how much of the world is unlocked
 
-	routes map[string]*route // live extractor-to-seller paths, for emitting ore
-	chunks []*chunk          // ore in flight on the belts
+	routes map[string]*route // live extractor-to-seller paths, for emitting material
+	chunks []*chunk          // material in flight on the belts
 
 	clients    map[*Client]bool
 	register   chan *Client
@@ -74,7 +73,7 @@ type Hub struct {
 func NewHub(w *engine.World) *Hub {
 	h := &Hub{
 		world:      w,
-		ironOre:    startingOre,
+		credits:    startingCredits,
 		routes:     make(map[string]*route),
 		clients:    make(map[*Client]bool),
 		register:   make(chan *Client),
@@ -90,9 +89,8 @@ func NewHub(w *engine.World) *Hub {
 // final save during a clean shutdown.
 const saveEvery = 30 * time.Second
 
-// Run is the hub's event loop: it applies and broadcasts each command right away
-// (so a placement shows up at once) and accrues ore once a second. On ctx cancel
-// it attempts a final save and disconnects everyone.
+// Run is the hub's event loop: it applies and broadcasts each command right
+// away, advances production once a second, and saves before a clean shutdown.
 func (h *Hub) Run(ctx context.Context) {
 	defer close(h.done)
 	ticker := time.NewTicker(time.Second)
@@ -132,8 +130,11 @@ func (h *Hub) runEconomyTick() {
 	if h.metrics != nil {
 		started = time.Now()
 	}
-	h.tick()
+	resourcesChanged := h.tick()
 	h.broadcastStats()
+	if resourcesChanged {
+		h.broadcast(h.resourcesBytes())
+	}
 	if !started.IsZero() {
 		h.metrics.economyTick(time.Since(started))
 	}
@@ -142,6 +143,10 @@ func (h *Hub) runEconomyTick() {
 // handleCommand applies one decoded room command and queues any state it
 // changes. It reports whether the command produced a visible change.
 func (h *Hub) handleCommand(sub clientCommand) bool {
+	if !h.clients[sub.c] {
+		return false
+	}
+
 	switch sub.cmd.Type {
 	case wire.CmdHover:
 		changed := h.applyHover(sub.c, sub.cmd)
@@ -168,17 +173,17 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 		}
 	}
 
-	ore, rate := h.ironOre, h.currentRate()
+	credits, rate := h.credits, h.currentRate()
 	if !h.apply(sub.cmd) {
-		// A rejected build may have reserved ore on the client while another
+		// A rejected build may have reserved credits on the client while another
 		// player changed the room. Return the authoritative total so it clears.
 		h.sendTo(sub.c, h.statsBytes())
 		return false
 	}
 	h.broadcast(h.stateBytes())
 	h.recompute()
-	if h.ironOre != ore || h.currentRate() != rate {
-		h.broadcastStats() // the command moved ore or changed the rate
+	if h.credits != credits || h.currentRate() != rate {
+		h.broadcastStats() // the command spent credits or changed the rate
 	}
 	return true
 }
@@ -229,7 +234,7 @@ func (h *Hub) Submit(c *Client, cmd wire.Command) {
 	}
 }
 
-// apply runs one client command against the world and the ore purse, reporting
+// apply runs one client command against the world and shared credits, reporting
 // whether anything changed. A command the players cannot afford, cannot reach,
 // or that makes no sense is ignored: the client greys those out up front, and
 // the server never trusts it. The checks themselves live in shop.go.
@@ -251,7 +256,14 @@ func (h *Hub) apply(cmd wire.Command) bool {
 
 // stateBytes is the current world as a JSON state message.
 func (h *Hub) stateBytes() []byte {
-	b, _ := json.Marshal(wire.Snapshot(h.world)) // a fixed struct; marshal can't fail
+	x0, y0, x1, y1 := h.unlockedRect()
+	b, _ := json.Marshal(wire.Snapshot(h.world, x0, y0, x1, y1))
+	return b
+}
+
+func (h *Hub) resourcesBytes() []byte {
+	x0, y0, x1, y1 := h.unlockedRect()
+	b, _ := json.Marshal(wire.Resources(h.world, x0, y0, x1, y1))
 	return b
 }
 
@@ -265,7 +277,7 @@ func (h *Hub) statsBytes() []byte {
 	}
 	b, _ := json.Marshal(wire.StatsMessage{
 		Type:           "stats",
-		IronOre:        h.ironOre,
+		Credits:        h.credits,
 		Rate:           h.currentRate(),
 		ExtractorLevel: h.extractorLevel,
 		ExtractorCost:  h.extractorCost(),

@@ -69,7 +69,7 @@ func TestProducers(t *testing.T) {
 		}
 	})
 
-	t.Run("path length counts the belts the ore crosses", func(t *testing.T) {
+	t.Run("path length counts the belts the material crosses", func(t *testing.T) {
 		w := NewWorld(6, 1)
 		w.PlaceExtractor(0, 0, East)
 		w.PlaceBelt(1, 0, East)
