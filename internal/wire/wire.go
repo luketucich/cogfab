@@ -106,12 +106,32 @@ type PresencePlayer struct {
 	Preview  *BuildPreview `json:"preview,omitempty"`
 }
 
-// PresenceMessage is a room's full roster, sent whenever identity, cursor, or
-// build-preview presence changes. Four players at most, so sending the whole
-// list every time beats delta bookkeeping.
+// PresenceMessage is a room's full roster. It handles membership and identity
+// for every client, plus cursor and preview changes for protocols before 3.
 type PresenceMessage struct {
 	Type    string           `json:"type"`
 	Players []PresencePlayer `json:"players"`
+}
+
+// CursorMessage updates one player's transient pointer position. Identity and
+// room membership continue to use the full presence roster.
+type CursorMessage struct {
+	Type     string  `json:"type"`
+	Slot     int     `json:"slot"`
+	On       bool    `json:"on"`
+	SX       float64 `json:"sx"`
+	SY       float64 `json:"sy"`
+	Hovering bool    `json:"hovering"`
+	X        float64 `json:"x"`
+	Y        float64 `json:"y"`
+}
+
+// BuildPreviewMessage replaces one player's complete transient build preview.
+// Preview is deliberately not omitted: null tells clients to clear the ghost.
+type BuildPreviewMessage struct {
+	Type    string        `json:"type"`
+	Slot    int           `json:"slot"`
+	Preview *BuildPreview `json:"preview"`
 }
 
 // RoomFullMessage tells a joiner there is no seat: the room holds its four

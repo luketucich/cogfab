@@ -4,6 +4,9 @@ import { subscribeSession } from "../net/session";
 
 let current: BuildPreview | null = null;
 const listeners = new Set<() => void>();
+const SEND_EVERY = 50; // 20 updates per second matches the shared cursor cadence
+let lastSentAt = -Infinity;
+let pending: ReturnType<typeof setTimeout> | null = null;
 
 export function buildPreviewsEqual(a: BuildPreview | null, b: BuildPreview | null): boolean {
   if (a === b) return true;
@@ -18,12 +21,31 @@ function copy(preview: BuildPreview): BuildPreview {
   return { kind: preview.kind, placements: preview.placements.map((placement) => ({ ...placement })) };
 }
 
-function share(): void {
+function shareNow(): void {
+  if (pending) {
+    clearTimeout(pending);
+    pending = null;
+  }
+  lastSentAt = performance.now();
   connection.send(
     current
       ? { type: "preview", kind: current.kind, placements: current.placements }
       : { type: "preview", kind: "", placements: [] },
   );
+}
+
+// Keep the local ghost immediate while the network receives at most one latest
+// preview per 50ms window.
+function share(): void {
+  const wait = SEND_EVERY - (performance.now() - lastSentAt);
+  if (wait <= 0) {
+    shareNow();
+  } else if (!pending) {
+    pending = setTimeout(() => {
+      pending = null;
+      shareNow();
+    }, wait);
+  }
 }
 
 // setBuildPreview updates the immediate local ghost and shares it with the
@@ -32,7 +54,8 @@ export function setBuildPreview(preview: BuildPreview | null): void {
   if (buildPreviewsEqual(current, preview)) return;
   current = preview ? copy(preview) : null;
   for (const listener of listeners) listener();
-  share();
+  if (current) share();
+  else shareNow(); // clearing a stale remote ghost should never wait
 }
 
 export function getBuildPreview(): BuildPreview | null {
@@ -49,5 +72,5 @@ export function subscribeBuildPreview(listener: () => void): () => void {
 // A fresh welcome creates a new server-side player, so restore any preview the
 // local pointer is still holding through a reconnect.
 subscribeSession(() => {
-  if (current) share();
+  if (current) shareNow();
 });

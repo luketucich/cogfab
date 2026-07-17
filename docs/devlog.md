@@ -7,6 +7,10 @@ What I've worked on, newest first.
 - Replaced action-time 64x64 snapshots with authoritative tile updates. A
   benchmarked 64-tile change fell from 127 KB to 2.7 KB and encodes about 40x
   faster. Full snapshots remain for joins, reconnects, and land unlocks.
+- Split cursor movement and build previews from the room roster. In a local
+  four-player trace, a five-tile drag sent each peer 2.2 KB of transient updates
+  instead of 12.5 KB. Local previews remain immediate while their shared copy
+  coalesces routine updates to 20 per second.
 
 ## 2026-07-15
 

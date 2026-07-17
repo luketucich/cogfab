@@ -111,7 +111,7 @@ func TestWorldCommandsBroadcastAuthoritativeTileUpdates(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			h := NewHub(test.world())
-			c := &Client{send: make(chan []byte, 4), supportsTileUpdates: true}
+			c := &Client{send: make(chan []byte, 4), protocol: tileUpdateProtocol}
 			h.clients[c] = true
 
 			if !h.handleCommand(clientCommand{c: c, cmd: test.cmd}) {
@@ -134,7 +134,7 @@ func TestWorldCommandsBroadcastAuthoritativeTileUpdates(t *testing.T) {
 func TestTileUpdatesKeepLegacyClientsInSync(t *testing.T) {
 	h := NewHub(engine.NewWorld(2, 1))
 	legacy := &Client{send: make(chan []byte, 2)}
-	current := &Client{send: make(chan []byte, 2), supportsTileUpdates: true}
+	current := &Client{send: make(chan []byte, 2), protocol: tileUpdateProtocol}
 	h.clients[legacy] = true
 	h.clients[current] = true
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/coder/websocket"
@@ -19,9 +20,10 @@ const (
 	// memory used by an untrusted WebSocket frame.
 	clientReadLimit = 256 << 10
 
-	// Current clients request compact authoritative tile updates. Missing this
-	// value identifies an older tab that still needs full snapshots.
-	tileUpdateProtocol = "2"
+	// Protocol 2 introduced compact authoritative tile updates. Protocol 3 adds
+	// compact collaborative cursor and build-preview updates.
+	tileUpdateProtocol      = 2
+	compactPresenceProtocol = 3
 )
 
 // acceptOptions is shared by every upgrade. Only the game's own pages may open
@@ -62,8 +64,8 @@ func (h *Hub) serve(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	client := &Client{
-		send:                make(chan []byte, clientBuffer),
-		supportsTileUpdates: r.URL.Query().Get("protocol") == tileUpdateProtocol,
+		send:     make(chan []byte, clientBuffer),
+		protocol: protocolVersion(r.URL.Query().Get("protocol")),
 	}
 	h.Register(client)
 	defer h.Unregister(client)
@@ -128,4 +130,14 @@ func (h *Hub) serve(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// protocolVersion parses a client's numeric wire version. Missing, malformed,
+// and negative values stay on the legacy protocol instead of guessing.
+func protocolVersion(raw string) int {
+	version, err := strconv.Atoi(raw)
+	if err != nil || version < 0 {
+		return 0
+	}
+	return version
 }
