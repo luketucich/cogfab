@@ -6,6 +6,7 @@ COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
 RUN npm run build
+RUN find dist/assets -type f \( -name '*.js' -o -name '*.css' \) -exec gzip -9 -k {} +
 
 FROM golang:1.26-alpine AS server
 WORKDIR /src

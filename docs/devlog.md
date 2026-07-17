@@ -4,16 +4,19 @@ What I've worked on, newest first.
 
 ## 2026-07-17
 
+- Precompressed production JavaScript and CSS and added safe cache headers. The
+  current JavaScript transfer falls from about 1.24 MB to 341 KB for browsers
+  that accept gzip.
+- Added bounded WebSocket message and payload-byte counters by update type,
+  plus matching operations-dashboard panels. Compact update regressions are now
+  visible without recording room or player data.
+- Reused one set of server route-search buffers across every extractor in a
+  factory update. The generated 121-extractor benchmark fell from about 11.4 ms
+  and 13.8 MB allocated to 1.1 ms and 0.2 MB.
 - Separated client belt routing from once-per-second stock updates and replaced
   one search per extractor with a shared seller-distance pass. On a
   121-extractor stress layout, stock refreshes fell from about 49 ms to less
   than 0.05 ms, while fresh routing fell to a 1.45 ms median.
-- Reused one set of server route-search buffers across every extractor in a
-  factory update. The generated 121-extractor benchmark fell from about 11.4 ms
-  and 13.8 MB allocated to 1.1 ms and 0.2 MB.
-- Added bounded WebSocket message and payload-byte counters by update type,
-  plus matching operations-dashboard panels. Compact update regressions are now
-  visible without recording room or player data.
 
 ## 2026-07-16
 

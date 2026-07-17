@@ -5,6 +5,9 @@ The game container serves the site, WebSocket, and TLS certificate. A small
 OpenTelemetry collector exports private metrics from the VM's loopback
 interface.
 
+The image precompresses built JavaScript and CSS. The server revalidates the
+entry page and caches Vite's fingerprinted assets for one year.
+
 `deploy/startup.sh` pulls a versioned image from Artifact Registry, checks it,
 and swaps containers only after the replacement is healthy. The GKE manifests
 in `deploy/` are reference configuration, not the current production setup or
