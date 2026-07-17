@@ -20,3 +20,7 @@ export const OPPOSITE: Record<Dir, Dir> = {
 
 // SIDES lists the four directions, for walking a cell's neighbours.
 export const SIDES: Dir[] = ["north", "east", "south", "west"];
+
+export function clockwise(dir: Dir): Dir {
+  return SIDES[(SIDES.indexOf(dir) + 1) % SIDES.length];
+}

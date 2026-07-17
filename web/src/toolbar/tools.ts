@@ -1,5 +1,5 @@
 import type { Dir } from "../net/types";
-import { SIDES } from "../world/dir";
+import { clockwise } from "../world/dir";
 
 // A Tool is one toolbar entry: its id, label, number key, and build cost.
 export type Tool = {
@@ -50,5 +50,5 @@ export function setFacing(dir: Dir): void {
 
 // rotateFacing steps to the next direction clockwise (R cycles through SIDES).
 export function rotateFacing(): void {
-  facing = SIDES[(SIDES.indexOf(facing) + 1) % SIDES.length];
+  facing = clockwise(facing);
 }

@@ -38,6 +38,15 @@ type TileUpdateMessage struct {
 	Tiles []TileUpdate `json:"tiles"`
 }
 
+// ActionResult acknowledges one predicted world command to its sender. An
+// accepted command's authoritative tile update arrives before this result.
+type ActionResultMessage struct {
+	Type     string `json:"type"`
+	ActionID uint64 `json:"actionId"`
+	Applied  bool   `json:"applied"`
+	Credits  int    `json:"credits"`
+}
+
 // CellView identifies one sparse terrain feature in the world grid.
 type CellView struct {
 	X int `json:"x"`
@@ -79,14 +88,14 @@ type StatsMessage struct {
 	NextGridHeight int     `json:"nextGridHeight"`
 }
 
-// WelcomeMessage is the first thing a client hears after joining: which room it
-// landed in (the client writes this into the page URL, making the address bar
-// the invite link) and its player slot. The slot doubles as the player's colour
-// and is not persistent: reconnecting may seat you in a different one.
+// WelcomeMessage is the first thing a client hears after joining: its room,
+// player slot, and negotiated wire protocol. The slot doubles as its colour and
+// is not persistent: reconnecting may seat it in a different one.
 type WelcomeMessage struct {
-	Type string `json:"type"`
-	Room string `json:"room"`
-	Slot int    `json:"slot"`
+	Type     string `json:"type"`
+	Room     string `json:"room"`
+	Slot     int    `json:"slot"`
+	Protocol int    `json:"protocol"`
 }
 
 // PresencePlayer describes one connected player, their cursor, and any

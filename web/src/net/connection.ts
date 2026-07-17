@@ -1,12 +1,14 @@
-import type { Command, ServerMessage } from "./types";
-import { applyTiles, resetLatest, setLatest, setResources } from "../world/store";
-import { setStats } from "../world/economy";
+import type { Command, ServerMessage, TileUpdate, WorldActionCommand } from "./types";
+import { applyTiles, clearPredictions, predictAction, resetLatest, resolveAction, setLatest, setResources } from "../world/store";
+import { clearPendingSpend, releaseSpend, reserveSpend, setStats, settleSpend } from "../world/economy";
 import { setCursor, setPresence, setPresencePreview } from "../world/presence";
 import { setRoomFull, setSession } from "./session";
 import { setPing } from "./ping";
+import { sfx } from "../sfx";
 
 const PING_INTERVAL = 2000; // ms between round-trip probes
-const WIRE_PROTOCOL = "3";
+const WIRE_PROTOCOL = "4";
+const PREDICTED_ACTION_PROTOCOL = 4;
 
 // wsUrl is where the game server lives: derived from the page in production,
 // a localhost fallback in dev (Vite serves the page, Go serves the game). The
@@ -27,8 +29,13 @@ export function handleServerMessage(msg: ServerMessage): void {
   else if (msg.type === "tiles") applyTiles(msg);
   else if (msg.type === "stats") setStats(msg);
   else if (msg.type === "resources") setResources(msg);
-  else if (msg.type === "welcome") {
+  else if (msg.type === "actionResult") {
+    const hadPrediction = resolveAction(msg.actionId);
+    const hadReservation = settleSpend(msg.actionId, msg.credits);
+    if (!msg.applied && (hadPrediction || hadReservation)) sfx.deny();
+  } else if (msg.type === "welcome") {
     resetLatest();
+    clearPendingSpend();
     setSession(msg.room, msg.slot);
     // The server's code is authoritative: write it into the address bar so
     // the URL is the invite link and a reconnect rejoins the same room.
@@ -42,16 +49,21 @@ export function handleServerMessage(msg: ServerMessage): void {
 
 type StatusListener = (connected: boolean) => void;
 
+export type SentAction = { predicted: boolean };
+
 // Connection owns the single WebSocket to the game server. It lives outside
 // React so it survives component re-mounts, decodes incoming snapshots into the
 // world store, and reconnects with backoff if the socket drops.
-class Connection {
+export class Connection {
   private ws: WebSocket | null = null;
   private backoff = 500; // ms; doubles on each failed attempt, capped
   private listeners = new Set<StatusListener>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private refused = false; // the room was full; reconnecting would just knock again
+  private nextActionId = 1;
+  private serverProtocol = 0;
+  private legacySpendPending = false;
 
   // start opens the connection. Safe to call more than once; extra calls are
   // ignored while a socket is open or a reconnect is already pending (React
@@ -70,14 +82,52 @@ class Connection {
     };
   }
 
-  // send sends a command to the server, dropping it if the socket is not open
-  // yet (still connecting, or already closed).
-  send(cmd: Command): void {
-    if (this.ws?.readyState !== WebSocket.OPEN) return;
-    this.ws.send(JSON.stringify(cmd));
+  // send returns false when the socket cannot accept the command.
+  send(cmd: Command): boolean {
+    if (this.ws?.readyState !== WebSocket.OPEN) return false;
+    try {
+      this.ws.send(JSON.stringify(cmd));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // sendAction projects one world edit locally while protocol 4 settles it by
+  // action ID. During a rolling deploy, older servers keep the previous
+  // authoritative-only behavior.
+  sendAction(cmd: WorldActionCommand, tiles: TileUpdate[], cost = 0): SentAction | null {
+    if (this.serverProtocol < PREDICTED_ACTION_PROTOCOL) {
+      if (cost < 0) return null;
+      if (cost === 0) return this.send(cmd) ? { predicted: false } : null;
+      if (this.legacySpendPending) return null;
+      const actionId = this.nextActionId++;
+      if (!reserveSpend(actionId, cost)) return null;
+      if (!this.send(cmd)) {
+        releaseSpend(actionId);
+        return null;
+      }
+      this.legacySpendPending = true;
+      return { predicted: false };
+    }
+
+    const actionId = this.nextActionId++;
+    if (!reserveSpend(actionId, cost)) return null;
+    if (!predictAction(actionId, tiles)) {
+      releaseSpend(actionId);
+      return null;
+    }
+    if (!this.send({ ...cmd, actionId })) {
+      resolveAction(actionId);
+      releaseSpend(actionId);
+      return null;
+    }
+    return { predicted: true };
   }
 
   private connect(): void {
+    this.serverProtocol = 0;
+    this.legacySpendPending = false;
     const ws = new WebSocket(wsUrl());
     this.ws = ws;
 
@@ -88,12 +138,21 @@ class Connection {
     };
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data as string) as ServerMessage;
+      if (msg.type === "welcome") this.serverProtocol = msg.protocol ?? 0;
       if (msg.type === "roomFull") this.refused = true;
       handleServerMessage(msg);
+      if (msg.type === "stats" && this.serverProtocol < PREDICTED_ACTION_PROTOCOL) {
+        this.legacySpendPending = false;
+        clearPendingSpend();
+      }
     };
     ws.onclose = () => {
       this.stopPinging();
       setPing(null);
+      this.serverProtocol = 0;
+      this.legacySpendPending = false;
+      clearPredictions();
+      clearPendingSpend();
       this.emit(false);
       this.ws = null;
       if (this.refused) return; // full room: stay away until the player picks a new one

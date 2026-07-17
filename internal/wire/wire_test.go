@@ -147,6 +147,37 @@ func TestPlaceBatchCommandJSON(t *testing.T) {
 	}
 }
 
+func TestPredictedWorldCommandJSON(t *testing.T) {
+	var cmd Command
+	err := json.Unmarshal([]byte(`{
+		"type":"rotate",
+		"actionId":42,
+		"x":3,
+		"y":4,
+		"expectedKind":"belt",
+		"expectedDir":"east"
+	}`), &cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd.ActionID != 42 || cmd.ExpectedKind != KindBelt || cmd.ExpectedDir != "east" {
+		t.Fatalf("decoded prediction fields = %+v", cmd)
+	}
+
+	result, err := json.Marshal(ActionResultMessage{
+		Type: "actionResult", ActionID: 42, Applied: true, Credits: 240,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(result), `{"type":"actionResult","actionId":42,"applied":true,"credits":240}`; got != want {
+		t.Fatalf("action result JSON = %s, want %s", got, want)
+	}
+	if len(result) > 100 {
+		t.Fatalf("action result is %d bytes, want at most 100", len(result))
+	}
+}
+
 func TestPresenceBuildPreviewJSON(t *testing.T) {
 	msg := PresenceMessage{
 		Type: "presence",

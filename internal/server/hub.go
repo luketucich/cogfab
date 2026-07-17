@@ -27,6 +27,7 @@ const (
 	outboundWelcome      outboundMessage = "welcome"
 	outboundState        outboundMessage = "state"
 	outboundTiles        outboundMessage = "tiles"
+	outboundActionResult outboundMessage = "actionResult"
 	outboundStats        outboundMessage = "stats"
 	outboundResources    outboundMessage = "resources"
 	outboundPresence     outboundMessage = "presence"
@@ -195,15 +196,20 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 
 	credits, rate := h.credits, h.currentRate()
 	if !h.apply(sub.cmd) {
-		// A rejected build may have reserved credits on the client while another
-		// player changed the room. Return the authoritative total so it clears.
+		if h.acknowledges(sub) && !h.sendActionResult(sub, false) {
+			return false
+		}
+		// Return current stats so older clients clear their reserved credits and
+		// current clients receive the complete authoritative economy snapshot.
 		h.sendTo(sub.c, outboundStats, h.statsBytes())
 		return false
 	}
+	worldChanged := false
 	switch sub.cmd.Type {
 	case wire.CmdPlace, wire.CmdPlaceBatch, wire.CmdDestroy, wire.CmdRotate:
 		h.broadcastTileUpdates(sub.cmd)
 		h.recompute()
+		worldChanged = true
 	case wire.CmdBuy:
 		// Expanding the grid reveals new terrain. The other upgrades change only
 		// the economy, so their stats message is enough.
@@ -211,10 +217,39 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 			h.broadcast(outboundState, h.stateBytes())
 		}
 	}
-	if h.credits != credits || h.currentRate() != rate {
+	acknowledged := false
+	if worldChanged && h.acknowledges(sub) {
+		acknowledged = h.sendActionResult(sub, true)
+	}
+	statsChanged := h.credits != credits || h.currentRate() != rate
+	if statsChanged {
 		h.broadcastStats() // the command spent credits or changed the rate
+	} else if acknowledged {
+		// Rotations still complete with the same result-then-stats ordering as
+		// world actions that change the shared economy.
+		h.sendTo(sub.c, outboundStats, h.statsBytes())
 	}
 	return true
+}
+
+func (h *Hub) acknowledges(sub clientCommand) bool {
+	return sub.c.protocol >= predictedActionProtocol && sub.cmd.ActionID != 0 && isWorldCommand(sub.cmd.Type)
+}
+
+func isWorldCommand(command string) bool {
+	switch command {
+	case wire.CmdPlace, wire.CmdPlaceBatch, wire.CmdDestroy, wire.CmdRotate:
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *Hub) sendActionResult(sub clientCommand, applied bool) bool {
+	b, _ := json.Marshal(wire.ActionResultMessage{
+		Type: "actionResult", ActionID: sub.cmd.ActionID, Applied: applied, Credits: h.credits,
+	})
+	return h.sendRequired(sub.c, outboundActionResult, b)
 }
 
 // persist attempts to write the room to disk. A failure is logged instead of
@@ -370,12 +405,23 @@ func (h *Hub) broadcast(message outboundMessage, payload []byte) {
 }
 
 func (h *Hub) queueBroadcast(c *Client, message outboundMessage, payload []byte) {
+	h.sendRequired(c, message, payload)
+}
+
+// sendRequired queues state needed to keep a client synchronized. A full queue
+// disconnects the client so its next connection starts from a clean snapshot.
+func (h *Hub) sendRequired(c *Client, message outboundMessage, payload []byte) bool {
+	if !h.clients[c] {
+		return false
+	}
 	select {
 	case c.send <- payload:
 		h.metrics.outboundQueued(message, len(payload))
+		return true
 	default:
 		h.metrics.slowClientDisconnected()
 		h.removeClient(c)
+		return false
 	}
 }
 

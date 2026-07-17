@@ -4,6 +4,9 @@ What I've worked on, newest first.
 
 ## 2026-07-17
 
+- Added client-side prediction for building, rotating, and destroying. Local
+  edits render immediately, while action IDs let the server confirm or roll
+  back each edit without weakening the shared authoritative world.
 - Precompressed production JavaScript and CSS and added safe cache headers. The
   current JavaScript transfer falls from about 1.24 MB to 341 KB for browsers
   that accept gzip.

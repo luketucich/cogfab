@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
-import { fmtNum, getStats, subscribeStats } from "./world/economy";
+import { fmtNum, getStats, pendingSpendTotal, subscribeStats } from "./world/economy";
 import { panel, FONT_DISPLAY } from "./ui";
 
 // CreditsCounter is the centred readout at the top: shared credits as the big
@@ -35,12 +35,16 @@ function useSmoothCredits(): number {
     let raf = 0;
     let shown = 0;
     let lastServer = 0;
+    let lastReserved = 0;
     const tick = () => {
       const stats = getStats();
+      const reserved = pendingSpendTotal();
       const elapsed = stats.receivedAt ? Math.min((performance.now() - stats.receivedAt) / 1000, 1.2) : 0;
-      const predicted = Math.floor(stats.credits + stats.ratePerSec * elapsed);
-      shown = stats.credits < lastServer || stats.ratePerSec === 0 ? predicted : Math.max(predicted, shown);
+      const predicted = Math.max(Math.floor(stats.credits + stats.ratePerSec * elapsed) - reserved, 0);
+      const balanceFell = stats.credits < lastServer || reserved > lastReserved;
+      shown = balanceFell || stats.ratePerSec === 0 ? predicted : Math.max(predicted, shown);
       lastServer = stats.credits;
+      lastReserved = reserved;
       setAmount((previous) => (previous === shown ? previous : shown));
       raf = requestAnimationFrame(tick);
     };

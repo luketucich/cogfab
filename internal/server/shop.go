@@ -186,8 +186,12 @@ func (h *Hub) applyDestroy(cmd wire.Command) bool {
 	if !h.unlocked(cmd.X, cmd.Y) {
 		return false
 	}
-	kind := h.world.At(cmd.X, cmd.Y).Kind
+	tile := h.world.At(cmd.X, cmd.Y)
+	kind := tile.Kind
 	if kind == engine.Empty {
+		return false
+	}
+	if !matchesExpectedTile(tile, cmd) {
 		return false
 	}
 	h.world.Destroy(cmd.X, cmd.Y)
@@ -213,11 +217,24 @@ func (h *Hub) hasActiveProducer() bool {
 
 // applyRotate turns a structure a quarter clockwise, free of charge.
 func (h *Hub) applyRotate(cmd wire.Command) bool {
-	if !h.unlocked(cmd.X, cmd.Y) || h.world.At(cmd.X, cmd.Y).Kind == engine.Empty {
+	if !h.unlocked(cmd.X, cmd.Y) {
+		return false
+	}
+	tile := h.world.At(cmd.X, cmd.Y)
+	if tile.Kind == engine.Empty || !matchesExpectedTile(tile, cmd) {
 		return false
 	}
 	h.world.Rotate(cmd.X, cmd.Y)
 	return true
+}
+
+// matchesExpectedTile turns optional client preconditions into a compare-and-
+// set guard. Older clients omit both fields and keep their existing behaviour.
+func matchesExpectedTile(tile engine.Tile, cmd wire.Command) bool {
+	if cmd.ExpectedKind != "" && tile.Kind.String() != cmd.ExpectedKind {
+		return false
+	}
+	return cmd.ExpectedDir == "" || tile.Dir.String() == cmd.ExpectedDir
 }
 
 // applyBuy pays for an upgrade if the shared credits cover it and it is not

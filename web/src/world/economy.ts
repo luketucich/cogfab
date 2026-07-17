@@ -89,18 +89,75 @@ let stats: Stats = {
 };
 const listeners = new Set<() => void>();
 
-// pendingSpend is credits already committed to commands still in flight, so a
-// fast belt drag cannot overspend against a total the server has not re-sent yet.
-// Every stats update carries the true total, so it resets there.
-let pendingSpend = 0;
+// Reservations are keyed by action so one server result cannot release a
+// different build that is still in flight.
+const reservations = new Map<number, number>();
+let reserved = 0;
 
-export function addPendingSpend(cost: number): void {
-  pendingSpend += cost;
+export function reserveSpend(actionId: number, cost: number): boolean {
+  if (
+    !Number.isSafeInteger(actionId) ||
+    actionId <= 0 ||
+    !Number.isSafeInteger(cost) ||
+    cost < 0 ||
+    cost > spendableCredits() ||
+    reservations.has(actionId)
+  ) {
+    return false;
+  }
+  reservations.set(actionId, cost);
+  reserved += cost;
+  if (cost > 0) {
+    stats = { ...stats };
+    for (const fn of listeners) fn();
+  }
+  return true;
+}
+
+// settleSpend applies the authoritative balance and releases one reservation
+// together, so the credits display cannot jump between consecutive messages.
+export function settleSpend(actionId: number, credits: number): boolean {
+  const cost = reservations.get(actionId);
+  if (cost === undefined || !Number.isFinite(credits) || credits < 0) return false;
+  reservations.delete(actionId);
+  reserved -= cost;
+  if (cost > 0 || credits !== stats.credits) {
+    stats = { ...stats, credits, receivedAt: performance.now() };
+    for (const fn of listeners) fn();
+  }
+  return true;
+}
+
+export function releaseSpend(actionId: number): boolean {
+  const cost = reservations.get(actionId);
+  if (cost === undefined) return false;
+  reservations.delete(actionId);
+  reserved -= cost;
+  if (cost > 0) {
+    stats = { ...stats };
+    for (const fn of listeners) fn();
+  }
+  return true;
+}
+
+export function clearPendingSpend(): void {
+  if (reservations.size === 0) return;
+  reservations.clear();
+  const changed = reserved > 0;
+  reserved = 0;
+  if (changed) {
+    stats = { ...stats };
+    for (const fn of listeners) fn();
+  }
+}
+
+export function pendingSpendTotal(): number {
+  return reserved;
 }
 
 // spendableCredits is the latest server total minus what is already in flight.
 export function spendableCredits(): number {
-  return stats.credits - pendingSpend;
+  return Math.max(stats.credits - reserved, 0);
 }
 
 // creditsAfterReserve is the part of a balance that can be spent without
@@ -127,7 +184,6 @@ export function setStats(msg: StatsMessage): void {
     nextGridHeight: msg.nextGridHeight,
     receivedAt: performance.now(),
   };
-  pendingSpend = 0;
   for (const fn of listeners) fn();
 }
 
