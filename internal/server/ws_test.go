@@ -173,6 +173,19 @@ func readWelcome(t *testing.T, read func() []byte) wire.WelcomeMessage {
 	return wire.WelcomeMessage{}
 }
 
+func readJoinBurst(t *testing.T, read func() []byte) {
+	t.Helper()
+	readWelcome(t, read)
+	for _, want := range []string{"state", "stats", "presence"} {
+		var envelope struct {
+			Type string `json:"type"`
+		}
+		if data := read(); json.Unmarshal(data, &envelope) != nil || envelope.Type != want {
+			t.Fatalf("join message = %s, want %s", data, want)
+		}
+	}
+}
+
 func TestEndToEndClientReceivesWelcomeThenState(t *testing.T) {
 	url := newTestServer(t)
 	_, read := dial(t, url)
@@ -278,6 +291,42 @@ func TestPlayersShareARoomAndSeeEachOthersHover(t *testing.T) {
 	t.Fatal("player B never saw player A's hover")
 }
 
+func TestMixedProtocolClientsReceiveCompatibleCursorUpdates(t *testing.T) {
+	url := newTestServer(t)
+
+	currentConn, currentRead := dial(t, url+"?room=M7XEDV&protocol=3")
+	readJoinBurst(t, currentRead)
+	_, futureRead := dial(t, url+"?room=M7XEDV&protocol=4")
+	readJoinBurst(t, futureRead)
+	currentRead() // full roster after the second player joined
+	_, legacyRead := dial(t, url+"?room=M7XEDV&protocol=2")
+	readJoinBurst(t, legacyRead)
+	currentRead() // full roster after the legacy player joined
+	futureRead()  // same roster for the other current player
+
+	wctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	hover := []byte(`{"type":"hover","on":true,"sx":0.25,"sy":0.75,"hovering":true,"cx":1.5,"cy":0.5}`)
+	if err := currentConn.Write(wctx, websocket.MessageText, hover); err != nil {
+		t.Fatalf("write hover: %v", err)
+	}
+
+	var cursor wire.CursorMessage
+	if data := futureRead(); json.Unmarshal(data, &cursor) != nil || cursor.Type != "cursor" {
+		t.Fatalf("future client got %s, want cursor", data)
+	}
+	if cursor.Slot != 0 || cursor.SX != 0.25 || cursor.Y != 0.5 {
+		t.Fatalf("cursor = %+v, want player 0 position", cursor)
+	}
+	var presence wire.PresenceMessage
+	if data := legacyRead(); json.Unmarshal(data, &presence) != nil || presence.Type != "presence" {
+		t.Fatalf("protocol 2 client got %s, want full presence", data)
+	}
+	if len(presence.Players) != 3 || !presence.Players[0].Hovering {
+		t.Fatalf("legacy roster = %+v, want three players and source hover", presence.Players)
+	}
+}
+
 func TestPlayersShareBuildPreviewsUntilPlacement(t *testing.T) {
 	url := newTestServerWithWorld(t, func() *engine.World { return engine.NewWorld(3, 1) })
 	connA, readA := dial(t, url+"?room=PREVUE&protocol=2")
@@ -371,5 +420,17 @@ func TestFifthPlayerIsRefused(t *testing.T) {
 	var msg wire.RoomFullMessage
 	if data := read(); json.Unmarshal(data, &msg) != nil || msg.Type != "roomFull" {
 		t.Fatalf("fifth player should hear roomFull, got %s", data)
+	}
+}
+
+func TestProtocolVersion(t *testing.T) {
+	tests := map[string]int{
+		"": 0, "0": 0, "2": 2, "3": 3, "99": 99,
+		"-1": 0, "two": 0, "2.5": 0,
+	}
+	for raw, want := range tests {
+		if got := protocolVersion(raw); got != want {
+			t.Errorf("protocolVersion(%q) = %d, want %d", raw, got, want)
+		}
 	}
 }

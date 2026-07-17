@@ -72,11 +72,30 @@ export type PresencePlayer = {
   preview?: BuildPreview;
 };
 
-// PresenceMessage is the room's full roster, sent whenever player presence
-// changes. Mirror of wire.PresenceMessage.
+// PresenceMessage is the room's full roster. It bootstraps a join and carries
+// membership or profile changes. Mirror of wire.PresenceMessage.
 export type PresenceMessage = {
   type: "presence";
   players: PresencePlayer[];
+};
+
+// Protocol 3 keeps frequent collaborative updates compact. The full presence
+// roster still bootstraps identity and state when a player joins.
+export type CursorMessage = {
+  type: "cursor";
+  slot: number;
+  on: boolean;
+  sx: number;
+  sy: number;
+  hovering: boolean;
+  x: number;
+  y: number;
+};
+
+export type BuildPreviewMessage = {
+  type: "buildPreview";
+  slot: number;
+  preview: BuildPreview | null;
 };
 
 // RoomFullMessage means the server refused the join because the room or process
@@ -115,6 +134,8 @@ export type ServerMessage =
   | TilesMessage
   | WelcomeMessage
   | PresenceMessage
+  | CursorMessage
+  | BuildPreviewMessage
   | RoomFullMessage
   | PongMessage;
 

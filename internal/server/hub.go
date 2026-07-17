@@ -26,7 +26,7 @@ const maxTileUpdateBatch = 1024
 type Client struct {
 	send chan []byte
 
-	supportsTileUpdates bool // negotiated by current web clients; legacy tabs receive full state
+	protocol int // negotiated wire version; zero identifies tabs from before versioning
 
 	slot  int    // 0-3; picks the default colour (PLAYER_COLORS in ui.ts)
 	name  string // "Player N" until the player picks one
@@ -157,7 +157,7 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 	case wire.CmdHover:
 		changed := h.applyHover(sub.c, sub.cmd)
 		if changed {
-			h.broadcastPresence()
+			h.broadcastCursor(sub.c)
 		}
 		return changed
 	case wire.CmdProfile:
@@ -169,13 +169,13 @@ func (h *Hub) handleCommand(sub clientCommand) bool {
 	case wire.CmdPreview:
 		changed := h.applyPreview(sub.c, sub.cmd)
 		if changed {
-			h.broadcastPresence()
+			h.broadcastPreview(sub.c)
 		}
 		return changed
 	}
 	if sub.cmd.Type == wire.CmdPlace || sub.cmd.Type == wire.CmdPlaceBatch {
 		if h.clearPreview(sub.c) {
-			h.broadcastPresence()
+			h.broadcastPreview(sub.c)
 		}
 	}
 
@@ -297,7 +297,7 @@ func (h *Hub) broadcastTileUpdates(cmd wire.Command) {
 	var state []byte
 	for c := range h.clients {
 		data := updates
-		if !c.supportsTileUpdates {
+		if c.protocol < tileUpdateProtocol {
 			if state == nil {
 				state = h.stateBytes()
 			}

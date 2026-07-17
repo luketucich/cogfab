@@ -168,3 +168,26 @@ func TestPresenceBuildPreviewJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestCompactPresenceJSON(t *testing.T) {
+	cursor, err := json.Marshal(CursorMessage{
+		Type: "cursor", Slot: 2, On: true, SX: 0.25, SY: 0.75,
+		Hovering: true, X: 4.5, Y: 3.5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"type":"cursor"`, `"slot":2`, `"sx":0.25`, `"x":4.5`} {
+		if !strings.Contains(string(cursor), want) {
+			t.Errorf("cursor JSON %s does not contain %s", cursor, want)
+		}
+	}
+
+	preview, err := json.Marshal(BuildPreviewMessage{Type: "buildPreview", Slot: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(preview), `{"type":"buildPreview","slot":2,"preview":null}`; got != want {
+		t.Fatalf("preview clear JSON = %s, want %s", got, want)
+	}
+}

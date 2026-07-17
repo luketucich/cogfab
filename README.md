@@ -50,13 +50,18 @@ on one goroutine, so its hot path needs no locks.
 
 The server applies commands, advances the economy, and owns each deposit's
 remaining stock. Clients receive one grid snapshot when they join, then compact
-tile, resource, and economy updates. Animation stays in the browser, keeping
-per-item positions off the wire and the server focused on authoritative state.
+tile, resource, economy, cursor, and build-preview updates. Animation stays in
+the browser, keeping per-item positions off the wire and the server focused on
+authoritative state.
 
 Builds, rotations, and destroys send only the tiles they changed. In the wire
 benchmark, a 64-tile update is 2.7 KB instead of a 127 KB full-world snapshot.
 Full snapshots remain the safe path for joins, reconnects, land unlocks,
 unusually large batches, and older tabs during deployment.
+
+Local build previews update on every pointer move. Routine shared updates are
+coalesced to 20 per second and sent separately from cursor movement, so a long
+drag stays responsive without repeatedly broadcasting the whole room roster.
 
 Today, one Container-Optimized OS VM is enough. Rooms already have stable codes
 and isolated state. Scaling out would require routing each room code to one
@@ -69,7 +74,7 @@ not change.
 | --- | --- |
 | Simulation + server | Go (pure grid engine; room hubs + finite-resource sim; WebSocket server) |
 | Transport | WebSockets (`coder/websocket`) |
-| Wire format | JSON commands, full join snapshots, and compact tile/resource updates (placement batches are atomic) |
+| Wire format | JSON commands, full join snapshots, and compact world/presence updates (placement batches are atomic) |
 | Client | React + TypeScript + Vite |
 | Rendering | Three.js via React Three Fiber |
 | Audio | Synthesized WebAudio effects plus a looping licensed music track |

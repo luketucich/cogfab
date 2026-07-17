@@ -2,7 +2,7 @@ import { useRef, useSyncExternalStore } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { getLatest, subscribe } from "./store";
-import { getPresence } from "./presence";
+import { getPresence, getPreviewPresence } from "./presence";
 import { getSession } from "../net/session";
 import { getBuildPreview } from "./buildPreviewStore";
 import { cellIndex, cellOffsets, CURSOR_TILE, isUnlocked, unlockedRect } from "./grid";
@@ -31,6 +31,7 @@ export function PlayerCursors() {
     const stats = getStats();
     const unlocked = unlockedRect(snap, stats.gridWidth, stats.gridHeight);
     const roster = getPresence();
+    const previewRoster = getPreviewPresence();
     const mySlot = getSession().slot;
 
     group.current.children.forEach((tile, slot) => {
@@ -44,7 +45,8 @@ export function PlayerCursors() {
           cursor = { x: cell.x, y: cell.y, color: me ? playerColor(me) : PLAYER_COLORS[slot] };
         }
       } else {
-        const player = roster.find((candidate) => candidate.slot === slot && candidate.hovering && !candidate.preview);
+        const preview = previewRoster.find((candidate) => candidate.slot === slot)?.preview;
+        const player = roster.find((candidate) => candidate.slot === slot && candidate.hovering && !preview);
         if (player) cursor = { x: Math.round(player.x), y: Math.round(player.y), color: playerColor(player) };
       }
 

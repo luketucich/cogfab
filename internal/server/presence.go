@@ -37,7 +37,7 @@ func (h *Hub) lowestFreeSlot() int {
 }
 
 // applyHover records where a player's mouse is, reporting whether anything
-// changed so an unchanged cursor does not re-broadcast the roster.
+// changed so an unchanged cursor does not send another update.
 func (h *Hub) applyHover(c *Client, cmd wire.Command) bool {
 	if c.onScreen == cmd.On && c.screenX == cmd.SX && c.screenY == cmd.SY &&
 		c.hovering == cmd.Hovering && c.hoverX == cmd.CX && c.hoverY == cmd.CY {
@@ -164,9 +164,59 @@ func (h *Hub) presenceBytes() []byte {
 	return b
 }
 
-// broadcastPresence sends the current roster to everyone, sender included: each
-// client filters its own slot for the cursors and uses the full list for the
-// lobby panel.
+// cursorBytes is one player's latest pointer position for protocol 3 clients.
+func (h *Hub) cursorBytes(c *Client) []byte {
+	b, _ := json.Marshal(wire.CursorMessage{
+		Type: "cursor", Slot: c.slot,
+		On: c.onScreen, SX: c.screenX, SY: c.screenY,
+		Hovering: c.hovering, X: c.hoverX, Y: c.hoverY,
+	})
+	return b
+}
+
+// previewBytes is one player's complete build ghost. An empty preview becomes
+// JSON null so recipients remove any ghost they currently hold for that slot.
+func (h *Hub) previewBytes(c *Client) []byte {
+	var preview *wire.BuildPreview
+	if c.preview.Kind != "" {
+		current := c.preview
+		preview = &current
+	}
+	b, _ := json.Marshal(wire.BuildPreviewMessage{
+		Type: "buildPreview", Slot: c.slot, Preview: preview,
+	})
+	return b
+}
+
+// broadcastTransient sends a compact update to other protocol 3 clients while
+// preserving the full-roster behavior expected by older tabs. The sender has
+// already applied the change locally and does not need its compact echo.
+func (h *Hub) broadcastTransient(source *Client, compact []byte) {
+	var roster []byte
+	for recipient := range h.clients {
+		if recipient.protocol >= compactPresenceProtocol {
+			if recipient != source {
+				h.queueBroadcast(recipient, compact)
+			}
+			continue
+		}
+		if roster == nil {
+			roster = h.presenceBytes()
+		}
+		h.queueBroadcast(recipient, roster)
+	}
+}
+
+func (h *Hub) broadcastCursor(c *Client) {
+	h.broadcastTransient(c, h.cursorBytes(c))
+}
+
+func (h *Hub) broadcastPreview(c *Client) {
+	h.broadcastTransient(c, h.previewBytes(c))
+}
+
+// broadcastPresence sends the authoritative roster to every client after a
+// join, leave, or profile change.
 func (h *Hub) broadcastPresence() {
 	h.broadcast(h.presenceBytes())
 }

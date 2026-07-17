@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TilesMessage } from "./types";
+import type { BuildPreviewMessage, CursorMessage, TilesMessage } from "./types";
 
-const { applyTilesSpy } = vi.hoisted(() => ({ applyTilesSpy: vi.fn() }));
+const { applyTilesSpy, setCursorSpy, setPresencePreviewSpy } = vi.hoisted(() => ({
+  applyTilesSpy: vi.fn(),
+  setCursorSpy: vi.fn(),
+  setPresencePreviewSpy: vi.fn(),
+}));
 
 vi.mock("../world/store", () => ({
   applyTiles: applyTilesSpy,
@@ -10,7 +14,11 @@ vi.mock("../world/store", () => ({
   setResources: vi.fn(),
 }));
 vi.mock("../world/economy", () => ({ setStats: vi.fn() }));
-vi.mock("../world/presence", () => ({ setPresence: vi.fn() }));
+vi.mock("../world/presence", () => ({
+  setCursor: setCursorSpy,
+  setPresence: vi.fn(),
+  setPresencePreview: setPresencePreviewSpy,
+}));
 vi.mock("./session", () => ({ setRoomFull: vi.fn(), setSession: vi.fn() }));
 vi.mock("./ping", () => ({ setPing: vi.fn() }));
 
@@ -30,5 +38,22 @@ describe("server message routing", () => {
 
     expect(applyTilesSpy).toHaveBeenCalledOnce();
     expect(applyTilesSpy).toHaveBeenCalledWith(message);
+  });
+
+  it("routes compact cursor and preview updates independently", () => {
+    const cursor: CursorMessage = { type: "cursor", slot: 1, on: true, sx: 0.2, sy: 0.3, hovering: true, x: 4.5, y: 6.5 };
+    const buildPreview: BuildPreviewMessage = {
+      type: "buildPreview",
+      slot: 1,
+      preview: { kind: "belt", placements: [{ x: 4, y: 6, dir: "east" }] },
+    };
+
+    handleServerMessage(cursor);
+    handleServerMessage(buildPreview);
+
+    expect(setCursorSpy).toHaveBeenCalledOnce();
+    expect(setCursorSpy).toHaveBeenCalledWith(cursor);
+    expect(setPresencePreviewSpy).toHaveBeenCalledOnce();
+    expect(setPresencePreviewSpy).toHaveBeenCalledWith(buildPreview);
   });
 });

@@ -1,12 +1,12 @@
 import type { Command, ServerMessage } from "./types";
 import { applyTiles, resetLatest, setLatest, setResources } from "../world/store";
 import { setStats } from "../world/economy";
-import { setPresence } from "../world/presence";
+import { setCursor, setPresence, setPresencePreview } from "../world/presence";
 import { setRoomFull, setSession } from "./session";
 import { setPing } from "./ping";
 
 const PING_INTERVAL = 2000; // ms between round-trip probes
-const WIRE_PROTOCOL = "2";
+const WIRE_PROTOCOL = "3";
 
 // wsUrl is where the game server lives: derived from the page in production,
 // a localhost fallback in dev (Vite serves the page, Go serves the game). The
@@ -34,6 +34,8 @@ export function handleServerMessage(msg: ServerMessage): void {
     // the URL is the invite link and a reconnect rejoins the same room.
     history.replaceState(null, "", `${location.pathname}?room=${msg.room}`);
   } else if (msg.type === "presence") setPresence(msg.players);
+  else if (msg.type === "cursor") setCursor(msg);
+  else if (msg.type === "buildPreview") setPresencePreview(msg);
   else if (msg.type === "roomFull") setRoomFull();
   else if (msg.type === "pong") setPing(performance.now() - msg.t);
 }

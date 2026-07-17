@@ -5,7 +5,7 @@ import { getBuildPreview, subscribeBuildPreview } from "./buildPreviewStore";
 import { getStats, spendableCredits, subscribeStats } from "./economy";
 import { cellIndex, isUnlocked, unlockedRect } from "./grid";
 import { useFactoryModels } from "./models";
-import { getPresence, subscribePresence } from "./presence";
+import { getPreviewPresence, subscribePreviewPresence } from "./presence";
 import { getTerrain, subscribeResources } from "./store";
 import { getSession, subscribeSession } from "../net/session";
 import type { BuildPreview as BuildPreviewData, PlaceableKind, StateMessage } from "../net/types";
@@ -37,7 +37,7 @@ function previewCostExists(kind: PlaceableKind): boolean {
 // server-broadcast preview. Remote ghosts keep their owner's cursor colour.
 export function BuildPreviews() {
   const local = useSyncExternalStore(subscribeBuildPreview, getBuildPreview);
-  const players = useSyncExternalStore(subscribePresence, getPresence);
+  const players = useSyncExternalStore(subscribePreviewPresence, getPreviewPresence);
   const session = useSyncExternalStore(subscribeSession, getSession);
   const snap = useSyncExternalStore(subscribeResources, getTerrain);
   useSyncExternalStore(subscribeStats, getStats);
