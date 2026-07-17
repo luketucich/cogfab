@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/luketucich/cogfab/internal/engine"
+	"github.com/luketucich/cogfab/internal/wire"
 )
 
 // denseHub fills a w x h world with rows of one-belt pipelines (extractor,
@@ -70,4 +71,28 @@ func BenchmarkRecomputeFullWorld(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		h.recompute()
 	}
+}
+
+func BenchmarkCommandPayloads(b *testing.B) {
+	h := NewHub(engine.NewWorld(resourceWorldSize, resourceWorldSize))
+	h.gridTier = len(gridTiers) - 1
+	placements := make([]wire.Placement, 0, resourceWorldSize)
+	for x := 0; x < resourceWorldSize; x++ {
+		h.world.PlaceBelt(x, 0, engine.East)
+		placements = append(placements, wire.Placement{X: x, Y: 0, Dir: "east"})
+	}
+	cmd := wire.Command{Type: wire.CmdPlaceBatch, Kind: wire.KindBelt, Placements: placements}
+
+	b.Run("full state", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			h.stateBytes()
+		}
+		b.ReportMetric(float64(len(h.stateBytes())), "wire-bytes")
+	})
+	b.Run("64 tile update", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			h.tileUpdatesBytes(cmd)
+		}
+		b.ReportMetric(float64(len(h.tileUpdatesBytes(cmd))), "wire-bytes")
+	})
 }

@@ -2,6 +2,12 @@
 
 What I've worked on, newest first.
 
+## 2026-07-16
+
+- Replaced action-time 64x64 snapshots with authoritative tile updates. A
+  benchmarked 64-tile change fell from 127 KB to 2.7 KB and encodes about 40x
+  faster. Full snapshots remain for joins, reconnects, and land unlocks.
+
 ## 2026-07-15
 
 - Replaced the uniform ore supply with deterministic finite-resource worlds.

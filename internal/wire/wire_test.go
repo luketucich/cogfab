@@ -70,6 +70,38 @@ func TestSnapshotOnlyRevealsUnlockedTerrain(t *testing.T) {
 	}
 }
 
+func TestTileUpdatesReadAuthoritativeWorldState(t *testing.T) {
+	w := engine.NewWorld(3, 1)
+	w.PlaceBelt(0, 0, engine.East)
+	w.PlaceSeller(1, 0, engine.West)
+
+	msg := TileUpdates(w, []Placement{
+		{X: 0, Y: 0, Dir: "north"}, // command direction must not leak into the result
+		{X: 1, Y: 0},
+		{X: 3, Y: 0}, // unsafe input is ignored instead of reaching World.At
+	})
+
+	if msg.Type != "tiles" || len(msg.Tiles) != 2 {
+		t.Fatalf("tile update = %+v, want two in-bounds tiles", msg)
+	}
+	if got, want := msg.Tiles[0], (TileUpdate{X: 0, Y: 0, Kind: "belt", Dir: "east"}); got != want {
+		t.Errorf("Tiles[0] = %+v, want %+v", got, want)
+	}
+	if got, want := msg.Tiles[1], (TileUpdate{X: 1, Y: 0, Kind: "seller", Dir: "west"}); got != want {
+		t.Errorf("Tiles[1] = %+v, want %+v", got, want)
+	}
+}
+
+func TestEmptyTileUpdatesUseAnArray(t *testing.T) {
+	b, err := json.Marshal(TileUpdates(engine.NewWorld(1, 1), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != `{"type":"tiles","tiles":[]}` {
+		t.Fatalf("empty tile update encoded as %s", b)
+	}
+}
+
 func TestResourcesCarriesCurrentStock(t *testing.T) {
 	w := engine.NewWorld(2, 1)
 	w.SetDeposit(0, 0, engine.Quartz, 900)

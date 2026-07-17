@@ -431,7 +431,7 @@
           "refId": "A"
         }
       ],
-      "title": "Command latency p95",
+      "title": "Server command processing p95",
       "type": "timeseries"
     },
     {

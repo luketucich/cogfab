@@ -98,7 +98,25 @@ export type ResourcesMessage = {
   deposits: DepositView[];
 };
 
-export type ServerMessage = StateMessage | StatsMessage | ResourcesMessage | WelcomeMessage | PresenceMessage | RoomFullMessage | PongMessage;
+export type TileUpdate = TileView & {
+  x: number;
+  y: number;
+};
+
+export type TilesMessage = {
+  type: "tiles";
+  tiles: TileUpdate[];
+};
+
+export type ServerMessage =
+  | StateMessage
+  | StatsMessage
+  | ResourcesMessage
+  | TilesMessage
+  | WelcomeMessage
+  | PresenceMessage
+  | RoomFullMessage
+  | PongMessage;
 
 // PlaceableKind is the tile kinds a player can place (everything but empty).
 // Derived from TileView so the two stay in sync.

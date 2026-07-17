@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect } from "vitest";
-import { getLatest, getTerrain, resetLatest, setLatest, setResources, subscribe, subscribeResources } from "./store";
+import { applyTiles, getLatest, getTerrain, resetLatest, setLatest, setResources, subscribe, subscribeResources } from "./store";
 import type { StateMessage, TileView } from "../net/types";
 
 const snap = (kind: TileView["kind"]): StateMessage => ({
@@ -57,5 +57,59 @@ describe("world store", () => {
     expect(resourceChanges).toBe(1);
     offWorld();
     offResources();
+  });
+
+  it("applies a tile batch once while preserving resource state", () => {
+    const world = {
+      ...snap("empty"),
+      width: 2,
+      tiles: [
+        { kind: "empty", dir: "north" },
+        { kind: "empty", dir: "north" },
+      ] as TileView[],
+    };
+    setLatest(world);
+    setResources({ type: "resources", deposits: [{ x: 0, y: 0, kind: "iron", capacity: 100, remaining: 42 }] });
+    let worldChanges = 0;
+    let resourceChanges = 0;
+    const offWorld = subscribe(() => worldChanges++);
+    const offResources = subscribeResources(() => resourceChanges++);
+
+    applyTiles({
+      type: "tiles",
+      tiles: [
+        { x: 0, y: 0, kind: "extractor", dir: "east" },
+        { x: 1, y: 0, kind: "belt", dir: "east" },
+      ],
+    });
+
+    expect(getLatest()?.tiles).toEqual([
+      { kind: "extractor", dir: "east" },
+      { kind: "belt", dir: "east" },
+    ]);
+    expect(getTerrain()?.tiles).toBe(getLatest()?.tiles);
+    expect(getLatest()?.deposits[0].remaining).toBe(100);
+    expect(getTerrain()?.deposits[0].remaining).toBe(42);
+    expect(getTerrain()?.ports).toBe(world.ports);
+    expect(worldChanges).toBe(1);
+    expect(resourceChanges).toBe(1);
+    offWorld();
+    offResources();
+  });
+
+  it("rejects tile batches before a snapshot or outside the world", () => {
+    applyTiles({ type: "tiles", tiles: [{ x: 0, y: 0, kind: "belt", dir: "east" }] });
+    expect(getLatest()).toBeNull();
+
+    const world = snap("empty");
+    setLatest(world);
+    applyTiles({
+      type: "tiles",
+      tiles: [
+        { x: 0, y: 0, kind: "belt", dir: "east" },
+        { x: 1, y: 0, kind: "belt", dir: "east" },
+      ],
+    });
+    expect(getLatest()).toBe(world);
   });
 });
