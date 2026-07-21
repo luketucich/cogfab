@@ -18,6 +18,7 @@ import { addBurst } from "./burst";
 import { sfx } from "../sfx";
 import type { ResourceKind } from "../net/types";
 import { isRawResource, refineResource, RESOURCE_PALETTE } from "./resources";
+import { flashRefinedSale, setRefinerJobs } from "./feedback";
 
 const MAX_ORE = 8192;
 const ORE_Y = 0.5; // sit on the belt surface
@@ -116,6 +117,7 @@ export function FlowItems() {
     // nearest chunk in passing.
     for (const route of routes.current.values()) route.nearest = Infinity;
     const alive: Chunk[] = [];
+    const activeJobs: { x: number; y: number; progress: number }[] = [];
     for (const chunk of chunks.current) {
       const cell = Math.floor(chunk.dist);
       const tileKind = snap?.tiles[chunk.route.cells[cell]]?.kind;
@@ -132,6 +134,13 @@ export function FlowItems() {
           chunk.processLeft -= dt;
           if (chunk.processLeft > 0) {
             chunk.dist = cell;
+            if (snap) {
+              activeJobs.push({
+                x: refiner % snap.width,
+                y: Math.floor(refiner / snap.width),
+                progress: Math.min(1, chunk.processLeft / processSeconds),
+              });
+            }
           } else {
             chunk.processLeft = 0;
             chunk.resource = refineResource(chunk.resource);
@@ -150,8 +159,10 @@ export function FlowItems() {
         }
         if (live.current.has(chunk.route)) {
           curvePoint(chunk.route.curves[chunk.route.curves.length - 1], 1, 0, landing);
-          addBurst({ x: landing.x, z: landing.z, color: "#ffd57a", count: 2 });
+          const saleColor = RESOURCE_PALETTE[chunk.resource].color;
+          addBurst({ x: landing.x, z: landing.z, color: saleColor, count: 2 });
           sfx.deliver();
+          if (!isRawResource(chunk.resource)) flashRefinedSale(saleColor);
         }
         continue;
       }
@@ -186,6 +197,7 @@ export function FlowItems() {
       }
     }
     chunks.current = alive;
+    setRefinerJobs(activeJobs);
 
     let inst = 0;
     for (const chunk of alive) {

@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import type { IconType } from "react-icons";
 import { PiShovelFill, PiFastForwardFill, PiCoinsFill, PiFireFill, PiArrowsOutFill } from "react-icons/pi";
@@ -35,105 +35,176 @@ function unavailableReason(hasRequiredIncome: boolean, reserveBlocks: boolean): 
   return "Not enough credits";
 }
 
-// UpgradePanel is the upgrades sidebar in the top right: live purchases,
-// each card spelling out exactly what the next level buys.
+// UpgradePanel is a compact icon rail that expands a card on hover/focus so the
+// first viewport stays clear on shorter screens.
 export function UpgradePanel() {
   const stats = useSyncExternalStore(subscribeStats, getStats);
-  // Production upgrades require a live route and leave the next land purchase
-  // untouched. Land itself can still be unlocked after a deposit runs dry.
   const incomeAvailable = stats.ratePerSec > 0;
   const credits = spendableCredits();
   const { extractorLevel: el, beltLevel: bl, valueLevel: vl, refinerLevel: rl } = stats;
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const cards: CardProps[] = [
+    {
+      id: "extractor",
+      icon: PiShovelFill,
+      name: "Extractor Rate",
+      detail: upgradeDetail(emissionMultiplier(el), emissionMultiplier(el + 1), stats.extractorCost, "output"),
+      tag: `LV ${el}`,
+      cost: stats.extractorCost,
+      credits,
+      incomeAvailable,
+      reservedCredits: stats.gridCost,
+      onBuy: () => {
+        sfx.buy();
+        connection.send({ type: "buy", upgrade: "extractorRate" });
+      },
+    },
+    {
+      id: "belt",
+      icon: PiFastForwardFill,
+      name: "Belt Speed",
+      detail: upgradeDetail(beltMultiplier(bl), beltMultiplier(bl + 1), stats.beltCost, "throughput"),
+      tag: `LV ${bl}`,
+      cost: stats.beltCost,
+      credits,
+      incomeAvailable,
+      reservedCredits: stats.gridCost,
+      onBuy: () => {
+        sfx.buy();
+        connection.send({ type: "buy", upgrade: "beltSpeed" });
+      },
+    },
+    {
+      id: "refiner",
+      icon: PiFireFill,
+      name: "Refiner Speed",
+      detail: refineDetail(rl, stats.refinerCost),
+      tag: `LV ${rl}`,
+      cost: stats.refinerCost,
+      credits,
+      incomeAvailable,
+      reservedCredits: stats.gridCost,
+      onBuy: () => {
+        sfx.buy();
+        connection.send({ type: "buy", upgrade: "refinerSpeed" });
+      },
+    },
+    {
+      id: "value",
+      icon: PiCoinsFill,
+      name: "Sale Value",
+      detail: upgradeDetail(saleMultiplier(vl), saleMultiplier(vl + 1), stats.valueCost, "resource value"),
+      tag: `LV ${vl}`,
+      cost: stats.valueCost,
+      credits,
+      incomeAvailable,
+      reservedCredits: stats.gridCost,
+      onBuy: () => {
+        sfx.buy();
+        connection.send({ type: "buy", upgrade: "oreValue" });
+      },
+    },
+    {
+      id: "grid",
+      icon: PiArrowsOutFill,
+      name: "Grid Size",
+      detail:
+        stats.gridCost > 0
+          ? `${stats.gridWidth}x${stats.gridHeight} to ${stats.nextGridWidth}x${stats.nextGridHeight} land`
+          : "The whole world is yours",
+      tag: `${stats.gridWidth}x${stats.gridHeight}`,
+      cost: stats.gridCost,
+      credits,
+      incomeAvailable,
+      requiresIncome: false,
+      onBuy: () => {
+        sfx.expand();
+        connection.send({ type: "buy", upgrade: "gridSize" });
+      },
+    },
+  ];
 
   return (
     <div className="hud-upgrades" style={panel}>
       <div style={heading}>Upgrades</div>
-      <div className="hud-upgrades__list">
-        <UpgradeCard
-          icon={PiShovelFill}
-          name="Extractor Rate"
-          detail={upgradeDetail(emissionMultiplier(el), emissionMultiplier(el + 1), stats.extractorCost, "output")}
-          tag={`LV ${el}`}
-          cost={stats.extractorCost}
-          credits={credits}
-          incomeAvailable={incomeAvailable}
-          reservedCredits={stats.gridCost}
-          onBuy={() => {
-            sfx.buy();
-            connection.send({ type: "buy", upgrade: "extractorRate" });
-          }}
-        />
-        <UpgradeCard
-          icon={PiFastForwardFill}
-          name="Belt Speed"
-          detail={upgradeDetail(beltMultiplier(bl), beltMultiplier(bl + 1), stats.beltCost, "throughput")}
-          tag={`LV ${bl}`}
-          cost={stats.beltCost}
-          credits={credits}
-          incomeAvailable={incomeAvailable}
-          reservedCredits={stats.gridCost}
-          onBuy={() => {
-            sfx.buy();
-            connection.send({ type: "buy", upgrade: "beltSpeed" });
-          }}
-        />
-        <UpgradeCard
-          icon={PiFireFill}
-          name="Refiner Speed"
-          detail={refineDetail(rl, stats.refinerCost)}
-          tag={`LV ${rl}`}
-          cost={stats.refinerCost}
-          credits={credits}
-          incomeAvailable={incomeAvailable}
-          reservedCredits={stats.gridCost}
-          onBuy={() => {
-            sfx.buy();
-            connection.send({ type: "buy", upgrade: "refinerSpeed" });
-          }}
-        />
-        <UpgradeCard
-          icon={PiCoinsFill}
-          name="Sale Value"
-          detail={upgradeDetail(saleMultiplier(vl), saleMultiplier(vl + 1), stats.valueCost, "resource value")}
-          tag={`LV ${vl}`}
-          cost={stats.valueCost}
-          credits={credits}
-          incomeAvailable={incomeAvailable}
-          reservedCredits={stats.gridCost}
-          onBuy={() => {
-            sfx.buy();
-            connection.send({ type: "buy", upgrade: "oreValue" });
-          }}
-        />
-        <UpgradeCard
-          icon={PiArrowsOutFill}
-          name="Grid Size"
-          detail={
-            stats.gridCost > 0
-              ? `${stats.gridWidth}x${stats.gridHeight} to ${stats.nextGridWidth}x${stats.nextGridHeight} land`
-              : "The whole world is yours"
-          }
-          tag={`${stats.gridWidth}x${stats.gridHeight}`}
-          cost={stats.gridCost}
-          credits={credits}
-          incomeAvailable={incomeAvailable}
-          requiresIncome={false}
-          onBuy={() => {
-            sfx.expand();
-            connection.send({ type: "buy", upgrade: "gridSize" });
-          }}
-        />
+      <div className="hud-upgrades__rail">
+        {cards.map((card) => {
+          const Icon = card.icon;
+          const open = openId === card.id;
+          const availableCredits = creditsAfterReserve(card.credits, card.reservedCredits ?? 0);
+          const hasRequiredIncome = card.requiresIncome === false || card.incomeAvailable;
+          const buyable = card.cost > 0 && card.cost <= availableCredits && hasRequiredIncome;
+          return (
+            <div
+              key={card.id}
+              className="hud-upgrade-slot"
+              onMouseEnter={() => setOpenId(card.id)}
+              onMouseLeave={() => setOpenId((id) => (id === card.id ? null : id))}
+              onFocus={() => setOpenId(card.id)}
+              onBlur={() => setOpenId((id) => (id === card.id ? null : id))}
+            >
+              <button
+                type="button"
+                className="hud-upgrade-chip"
+                style={{
+                  ...chip,
+                  ...(open && { borderColor: ACCENT, background: "rgba(43, 60, 92, 0.9)" }),
+                  ...(!buyable && card.cost > 0 && { opacity: 0.55 }),
+                }}
+                title={`${card.name} · ${card.tag}`}
+                aria-expanded={open}
+              >
+                <Icon size={18} color={ACCENT} />
+                <span style={chipCost}>{card.cost === 0 ? "Max" : fmtNum(card.cost)}</span>
+              </button>
+              {open && (
+                <div className="hud-upgrade-card" style={cardStyle} role="dialog" aria-label={card.name}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Icon size={22} color={ACCENT} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>
+                        {card.name} <span style={tagChip}>{card.tag}</span>
+                      </div>
+                      <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>{card.detail}</div>
+                    </div>
+                  </div>
+                  {card.cost === 0 ? (
+                    <div style={mutedTag}>Max</div>
+                  ) : (
+                    <button
+                      onClick={card.onBuy}
+                      disabled={!buyable}
+                      title={
+                        buyable
+                          ? undefined
+                          : unavailableReason(
+                              hasRequiredIncome,
+                              hasRequiredIncome && card.cost <= card.credits && card.cost > availableCredits,
+                            )
+                      }
+                      style={{ ...buyButton, ...(!buyable && { opacity: 0.45, cursor: "default" }) }}
+                    >
+                      Upgrade <span style={{ color: CREDIT_TEXT }}>· {fmtNum(card.cost)} credits</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 type CardProps = {
+  id: string;
   icon: IconType;
   name: string;
   detail: string;
-  tag: string; // current level or size, shown beside the name
-  cost: number; // next purchase price; 0 = maxed out
+  tag: string;
+  cost: number;
   credits: number;
   incomeAvailable: boolean;
   requiresIncome?: boolean;
@@ -141,62 +212,47 @@ type CardProps = {
   onBuy: () => void;
 };
 
-function UpgradeCard({
-  icon: Icon,
-  name,
-  detail,
-  tag,
-  cost,
-  credits,
-  incomeAvailable,
-  requiresIncome = true,
-  reservedCredits = 0,
-  onBuy,
-}: CardProps) {
-  const hasRequiredIncome = !requiresIncome || incomeAvailable;
-  const availableCredits = creditsAfterReserve(credits, reservedCredits);
-  const buyable = cost > 0 && cost <= availableCredits && hasRequiredIncome;
-  const reserveBlocks = hasRequiredIncome && cost <= credits && cost > availableCredits;
-  const disabledTitle = unavailableReason(hasRequiredIncome, reserveBlocks);
-  return (
-    <div className="hud-upgrade-card" style={card}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <Icon size={24} color={ACCENT} />
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700 }}>
-            {name} <span style={tagChip}>{tag}</span>
-          </div>
-          <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>{detail}</div>
-        </div>
-      </div>
-      {cost === 0 ? (
-        <div style={mutedTag}>Max</div>
-      ) : (
-        <button
-          onClick={onBuy}
-          disabled={!buyable}
-          title={buyable ? undefined : disabledTitle}
-          style={{ ...buyButton, ...(!buyable && { opacity: 0.45, cursor: "default" }) }}
-        >
-          Upgrade <span style={{ color: CREDIT_TEXT }}>· {fmtNum(cost)} credits</span>
-        </button>
-      )}
-    </div>
-  );
-}
-
 const heading: CSSProperties = {
   fontFamily: FONT_DISPLAY,
-  fontSize: 16,
+  fontSize: 14,
   fontWeight: 800,
   letterSpacing: 0.5,
+  marginBottom: 10,
 };
 
-const card: CSSProperties = {
-  padding: 12,
+const chip: CSSProperties = {
+  width: "100%",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+  padding: "8px 10px",
   borderRadius: 10,
-  background: "rgba(0, 0, 0, 0.22)",
-  border: "1px solid rgba(255, 255, 255, 0.06)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(0,0,0,0.22)",
+  color: "#fff",
+  cursor: "default",
+  fontFamily: FONT_UI,
+};
+
+const chipCost: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  color: CREDIT_TEXT,
+  fontVariantNumeric: "tabular-nums",
+};
+
+const cardStyle: CSSProperties = {
+  position: "absolute",
+  right: "calc(100% + 10px)",
+  top: 0,
+  width: 210,
+  padding: 12,
+  borderRadius: 12,
+  background: "rgba(18, 21, 28, 0.94)",
+  border: "1px solid rgba(255, 255, 255, 0.1)",
+  boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
+  zIndex: 5,
 };
 
 const tagChip: CSSProperties = {

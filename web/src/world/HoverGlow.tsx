@@ -6,6 +6,7 @@ import { getHover } from "./hover";
 import { getSelectedId } from "../toolbar/tools";
 import { cellOffsets, MACHINE_ROTATION } from "./grid";
 import { beltPiece } from "./beltShape";
+import { refinedBeltCells } from "./flow";
 import { useFactoryModels, type FactoryModels } from "./models";
 import type { StateMessage } from "../net/types";
 
@@ -24,7 +25,8 @@ function structureAt(snap: StateMessage, models: FactoryModels, x: number, y: nu
   const tile = snap.tiles[y * snap.width + x];
   if (tile.kind === "belt") {
     const { kind, rotationY } = beltPiece(snap, x, y, tile.dir);
-    const part = kind === "corner" ? models.corner : kind === "tee" ? models.tee : kind === "cross" ? models.cross : models.belt;
+    const set = refinedBeltCells(snap).has(y * snap.width + x) ? models.stripe : models;
+    const part = kind === "corner" ? set.corner : kind === "tee" ? set.tee : kind === "cross" ? set.cross : set.belt;
     return part.geometry ? { geometry: part.geometry, rotationY } : null;
   }
   if (tile.kind === "extractor" && models.extractor.geometry) return { geometry: models.extractor.geometry, rotationY: MACHINE_ROTATION[tile.dir] };

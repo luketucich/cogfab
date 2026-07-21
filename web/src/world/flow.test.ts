@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { drainRuns, flowConnections, flowPaths, removeDrainedRuns, runKey } from "./flow";
+import { drainRuns, flowConnections, flowPaths, refinedBeltCells, removeDrainedRuns, runKey } from "./flow";
 import type { Dir, StateMessage, TileView } from "../net/types";
 
 // grid builds a snapshot from a map of "x,y" -> tile; missing cells are empty.
@@ -51,6 +51,7 @@ describe("flowPaths", () => {
       [2, 0],
       [3, 0],
     ]);
+    expect([...refinedBeltCells(snap)]).toEqual([3]);
   });
 
   it("marks a run that reaches no seller broken, tracing to the farthest belt", () => {

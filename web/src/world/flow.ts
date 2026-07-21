@@ -86,6 +86,26 @@ export function flowPaths(snap: StateMessage): FlowRun[] {
   return cache.runs;
 }
 
+// refinedBeltCells returns belt indices that sit on the output side of a refiner
+// on a complete route. Those belts draw the stripe conveyor variant.
+export function refinedBeltCells(snap: StateMessage): ReadonlySet<number> {
+  const refined = new Set<number>();
+  for (const run of flowPaths(snap)) {
+    if (!run.complete) continue;
+    let pastRefiner = false;
+    for (const step of run.steps) {
+      const index = step.y * snap.width + step.x;
+      const kind = snap.tiles[index]?.kind;
+      if (kind === "refiner") {
+        pastRefiner = true;
+        continue;
+      }
+      if (pastRefiner && kind === "belt") refined.add(index);
+    }
+  }
+  return refined;
+}
+
 // flowConnections returns the sides material crosses on each routed belt. Belt
 // models use the same answer as the moving material, including machine endpoints.
 export function flowConnections(snap: StateMessage): ReadonlyMap<number, readonly Dir[]> {

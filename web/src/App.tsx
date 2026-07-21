@@ -9,6 +9,7 @@ import { BackgroundMusic } from "./BackgroundMusic";
 import { CursorOverlay } from "./CursorOverlay";
 import { RoomFull } from "./RoomFull";
 import { Toolbar } from "./toolbar/Toolbar";
+import { CoachLine } from "./CoachLine";
 
 export function App() {
   return (
@@ -26,6 +27,7 @@ export function App() {
       <Hud />
       <CreditsCounter />
       <UpgradePanel />
+      <CoachLine />
       <Toolbar />
       <ResetView />
       <Settings />
