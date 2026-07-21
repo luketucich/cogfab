@@ -25,6 +25,8 @@ function stats(credits: number): StatsMessage {
     beltCost: 200,
     valueLevel: 0,
     valueCost: 400,
+    refinerLevel: 0,
+    refinerCost: 250,
     gridWidth: 8,
     gridHeight: 8,
     gridCost: 300,

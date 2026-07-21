@@ -13,6 +13,10 @@ const RESOURCE_COLORS: Record<ResourceKind, THREE.Color> = {
   copper: new THREE.Color(RESOURCE_PALETTE.copper.color),
   quartz: new THREE.Color(RESOURCE_PALETTE.quartz.color),
   gold: new THREE.Color(RESOURCE_PALETTE.gold.color),
+  ironBar: new THREE.Color(RESOURCE_PALETTE.ironBar.color),
+  copperSheet: new THREE.Color(RESOURCE_PALETTE.copperSheet.color),
+  quartzCrystal: new THREE.Color(RESOURCE_PALETTE.quartzCrystal.color),
+  goldIngot: new THREE.Color(RESOURCE_PALETTE.goldIngot.color),
 };
 
 function rockVariant(x: number, y: number): number {
