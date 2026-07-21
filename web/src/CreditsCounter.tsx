@@ -1,13 +1,26 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import { fmtNum, getStats, pendingSpendTotal, subscribeStats } from "./world/economy";
+import { getSaleFlash, subscribeSaleFlash } from "./world/feedback";
 import { panel, FONT_DISPLAY } from "./ui";
 
+const FLASH_MS = 700;
+
 // CreditsCounter is the centred readout at the top: shared credits as the big
-// headline, with the current sale rate and grid size beneath it.
+// headline, with the current sale rate and grid size beneath it. Refined sales
+// briefly tint the rate in the product colour.
 export function CreditsCounter() {
   const amount = useSmoothCredits();
   const stats = useSyncExternalStore(subscribeStats, getStats);
+  const flash = useSyncExternalStore(subscribeSaleFlash, getSaleFlash);
+  const [flashColor, setFlashColor] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!flash) return;
+    setFlashColor(flash.color);
+    const id = window.setTimeout(() => setFlashColor(null), FLASH_MS);
+    return () => window.clearTimeout(id);
+  }, [flash]);
 
   return (
     <div className="hud-credits" style={{ ...panel, textAlign: "center" }}>
@@ -15,19 +28,32 @@ export function CreditsCounter() {
       <div style={count}>{fmtNum(amount)}</div>
       <div className="hud-credits__subrow" style={subRow}>
         <span>
-          <span style={statLabel}>Rate</span> <span style={rateValue}>+{fmtNum(stats.ratePerSec, 1)}/s</span>
+          <span style={statLabel}>Rate</span>{" "}
+          <span
+            style={{
+              ...rateValue,
+              ...(flashColor && {
+                color: flashColor,
+                textShadow: `0 0 12px ${flashColor}88`,
+                transition: "color 120ms, text-shadow 120ms",
+              }),
+            }}
+          >
+            +{fmtNum(stats.ratePerSec, 1)}/s
+          </span>
         </span>
         <span style={dot}>·</span>
         <span>
-          <span style={statLabel}>Grid</span> <span style={gridValue}>{stats.gridWidth}x{stats.gridHeight}</span>
+          <span style={statLabel}>Grid</span>{" "}
+          <span style={gridValue}>
+            {stats.gridWidth}x{stats.gridHeight}
+          </span>
         </span>
       </div>
     </div>
   );
 }
 
-// Count smoothly between server updates without ever spending credits the
-// server has not confirmed.
 function useSmoothCredits(): number {
   const [amount, setAmount] = useState(0);
 

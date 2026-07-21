@@ -9,14 +9,14 @@ export type ResourceStyle = {
 // Resource colors are shared by deposits, moving material, and hover labels.
 // Shape still distinguishes raw rocks from later processed items.
 export const RESOURCE_PALETTE: Record<ResourceKind, ResourceStyle> = {
-  iron: { label: "Iron", color: "#8f969f", baseCredits: 1 },
-  copper: { label: "Copper", color: "#d88458", baseCredits: 3 },
-  quartz: { label: "Quartz", color: "#d6c9f2", baseCredits: 8 },
-  gold: { label: "Gold", color: "#e7bb52", baseCredits: 20 },
-  ironBar: { label: "Iron bar", color: "#c0c6ce", baseCredits: 3 },
-  copperSheet: { label: "Copper sheet", color: "#f0a06e", baseCredits: 9 },
-  quartzCrystal: { label: "Quartz crystal", color: "#efe6ff", baseCredits: 24 },
-  goldIngot: { label: "Gold ingot", color: "#ffd76a", baseCredits: 60 },
+  iron: { label: "Iron", color: "#a8b0ba", baseCredits: 1 },
+  copper: { label: "Copper", color: "#f08a4b", baseCredits: 3 },
+  quartz: { label: "Quartz", color: "#e8dcff", baseCredits: 8 },
+  gold: { label: "Gold", color: "#ffcc3d", baseCredits: 20 },
+  ironBar: { label: "Iron bar", color: "#d5dbe3", baseCredits: 3 },
+  copperSheet: { label: "Copper sheet", color: "#ffb07a", baseCredits: 9 },
+  quartzCrystal: { label: "Quartz crystal", color: "#f7f0ff", baseCredits: 24 },
+  goldIngot: { label: "Gold ingot", color: "#ffe28a", baseCredits: 60 },
 };
 
 export const RAW_RESOURCES: ResourceKind[] = ["iron", "copper", "quartz", "gold"];

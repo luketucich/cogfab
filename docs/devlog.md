@@ -4,6 +4,11 @@ What I've worked on, newest first.
 
 ## 2026-07-21
 
+- Visual overhaul: distinct Kenney meshes per machine (windowed extractor,
+  fortified refiner, yellow port structures), stripe belts on refined lanes,
+  brighter deposit tints, a processing ring on busy refiners, toolbar model
+  thumbs, a compact hover-expand upgrade rail, rate flashes on refined sales,
+  and a one-shot coach tip for empty rooms.
 - Added the refiner: an optional mid-line machine that turns raw ore into
   3×-value products after a processing delay. Raw shipping still works, so early
   lines stay simple while refining becomes the mid-game payoff. Kenney's

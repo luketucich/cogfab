@@ -33,13 +33,14 @@ function flush(mesh: THREE.InstancedMesh, count: number): void {
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
 }
 
-// ResourceField draws sparse deposits and shipping ports with four instanced
-// meshes, independent of the board dimensions.
+// ResourceField draws sparse deposits and shipping ports. Deposits are tinted
+// strongly by ore type; ports get a yellow kit structure on the shipping pad.
 export function ResourceField() {
   const rockA = useRef<THREE.InstancedMesh>(null!);
   const rockB = useRef<THREE.InstancedMesh>(null!);
   const rockC = useRef<THREE.InstancedMesh>(null!);
   const ports = useRef<THREE.InstancedMesh>(null!);
+  const portStructures = useRef<THREE.InstancedMesh>(null!);
   const models = useResourceModels();
   const snap = useSyncExternalStore(subscribeResources, getTerrain);
 
@@ -68,11 +69,18 @@ export function ResourceField() {
         dummy.rotation.set(0, 0, 0);
         dummy.scale.setScalar(0.9);
         dummy.updateMatrix();
-        ports.current.setMatrixAt(portCount++, dummy.matrix);
+        ports.current.setMatrixAt(portCount, dummy.matrix);
+
+        dummy.position.set(port.x - offX, 0.02, port.y - offZ);
+        dummy.scale.set(0.72, 0.55, 0.72);
+        dummy.updateMatrix();
+        portStructures.current.setMatrixAt(portCount, dummy.matrix);
+        portCount++;
       }
     }
     rocks.forEach((mesh, index) => flush(mesh, counts[index]));
     flush(ports.current, portCount);
+    flush(portStructures.current, portCount);
   }, [snap]);
 
   return (
@@ -85,12 +93,18 @@ export function ResourceField() {
           frustumCulled={false}
           raycast={() => null}
         >
-          <meshStandardMaterial color="#ffffff" roughness={0.86} metalness={0.12} flatShading />
+          <meshStandardMaterial color="#ffffff" roughness={0.72} metalness={0.28} flatShading />
         </instancedMesh>
       ))}
       <instancedMesh
         ref={ports}
         args={[models.port.geometry, models.port.material, MAX_CELLS]}
+        frustumCulled={false}
+        raycast={() => null}
+      />
+      <instancedMesh
+        ref={portStructures}
+        args={[models.portStructure.geometry, models.portStructure.material, MAX_CELLS]}
         frustumCulled={false}
         raycast={() => null}
       />

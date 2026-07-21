@@ -17,6 +17,7 @@ import { PlayerCursors } from "./world/PlayerCursors";
 import { Region } from "./world/Region";
 import { ResourceField } from "./world/ResourceField";
 import { ResourceTooltip } from "./world/ResourceTooltip";
+import { RefinerGlow } from "./world/RefinerGlow";
 
 // Scene is the whole 3D view: a locked isometric camera you pan and zoom like a
 // map, soft even lighting, the checkered floor, and the factory. The camera's
@@ -53,6 +54,7 @@ export function Scene() {
         <BuildPreviews />
         <Factory />
         <HoverGlow />
+        <RefinerGlow />
       </Suspense>
       <ResourceTooltip />
       <FlowItems />
