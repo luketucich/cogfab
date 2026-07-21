@@ -1,13 +1,14 @@
 import { useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import type { IconType } from "react-icons";
-import { PiShovelFill, PiFastForwardFill, PiCoinsFill, PiArrowsOutFill } from "react-icons/pi";
+import { PiShovelFill, PiFastForwardFill, PiCoinsFill, PiFireFill, PiArrowsOutFill } from "react-icons/pi";
 import {
   beltMultiplier,
   creditsAfterReserve,
   emissionMultiplier,
   fmtNum,
   getStats,
+  refineTime,
   saleMultiplier,
   spendableCredits,
   subscribeStats,
@@ -21,13 +22,20 @@ function upgradeDetail(current: number, next: number, cost: number, label: strin
   return cost > 0 ? `${currentValue} to x${fmtNum(next)} ${label}` : `${currentValue} ${label}`;
 }
 
+function refineDetail(level: number, cost: number): string {
+  const current = refineTime(level);
+  const next = refineTime(level + 1);
+  const fmt = (seconds: number) => `${seconds.toFixed(2).replace(/\.?0+$/, "")}s`;
+  return cost > 0 ? `${fmt(current)} to ${fmt(next)} per ore` : `${fmt(current)} per ore`;
+}
+
 function unavailableReason(hasRequiredIncome: boolean, reserveBlocks: boolean): string {
   if (!hasRequiredIncome) return "Connect an active production line first";
   if (reserveBlocks) return "Credits are being kept for the next land unlock";
   return "Not enough credits";
 }
 
-// UpgradePanel is the upgrades sidebar in the top right: four live purchases,
+// UpgradePanel is the upgrades sidebar in the top right: live purchases,
 // each card spelling out exactly what the next level buys.
 export function UpgradePanel() {
   const stats = useSyncExternalStore(subscribeStats, getStats);
@@ -35,7 +43,7 @@ export function UpgradePanel() {
   // untouched. Land itself can still be unlocked after a deposit runs dry.
   const incomeAvailable = stats.ratePerSec > 0;
   const credits = spendableCredits();
-  const { extractorLevel: el, beltLevel: bl, valueLevel: vl } = stats;
+  const { extractorLevel: el, beltLevel: bl, valueLevel: vl, refinerLevel: rl } = stats;
 
   return (
     <div className="hud-upgrades" style={panel}>
@@ -67,6 +75,20 @@ export function UpgradePanel() {
           onBuy={() => {
             sfx.buy();
             connection.send({ type: "buy", upgrade: "beltSpeed" });
+          }}
+        />
+        <UpgradeCard
+          icon={PiFireFill}
+          name="Refiner Speed"
+          detail={refineDetail(rl, stats.refinerCost)}
+          tag={`LV ${rl}`}
+          cost={stats.refinerCost}
+          credits={credits}
+          incomeAvailable={incomeAvailable}
+          reservedCredits={stats.gridCost}
+          onBuy={() => {
+            sfx.buy();
+            connection.send({ type: "buy", upgrade: "refinerSpeed" });
           }}
         />
         <UpgradeCard

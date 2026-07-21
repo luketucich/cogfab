@@ -21,9 +21,10 @@ people can build one factory together.
 ![Luke places an extractor and starts an iron line while Bert previews and completes the route to a shipping port](docs/demo.gif)
 
 Each room code creates a stable resource world with finite iron, copper, quartz,
-and gold deposits. Extractors work on deposits, sellers ship from marked ports,
-and delivered resources become shared credits. The buildable region grows from
-8x8 to 64x64, revealing rarer and more valuable materials farther from the
+and gold deposits. Extractors work on deposits, refiners turn raw ore into
+higher-value products after a short processing delay, sellers ship from marked
+ports, and delivered resources become shared credits. The buildable region grows
+from 8x8 to 64x64, revealing rarer and more valuable materials farther from the
 starting factory.
 
 Everyone in a room shares the same grid and economy. Live cursors and

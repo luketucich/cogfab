@@ -29,6 +29,7 @@ function structureAt(snap: StateMessage, models: FactoryModels, x: number, y: nu
   }
   if (tile.kind === "extractor" && models.extractor.geometry) return { geometry: models.extractor.geometry, rotationY: MACHINE_ROTATION[tile.dir] };
   if (tile.kind === "seller" && models.seller.geometry) return { geometry: models.seller.geometry, rotationY: MACHINE_ROTATION[tile.dir] };
+  if (tile.kind === "refiner" && models.refiner.geometry) return { geometry: models.refiner.geometry, rotationY: MACHINE_ROTATION[tile.dir] };
   return null;
 }
 

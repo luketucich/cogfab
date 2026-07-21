@@ -19,6 +19,7 @@ function grid(width: number, height: number, cells: Record<string, TileView>): S
 const E = (dir: Dir): TileView => ({ kind: "extractor", dir });
 const B = (dir: Dir): TileView => ({ kind: "belt", dir });
 const S = (dir: Dir): TileView => ({ kind: "seller", dir });
+const R = (dir: Dir): TileView => ({ kind: "refiner", dir });
 
 describe("flowPaths", () => {
   it("returns a complete run from the extractor to the seller", () => {
@@ -32,6 +33,24 @@ describe("flowPaths", () => {
     ]);
     expect(runs[0].steps[0].entry).toBe("west"); // enters from the extractor
     expect(runs[0].steps[1].exit).toBe("east"); // leaves into the seller
+  });
+
+  it("routes through a correctly faced refiner", () => {
+    const snap = grid(5, 1, {
+      "0,0": E("east"),
+      "1,0": B("east"),
+      "2,0": R("west"),
+      "3,0": B("east"),
+      "4,0": S("west"),
+    });
+    const runs = flowPaths(snap);
+    expect(runs.length).toBe(1);
+    expect(runs[0].complete).toBe(true);
+    expect(runs[0].steps.map((s) => [s.x, s.y])).toEqual([
+      [1, 0],
+      [2, 0],
+      [3, 0],
+    ]);
   });
 
   it("marks a run that reaches no seller broken, tracing to the farthest belt", () => {

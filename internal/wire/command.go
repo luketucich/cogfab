@@ -21,6 +21,7 @@ const (
 	KindBelt      = "belt"
 	KindExtractor = "extractor"
 	KindSeller    = "seller"
+	KindRefiner   = "refiner"
 )
 
 // Upgrades: the "upgrade" a buy command carries.
@@ -28,6 +29,7 @@ const (
 	UpgradeExtractorRate = "extractorRate"
 	UpgradeBeltSpeed     = "beltSpeed"
 	UpgradeSaleValue     = "oreValue" // keep the deployed wire value compatible
+	UpgradeRefinerSpeed  = "refinerSpeed"
 	UpgradeGridSize      = "gridSize"
 )
 

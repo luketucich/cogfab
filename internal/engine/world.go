@@ -17,7 +17,8 @@ const (
 	West
 )
 
-// TileKind is what's on a tile: nothing, a belt, an extractor, or a seller.
+// TileKind is what's on a tile: nothing, a belt, an extractor, a seller, or a
+// refiner.
 type TileKind uint8
 
 const (
@@ -25,6 +26,7 @@ const (
 	Belt
 	Extractor
 	Seller
+	Refiner
 )
 
 // Tile is one square of the grid: what's on it and the way it faces.
@@ -88,6 +90,10 @@ func (w *World) PlaceExtractor(x, y int, dir Direction) { w.set(x, y, Tile{Kind:
 
 // PlaceSeller puts a seller facing dir at (x, y).
 func (w *World) PlaceSeller(x, y int, dir Direction) { w.set(x, y, Tile{Kind: Seller, Dir: dir}) }
+
+// PlaceRefiner puts a refiner facing dir at (x, y). Facing points at the input
+// belt; refined material leaves from the opposite side.
+func (w *World) PlaceRefiner(x, y int, dir Direction) { w.set(x, y, Tile{Kind: Refiner, Dir: dir}) }
 
 // Destroy empties the tile at (x, y), removing any structure on it.
 func (w *World) Destroy(x, y int) { w.set(x, y, Tile{}) }

@@ -81,6 +81,8 @@ type StatsMessage struct {
 	BeltCost       int     `json:"beltCost"`
 	ValueLevel     int     `json:"valueLevel"`
 	ValueCost      int     `json:"valueCost"`
+	RefinerLevel   int     `json:"refinerLevel"`
+	RefinerCost    int     `json:"refinerCost"`
 	GridWidth      int     `json:"gridWidth"` // unlocked region, centred in the world
 	GridHeight     int     `json:"gridHeight"`
 	GridCost       int     `json:"gridCost"`

@@ -142,4 +142,27 @@ func TestProducers(t *testing.T) {
 		want := []int{w.index(5, 1), w.index(6, 1)}
 		assertProducerRoute(t, w, want, w.index(7, 1))
 	})
+
+	t.Run("a refiner in the line is part of the productive path", func(t *testing.T) {
+		w := NewWorld(6, 1)
+		w.PlaceExtractor(0, 0, East)
+		w.PlaceBelt(1, 0, East)
+		w.PlaceRefiner(2, 0, West) // input from west, output east
+		w.PlaceBelt(3, 0, East)
+		w.PlaceSeller(4, 0, West)
+		want := []int{w.index(1, 0), w.index(2, 0), w.index(3, 0)}
+		assertProducerRoute(t, w, want, w.index(4, 0))
+	})
+
+	t.Run("a refiner facing the wrong way does not complete the run", func(t *testing.T) {
+		w := NewWorld(6, 1)
+		w.PlaceExtractor(0, 0, East)
+		w.PlaceBelt(1, 0, East)
+		w.PlaceRefiner(2, 0, East) // faces away from the incoming belt
+		w.PlaceBelt(3, 0, East)
+		w.PlaceSeller(4, 0, West)
+		if got := len(w.Producers()); got != 0 {
+			t.Fatalf("got %d, want 0", got)
+		}
+	})
 }

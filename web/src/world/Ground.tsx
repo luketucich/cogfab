@@ -42,7 +42,7 @@ const cellUnlocked = (snap: StateMessage, cell: Cell) => {
 };
 
 function placeableKind(id: string): PlaceableKind | null {
-  if (id === "belt" || id === "extractor" || id === "seller") return id;
+  if (id === "belt" || id === "extractor" || id === "seller" || id === "refiner") return id;
   return null;
 }
 

@@ -13,6 +13,7 @@ const BURST_PROFILE: Record<PlaceableKind, { radius: number; y: number; count: n
   belt: { radius: 0.38, y: 0.18, count: 7 },
   extractor: { radius: 0.62, y: 0.28, count: 12 },
   seller: { radius: 0.62, y: 0.28, count: 12 },
+  refiner: { radius: 0.62, y: 0.28, count: 12 },
 };
 
 // newPlacements inspects only the cells in one accepted server batch. Rotations,

@@ -2,11 +2,19 @@
 // change these to match.
 
 export type TileView = {
-  kind: "empty" | "belt" | "extractor" | "seller";
+  kind: "empty" | "belt" | "extractor" | "seller" | "refiner";
   dir: "north" | "east" | "south" | "west";
 };
 
-export type ResourceKind = "iron" | "copper" | "quartz" | "gold";
+export type ResourceKind =
+  | "iron"
+  | "copper"
+  | "quartz"
+  | "gold"
+  | "ironBar"
+  | "copperSheet"
+  | "quartzCrystal"
+  | "goldIngot";
 
 export type DepositView = {
   x: number;
@@ -40,6 +48,8 @@ export type StatsMessage = {
   beltCost: number;
   valueLevel: number;
   valueCost: number;
+  refinerLevel: number;
+  refinerCost: number;
   gridWidth: number; // unlocked region, centred in the world
   gridHeight: number;
   gridCost: number;
@@ -211,7 +221,7 @@ export type RotateCommand = {
 
 export type BuyCommand = {
   type: "buy";
-  upgrade: "extractorRate" | "beltSpeed" | "oreValue" | "gridSize";
+  upgrade: "extractorRate" | "beltSpeed" | "oreValue" | "refinerSpeed" | "gridSize";
 };
 
 export type HoverCommand = {

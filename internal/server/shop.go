@@ -20,6 +20,7 @@ var buildCost = map[engine.TileKind]int{
 	engine.Belt:      10,
 	engine.Extractor: 75,
 	engine.Seller:    75,
+	engine.Refiner:   150,
 }
 
 // refund is the credit returned for tearing a structure down: half its build
@@ -35,6 +36,7 @@ const (
 	extractorBaseCost = 150
 	beltBaseCost      = 200
 	valueBaseCost     = 400
+	refinerBaseCost   = 250
 )
 
 // gridTiers are the unlockable region sizes, smallest first. Buying Grid Size
@@ -67,6 +69,7 @@ func doublingCost(level, base int) int {
 func (h *Hub) extractorCost() int { return doublingCost(h.extractorLevel, extractorBaseCost) }
 func (h *Hub) beltCost() int      { return doublingCost(h.beltLevel, beltBaseCost) }
 func (h *Hub) valueCost() int     { return doublingCost(h.valueLevel, valueBaseCost) }
+func (h *Hub) refinerCost() int   { return doublingCost(h.refinerLevel, refinerBaseCost) }
 
 // gridCost is the price of the next grid tier, 0 once the whole world is open.
 func (h *Hub) gridCost() int {
@@ -108,6 +111,8 @@ func kindOf(kind string) engine.TileKind {
 		return engine.Extractor
 	case wire.KindSeller:
 		return engine.Seller
+	case wire.KindRefiner:
+		return engine.Refiner
 	}
 	return engine.Empty
 }
@@ -159,6 +164,8 @@ func (h *Hub) applyPlacements(kindName string, placements []wire.Placement) bool
 			h.world.PlaceExtractor(placement.X, placement.Y, dir)
 		case engine.Seller:
 			h.world.PlaceSeller(placement.X, placement.Y, dir)
+		case engine.Refiner:
+			h.world.PlaceRefiner(placement.X, placement.Y, dir)
 		}
 	}
 	h.credits -= cost
@@ -172,7 +179,7 @@ func (h *Hub) terrainAllows(kind engine.TileKind, x, y int) bool {
 		return deposit.Kind != engine.NoResource && deposit.Remaining > 0 && !h.world.HasPort(x, y)
 	case engine.Seller:
 		return h.world.HasPort(x, y) && deposit.Kind == engine.NoResource
-	case engine.Belt:
+	case engine.Belt, engine.Refiner:
 		return !h.world.HasPort(x, y) && (deposit.Kind == engine.NoResource || deposit.Remaining == 0)
 	default:
 		return false
@@ -252,6 +259,8 @@ func (h *Hub) applyBuy(cmd wire.Command) bool {
 		cost, level = h.beltCost(), &h.beltLevel
 	case wire.UpgradeSaleValue:
 		cost, level = h.valueCost(), &h.valueLevel
+	case wire.UpgradeRefinerSpeed:
+		cost, level = h.refinerCost(), &h.refinerLevel
 	case wire.UpgradeGridSize:
 		productionUpgrade = false
 		cost, level = h.gridCost(), &h.gridTier

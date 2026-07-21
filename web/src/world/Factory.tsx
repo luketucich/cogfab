@@ -25,16 +25,17 @@ function flush(mesh: THREE.InstancedMesh, count: number) {
 
 // Factory draws the placed structures as instanced models. Belts split into
 // straight, corner, tee, and cross pieces, where the shape comes from each
-// belt's neighbours. Extractors and sellers draw as their own models. Nothing
-// moves, so it rebuilds only when a new snapshot arrives.
+// belt's neighbours. Extractors, sellers, and refiners draw as their own models.
+// Nothing moves, so it rebuilds only when a new snapshot arrives.
 export function Factory() {
-  const { belt, corner, tee, cross, extractor, seller } = useFactoryModels();
+  const { belt, corner, tee, cross, extractor, seller, refiner } = useFactoryModels();
   const straights = useRef<THREE.InstancedMesh>(null!);
   const corners = useRef<THREE.InstancedMesh>(null!);
   const tees = useRef<THREE.InstancedMesh>(null!);
   const crosses = useRef<THREE.InstancedMesh>(null!);
   const extractors = useRef<THREE.InstancedMesh>(null!);
   const sellers = useRef<THREE.InstancedMesh>(null!);
+  const refiners = useRef<THREE.InstancedMesh>(null!);
   const snap = useSyncExternalStore(subscribe, getLatest);
 
   useLayoutEffect(() => {
@@ -44,6 +45,7 @@ export function Factory() {
     let nCross = 0;
     let nExt = 0;
     let nSeller = 0;
+    let nRefiner = 0;
     if (snap) {
       const { width, height, tiles } = snap;
       const { offX, offZ } = cellOffsets(snap);
@@ -62,6 +64,8 @@ export function Factory() {
             placeInstance(extractors.current, nExt++, wx, wz, MACHINE_ROTATION[tile.dir]);
           } else if (tile.kind === "seller") {
             placeInstance(sellers.current, nSeller++, wx, wz, MACHINE_ROTATION[tile.dir]);
+          } else if (tile.kind === "refiner") {
+            placeInstance(refiners.current, nRefiner++, wx, wz, MACHINE_ROTATION[tile.dir]);
           }
         }
       }
@@ -72,6 +76,7 @@ export function Factory() {
     flush(crosses.current, nCross);
     flush(extractors.current, nExt);
     flush(sellers.current, nSeller);
+    flush(refiners.current, nRefiner);
   }, [snap]);
 
   return (
@@ -82,6 +87,7 @@ export function Factory() {
       <instancedMesh ref={crosses} args={[cross.geometry, cross.material, MAX_INSTANCES]} frustumCulled={false} />
       <instancedMesh ref={extractors} args={[extractor.geometry, extractor.material, MAX_INSTANCES]} frustumCulled={false} />
       <instancedMesh ref={sellers} args={[seller.geometry, seller.material, MAX_INSTANCES]} frustumCulled={false} />
+      <instancedMesh ref={refiners} args={[refiner.geometry, refiner.material, MAX_INSTANCES]} frustumCulled={false} />
     </>
   );
 }

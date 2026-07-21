@@ -15,7 +15,8 @@ export const TOOLS: Tool[] = [
   { id: "belt", label: "Belt", hotkey: "1", cost: 10 },
   { id: "extractor", label: "Extractor", hotkey: "2", cost: 75 },
   { id: "seller", label: "Seller", hotkey: "3", cost: 75 },
-  { id: "destroy", label: "Destroy", hotkey: "4" },
+  { id: "refiner", label: "Refiner", hotkey: "4", cost: 150 },
+  { id: "destroy", label: "Destroy", hotkey: "5" },
 ];
 
 // Which tool is selected. Module state (not React) so the DOM toolbar and the

@@ -17,8 +17,18 @@ const snap: StateMessage = {
 describe("resource terrain", () => {
   it("indexes deposits and defines every resource style", () => {
     expect(depositAt(snap, 0, 0)?.kind).toBe("copper");
-    expect(Object.keys(RESOURCE_PALETTE)).toEqual(["iron", "copper", "quartz", "gold"]);
+    expect(Object.keys(RESOURCE_PALETTE)).toEqual([
+      "iron",
+      "copper",
+      "quartz",
+      "gold",
+      "ironBar",
+      "copperSheet",
+      "quartzCrystal",
+      "goldIngot",
+    ]);
     expect(RESOURCE_PALETTE.gold.baseCredits).toBe(20);
+    expect(RESOURCE_PALETTE.goldIngot.baseCredits).toBe(60);
     expect(hasPortAt(snap, 2, 0)).toBe(true);
   });
 
@@ -28,6 +38,12 @@ describe("resource terrain", () => {
     expect(placementTerrainAllows(snap, "extractor", 2, 0)).toBe(false);
     expect(placementTerrainAllows(snap, "seller", 2, 0)).toBe(true);
     expect(placementTerrainAllows(snap, "seller", 0, 0)).toBe(false);
+  });
+
+  it("allows refiners on open land like belts", () => {
+    expect(placementTerrainAllows(snap, "refiner", 1, 0)).toBe(true);
+    expect(placementTerrainAllows(snap, "refiner", 0, 0)).toBe(false);
+    expect(placementTerrainAllows(snap, "refiner", 2, 0)).toBe(false);
   });
 
   it("keeps belts off ports and live deposits but allows depleted tiles", () => {

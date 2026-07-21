@@ -23,8 +23,23 @@ func (w *World) IsBelt(i int) bool { return i >= 0 && i < len(w.tiles) && w.tile
 // IsSeller reports whether cell i holds a seller.
 func (w *World) IsSeller(i int) bool { return i >= 0 && i < len(w.tiles) && w.tiles[i].Kind == Seller }
 
-// Producer is one productive extractor: the belts its material crosses
-// (extractor mouth first, seller mouth last) and the seller cell it lands in.
+// IsRefiner reports whether cell i holds a refiner.
+func (w *World) IsRefiner(i int) bool {
+	return i >= 0 && i < len(w.tiles) && w.tiles[i].Kind == Refiner
+}
+
+// IsConveying reports whether cell i is a belt or refiner that material rides.
+func (w *World) IsConveying(i int) bool {
+	if i < 0 || i >= len(w.tiles) {
+		return false
+	}
+	kind := w.tiles[i].Kind
+	return kind == Belt || kind == Refiner
+}
+
+// Producer is one productive extractor: the cells its material crosses
+// (extractor mouth first, seller mouth last; refiners sit in the path) and the
+// seller cell it lands in.
 type Producer struct {
 	Cell   int
 	Path   []int
@@ -52,9 +67,9 @@ func newPathSearch(cells int) *pathSearch {
 
 // Producers lists every extractor whose material reaches a seller. Material
 // leaves an extractor only from the side it faces and enters a seller only on
-// the side it faces, so the run starts at the belt at the extractor's mouth and
-// ends at the belt at a seller's mouth. Mirrors the client's flowPaths; keep
-// the two in step.
+// the side it faces. A refiner accepts input on the side it faces and emits from
+// the opposite side, so a path may include refiners between belts. Mirrors the
+// client's flowPaths; keep the two in step.
 func (w *World) Producers() []Producer {
 	var out []Producer
 	var search *pathSearch
@@ -76,10 +91,10 @@ func (w *World) Producers() []Producer {
 	return out
 }
 
-// pathToSeller walks belts out from start (an extractor's mouth belt) to the
-// nearest seller mouth, returning the ordered belts on that path, the seller cell,
-// and whether a seller was reached. A seller counts only when it faces the belt
-// feeding it.
+// pathToSeller walks belts (and refiners) out from start (an extractor's mouth
+// belt) to the nearest seller mouth, returning the ordered cells on that path,
+// the seller cell, and whether a seller was reached. A seller or refiner counts
+// only when it faces the belt feeding it.
 func (w *World) pathToSeller(start int, search *pathSearch) (path []int, seller int, reached bool) {
 	for i := 0; i < search.visited; i++ {
 		search.previous[search.queue[i]] = -1
@@ -91,6 +106,15 @@ func (w *World) pathToSeller(start int, search *pathSearch) (path []int, seller 
 	for head < tail && end < 0 {
 		current := search.queue[head]
 		head++
+		if w.tiles[current].Kind == Refiner {
+			out := w.faceCell(current, opposite(w.tiles[current].Dir))
+			if out >= 0 && w.tiles[out].Kind == Belt && search.previous[out] < 0 {
+				search.previous[out] = current
+				search.queue[tail] = out
+				tail++
+			}
+			continue
+		}
 		for d := Direction(0); d < 4; d++ {
 			next := w.faceCell(current, d)
 			if next < 0 {
@@ -102,6 +126,11 @@ func (w *World) pathToSeller(start int, search *pathSearch) (path []int, seller 
 				break
 			}
 			if kind == Belt && search.previous[next] < 0 {
+				search.previous[next] = current
+				search.queue[tail] = next
+				tail++
+			}
+			if kind == Refiner && w.tiles[next].Dir == opposite(d) && search.previous[next] < 0 {
 				search.previous[next] = current
 				search.queue[tail] = next
 				tail++

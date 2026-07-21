@@ -2,6 +2,13 @@
 
 What I've worked on, newest first.
 
+## 2026-07-21
+
+- Added the refiner: an optional mid-line machine that turns raw ore into
+  3×-value products after a processing delay. Raw shipping still works, so early
+  lines stay simple while refining becomes the mid-game payoff. Kenney's
+  fortified machine model is the new mesh; Refiner Speed is the matching upgrade.
+
 ## 2026-07-17
 
 - Added client-side prediction for building, rotating, and destroying. Local

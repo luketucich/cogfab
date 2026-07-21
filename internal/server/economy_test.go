@@ -268,3 +268,40 @@ func TestCappedVisualChunksStillConsumeEveryRawUnit(t *testing.T) {
 		t.Fatalf("earned %d credits from %d copper, want %d", got, stock, want)
 	}
 }
+
+func TestRefinerTriplesSaleValueAfterProcessing(t *testing.T) {
+	w := engine.NewWorld(5, 1)
+	w.SetDeposit(0, 0, engine.Iron, 1_000_000)
+	w.PlaceExtractor(0, 0, engine.East)
+	w.PlaceBelt(1, 0, engine.East)
+	w.PlaceRefiner(2, 0, engine.West)
+	w.PlaceBelt(3, 0, engine.East)
+	w.PlaceSeller(4, 0, engine.West)
+	w.SetPort(4, 0, true)
+	h := NewHub(w)
+
+	// Raw iron would be 5 credits/s; refined iron bars are 3× so 15 credits/s,
+	// but the level-0 refiner only clears 0.5 jobs/s, so the HUD rate is 1.5.
+	if got := h.currentRate(); got != 1.5 {
+		t.Fatalf("refined rate = %v, want 1.5", got)
+	}
+
+	tickN(h, int(baseRefineTime)+5)
+	before := h.credits
+	tickN(h, 10)
+	got := h.credits - before
+	if got < 10 || got > 20 {
+		t.Fatalf("delivered %d credits over 10s through a refiner, want about 15", got)
+	}
+}
+
+func TestRefinerSpeedUpgradeShortensProcessTime(t *testing.T) {
+	_, h := run(1)
+	if got := h.refineTime(); got != baseRefineTime {
+		t.Fatalf("level 0 refine time = %v, want %v", got, baseRefineTime)
+	}
+	h.refinerLevel = 2
+	if got := h.refineTime(); got != baseRefineTime/refineMult(2) {
+		t.Fatalf("level 2 refine time = %v, want %v", got, baseRefineTime/refineMult(2))
+	}
+}

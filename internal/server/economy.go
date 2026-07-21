@@ -18,6 +18,10 @@ const (
 	// subSteps is the sim steps per one-second tick: enough that a chunk never
 	// skips a belt, with room to emit one chunk per step at the sim cap (~39/sec).
 	subSteps = 40
+
+	// baseRefineTime is how long a level-0 refiner holds one job, in seconds.
+	// Mirror of BASE_REFINE_TIME in economy.ts.
+	baseRefineTime = 2.0
 )
 
 // extractorMult and beltMult are the level multipliers the two rate upgrades
@@ -26,6 +30,10 @@ const (
 // material derives from these two. Keep in step with economy.ts.
 func extractorMult(level int) float64 { return 1 + 0.5*float64(level) }
 func beltMult(level int) float64      { return 1 + 0.25*float64(level) }
+
+// refineMult is the Refiner Speed scale: each level cuts process time the same
+// way Extractor Rate raises emission. Keep in step with economy.ts.
+func refineMult(level int) float64 { return 1 + 0.5*float64(level) }
 
 // maxSimLevel is where the simulation stops drawing more chunks. Past this,
 // one visible chunk carries a batch of raw units so throughput stays accurate
@@ -44,6 +52,11 @@ func (h *Hub) beltSpeed() float64 {
 	return materialSpeed * beltMult(min(h.beltLevel, maxSimLevel))
 }
 
+// refineTime is how long one refiner job takes at the current upgrade level.
+func (h *Hub) refineTime() float64 {
+	return baseRefineTime / refineMult(h.refinerLevel)
+}
+
 // saleValueMultiplier is the global multiplier from the Sale Value upgrade.
 func (h *Hub) saleValueMultiplier() int {
 	return 1 + h.valueLevel
@@ -57,6 +70,14 @@ func rawValue(kind engine.ResourceKind) int {
 		return 8
 	case engine.Gold:
 		return 20
+	case engine.IronBar:
+		return 3
+	case engine.CopperSheet:
+		return 9
+	case engine.QuartzCrystal:
+		return 24
+	case engine.GoldIngot:
+		return 60
 	default:
 		return 1
 	}
@@ -80,22 +101,37 @@ func (h *Hub) unitsPerChunk() float64 {
 }
 
 // currentRate is the factory's credits per second: actual item throughput times
-// each route's raw-material value and the global sale multiplier.
-// Derived from the routes instead of measured, so the HUD reads steady instead
-// of flickering with the sub-second timing of individual deliveries.
+// each route's material value and the global sale multiplier. Routes that pass
+// a refiner use refined prices and are capped by refining speed.
 func (h *Hub) currentRate() float64 {
 	chunksPerSec := materialSpeed * beltMult(h.beltLevel) / (materialGap / extractorMult(h.extractorLevel))
-	value := 0
+	refinePerSec := 1.0 / h.refineTime()
+	total := 0.0
 	for _, rt := range h.routes {
-		value += rawValue(rt.resource)
+		kind := rt.resource
+		throughput := chunksPerSec
+		if routeHasRefiner(h.world, rt) {
+			kind = engine.Refine(rt.resource)
+			throughput = min(throughput, refinePerSec)
+		}
+		total += float64(rawValue(kind)*h.saleValueMultiplier()) * throughput
 	}
-	return float64(value*h.saleValueMultiplier()) * chunksPerSec
+	return total
 }
 
-// route is one extractor-to-seller path the material rides: the belts it crosses
-// (extractor mouth first, seller mouth last) and the seller cell at the end. Chunks
-// point at it, so a path rebuilt unchanged keeps the same route and its chunks keep
-// flowing.
+func routeHasRefiner(world *engine.World, rt *route) bool {
+	for _, cell := range rt.cells {
+		if world.IsRefiner(cell) {
+			return true
+		}
+	}
+	return false
+}
+
+// route is one extractor-to-seller path the material rides: the belts and
+// refiners it crosses (extractor mouth first, seller mouth last) and the seller
+// cell at the end. Chunks point at it, so a path rebuilt unchanged keeps the
+// same route and its chunks keep flowing.
 type route struct {
 	cells     []int
 	extractor int
@@ -106,11 +142,14 @@ type route struct {
 }
 
 // chunk is one visible item in flight. Units may be greater than one when
-// upgrades push physical throughput beyond the visual simulation cap.
+// upgrades push physical throughput beyond the visual simulation cap. Resource
+// starts as the deposit ore and upgrades when a refiner finishes a job.
 type chunk struct {
-	route *route
-	dist  float64
-	units int
+	route       *route
+	dist        float64
+	units       int
+	resource    engine.ResourceKind
+	processLeft float64
 }
 
 // recompute rebuilds the live routes after a world change, reusing one whose path
@@ -136,6 +175,12 @@ func (h *Hub) recompute() {
 		}
 	}
 	h.routes = next
+	// Drop busy marks for refiners that no longer exist on any live route.
+	for cell := range h.refinerBusy {
+		if !h.world.IsRefiner(cell) {
+			delete(h.refinerBusy, cell)
+		}
+	}
 }
 
 // tick advances material one second in small steps, tallying every chunk that lands
@@ -145,6 +190,7 @@ func (h *Hub) recompute() {
 func (h *Hub) tick() bool {
 	earned := 0
 	speed := h.beltSpeed()
+	dt := 1.0 / subSteps
 	resourcesChanged := false
 	depositDepleted := false
 	for s := 0; s < subSteps; s++ {
@@ -153,16 +199,16 @@ func (h *Hub) tick() bool {
 		}
 		alive := h.chunks[:0]
 		for _, c := range h.chunks {
-			c.dist += speed / subSteps
-			cell := int(c.dist)
-			if cell >= len(c.route.cells) {
+			if h.advanceChunk(c, speed, dt) {
 				if h.world.IsSeller(c.route.seller) {
-					earned += h.chunkValue(c.route.resource, c.units)
+					earned += h.chunkValue(c.resource, c.units)
 				}
-				continue // off the end either way
+				continue
 			}
-			if !h.world.IsBelt(c.route.cells[cell]) {
-				continue // its belt is gone: fell off
+			cell := int(c.dist)
+			if cell >= len(c.route.cells) || !h.world.IsConveying(c.route.cells[cell]) {
+				h.clearRefinerJob(c)
+				continue // its path cell is gone: fell off
 			}
 			if c.route.nearest < 0 || c.dist < c.route.nearest {
 				c.route.nearest = c.dist // noted in passing, so emit never rescans
@@ -179,6 +225,46 @@ func (h *Hub) tick() bool {
 		h.recompute()
 	}
 	return resourcesChanged
+}
+
+// advanceChunk moves one chunk forward, pausing on refiners while they work.
+// It returns true when the chunk has been delivered to its seller.
+func (h *Hub) advanceChunk(c *chunk, speed, dt float64) (delivered bool) {
+	cell := int(c.dist)
+	if cell < len(c.route.cells) && h.world.IsRefiner(c.route.cells[cell]) && engine.IsRaw(c.resource) {
+		refiner := c.route.cells[cell]
+		if owner, busy := h.refinerBusy[refiner]; busy && owner != c {
+			c.dist = float64(cell)
+			return false
+		}
+		if c.processLeft <= 0 {
+			h.refinerBusy[refiner] = c
+			c.processLeft = h.refineTime()
+		}
+		c.processLeft -= dt
+		if c.processLeft > 0 {
+			c.dist = float64(cell)
+			return false
+		}
+		c.processLeft = 0
+		c.resource = engine.Refine(c.resource)
+		delete(h.refinerBusy, refiner)
+	}
+
+	c.dist += speed * dt
+	if int(c.dist) >= len(c.route.cells) {
+		h.clearRefinerJob(c)
+		return true
+	}
+	return false
+}
+
+func (h *Hub) clearRefinerJob(c *chunk) {
+	for cell, owner := range h.refinerBusy {
+		if owner == c {
+			delete(h.refinerBusy, cell)
+		}
+	}
 }
 
 // emit adds a chunk at the head of each route once the nearest one has moved a
@@ -204,7 +290,9 @@ func (h *Hub) emit() (changed, depleted bool) {
 		rt.unitPart -= float64(requested)
 		x, y := rt.extractor%h.world.Width(), rt.extractor/h.world.Width()
 		if units := h.world.Consume(x, y, requested); units > 0 {
-			h.chunks = append(h.chunks, &chunk{route: rt, dist: dist, units: units})
+			h.chunks = append(h.chunks, &chunk{
+				route: rt, dist: dist, units: units, resource: rt.resource,
+			})
 			changed = true
 			depleted = h.world.DepositAt(x, y).Remaining == 0 || depleted
 		}

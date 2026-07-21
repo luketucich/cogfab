@@ -30,6 +30,7 @@ function modelFor(
   const placement = preview.placements[index];
   if (preview.kind === "extractor") return { part: models.extractor, rotationY: MACHINE_ROTATION[placement.dir] };
   if (preview.kind === "seller") return { part: models.seller, rotationY: MACHINE_ROTATION[placement.dir] };
+  if (preview.kind === "refiner") return { part: models.refiner, rotationY: MACHINE_ROTATION[placement.dir] };
   const piece = beltPiece(snap, placement.x, placement.y, placement.dir);
   const part = {
     straight: models.belt,

@@ -28,6 +28,7 @@ func TestTileKindString(t *testing.T) {
 		{Belt, "belt"},
 		{Extractor, "extractor"},
 		{Seller, "seller"},
+		{Refiner, "refiner"},
 	}
 	for _, c := range cases {
 		if got := c.k.String(); got != c.want {
@@ -50,6 +51,8 @@ func TestParseDirectionRoundTrips(t *testing.T) {
 func TestResourceKindString(t *testing.T) {
 	for kind, want := range map[ResourceKind]string{
 		Iron: "iron", Copper: "copper", Quartz: "quartz", Gold: "gold",
+		IronBar: "ironBar", CopperSheet: "copperSheet",
+		QuartzCrystal: "quartzCrystal", GoldIngot: "goldIngot",
 	} {
 		if got := kind.String(); got != want {
 			t.Errorf("ResourceKind(%d).String() = %q, want %q", kind, got, want)

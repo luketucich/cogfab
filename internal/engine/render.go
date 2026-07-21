@@ -4,7 +4,7 @@ import "strings"
 
 // String draws the grid as text, one row per line, for tests and debugging.
 // '.' is empty, '^>v<' is a belt facing the way it points, 'E' is an extractor,
-// and 'S' is a seller.
+// 'S' is a seller, and 'R' is a refiner.
 func (w *World) String() string {
 	var b strings.Builder
 	b.Grow((w.width + 1) * w.height)
@@ -38,6 +38,8 @@ func (w *World) glyph(x, y int) byte {
 		return 'E'
 	case Seller:
 		return 'S'
+	case Refiner:
+		return 'R'
 	}
 	return '.'
 }

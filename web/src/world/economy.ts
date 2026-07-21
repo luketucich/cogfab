@@ -11,6 +11,10 @@ import type { StatsMessage } from "../net/types";
 export const MATERIAL_SPEED = 2.5;
 export const MATERIAL_GAP = 0.5;
 
+// BASE_REFINE_TIME is how long a level-0 refiner holds one job, in seconds.
+// Mirror of baseRefineTime in economy.go.
+export const BASE_REFINE_TIME = 2.0;
+
 // MAX_SIM_LEVEL is where the visuals stop getting busier: past this the belts
 // are maxed on screen, and each visible chunk represents more raw units.
 // Mirror of maxSimLevel in economy.go.
@@ -54,6 +58,16 @@ export function saleMultiplier(valueLevel: number): number {
   return 1 + valueLevel;
 }
 
+// refineMultiplier is the Refiner Speed scale. Mirror of refineMult in economy.go.
+export function refineMultiplier(refinerLevel: number): number {
+  return 1 + 0.5 * refinerLevel;
+}
+
+// refineTime is how long one refiner job takes. Mirror of refineTime in economy.go.
+export function refineTime(refinerLevel: number): number {
+  return BASE_REFINE_TIME / refineMultiplier(refinerLevel);
+}
+
 type Stats = {
   credits: number;
   ratePerSec: number;
@@ -63,6 +77,8 @@ type Stats = {
   beltCost: number; // 0 = maxed
   valueLevel: number;
   valueCost: number; // 0 = maxed
+  refinerLevel: number;
+  refinerCost: number; // 0 = maxed
   gridWidth: number; // unlocked region, centred in the world
   gridHeight: number;
   gridCost: number; // 0 = maxed
@@ -80,6 +96,8 @@ let stats: Stats = {
   beltCost: 0,
   valueLevel: 0,
   valueCost: 0,
+  refinerLevel: 0,
+  refinerCost: 0,
   gridWidth: 0,
   gridHeight: 0,
   gridCost: 0,
@@ -177,6 +195,8 @@ export function setStats(msg: StatsMessage): void {
     beltCost: msg.beltCost,
     valueLevel: msg.valueLevel,
     valueCost: msg.valueCost,
+    refinerLevel: msg.refinerLevel ?? 0,
+    refinerCost: msg.refinerCost ?? 0,
     gridWidth: msg.gridWidth,
     gridHeight: msg.gridHeight,
     gridCost: msg.gridCost,
