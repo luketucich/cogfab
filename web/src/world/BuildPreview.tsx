@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import type { BuildPreview as BuildPreviewData, StateMessage } from "../net/types";
-import { beltPiece } from "./beltShape";
 import { continuousPlacementPaths, previewSnapshot } from "./buildPreviewData";
 import { BuildPathIndicator } from "./BuildPathIndicator";
-import { cellOffsets, MACHINE_ROTATION } from "./grid";
-import type { FactoryModels, MeshParts } from "./models";
+import { cellOffsets } from "./grid";
+import type { FactoryModels } from "./models";
+import { structurePieces } from "./structurePieces";
 
 const MODEL_OPACITY = 0.25;
 const BELT_INDICATOR_Y = 0.52;
@@ -19,28 +19,6 @@ type Props = {
   owner: string;
 };
 
-type PreviewPiece = { part: MeshParts; rotationY: number };
-
-function modelFor(
-  preview: BuildPreviewData,
-  snap: StateMessage,
-  models: FactoryModels,
-  index: number,
-): PreviewPiece {
-  const placement = preview.placements[index];
-  if (preview.kind === "extractor") return { part: models.extractor, rotationY: MACHINE_ROTATION[placement.dir] };
-  if (preview.kind === "seller") return { part: models.seller, rotationY: MACHINE_ROTATION[placement.dir] };
-  if (preview.kind === "refiner") return { part: models.refiner, rotationY: MACHINE_ROTATION[placement.dir] };
-  const piece = beltPiece(snap, placement.x, placement.y, placement.dir);
-  const part = {
-    straight: models.belt,
-    corner: models.corner,
-    tee: models.tee,
-    cross: models.cross,
-  }[piece.kind];
-  return { part, rotationY: piece.rotationY };
-}
-
 // BuildPreview renders one player's uncommitted buildings as tinted models.
 export function BuildPreview({ preview, color, snap, models, owner }: Props) {
   const { offX, offZ } = cellOffsets(snap);
@@ -49,12 +27,19 @@ export function BuildPreview({ preview, color, snap, models, owner }: Props) {
 
   return (
     <group name={`${owner} build preview`}>
-      {preview.placements.map((placement, index) => {
-        const { part, rotationY } = modelFor(preview, previewSnap, models, index);
+      {preview.placements.map((placement) => {
+        const pieces = structurePieces(preview.kind, placement, previewSnap, models);
         return (
           <group key={`${placement.x}:${placement.y}`} position={[placement.x - offX, 0, placement.y - offZ]}>
-            {part.geometry && (
-              <mesh geometry={part.geometry} rotation={[0, rotationY, 0]} raycast={() => null}>
+            {pieces.map((piece, pieceIndex) => (
+              <mesh
+                key={pieceIndex}
+                geometry={piece.part.geometry}
+                position={[piece.offsetX, 0, piece.offsetZ]}
+                rotation={[0, piece.rotationY, 0]}
+                scale={piece.scale}
+                raycast={() => null}
+              >
                 <meshBasicMaterial
                   color={color}
                   transparent
@@ -64,17 +49,18 @@ export function BuildPreview({ preview, color, snap, models, owner }: Props) {
                   toneMapped={false}
                 />
               </mesh>
-            )}
+            ))}
           </group>
         );
       })}
-      {paths.map((path) => (
+      {preview.kind !== "refiner" && paths.map((path) => (
         <BuildPathIndicator
           key={`${path[0].x}:${path[0].y}:${path[path.length - 1].x}:${path[path.length - 1].y}`}
           placements={path}
           offX={offX}
           offZ={offZ}
           y={preview.kind === "belt" ? BELT_INDICATOR_Y : MACHINE_INDICATOR_Y}
+          color={color}
         />
       ))}
     </group>

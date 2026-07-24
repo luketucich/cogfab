@@ -22,9 +22,9 @@ const DIR_ANGLE: Record<Dir, number> = {
 // moves items. The model flows south by default, so this is just DIR_ANGLE.
 export const BELT_ROTATION: Record<Dir, number> = DIR_ANGLE;
 
-// MACHINE_ROTATION orients the machine models (extractor, seller). Their opening
-// faces across the conveyor's default, so they turn a quarter past BELT_ROTATION
-// to line the opening up with the belt they sit on.
+// MACHINE_ROTATION orients the Factory Kit machine models. Their authored
+// openings are a quarter-turn from the straight conveyor's default axis, so the
+// same offset lines the extractor, refiner, and seller up with item travel.
 export const MACHINE_ROTATION: Record<Dir, number> = {
   north: DIR_ANGLE.north + Math.PI / 2,
   east: DIR_ANGLE.east + Math.PI / 2,

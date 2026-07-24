@@ -3,10 +3,10 @@ import { connection } from "../net/connection";
 import { subscribeSession } from "../net/session";
 
 // Where this player's mouse is, for two audiences. Locally: the hovered grid
-// cell, module state (not React) so Ground can publish it and HoverGlow can
-// read it each frame. For the room: the whole picture, the mouse's spot on the
-// screen (for the named cursor everyone sees) plus the grid spot it is over
-// (for the cell marker), shared through one throttled sender.
+// cell, module state (not React) so Ground can publish it and WorldHighlights
+// can read it each frame. For the room: the whole picture, the mouse's spot on
+// the screen (for the named cursor everyone sees) plus the grid spot it is over
+// (for the matching world highlight), shared through one throttled sender.
 
 let hovered: Cell | null = null;
 let gridX = 0; // the grid spot, in fractional cell coordinates
@@ -21,13 +21,20 @@ export const getHover = (): Cell | null => hovered;
 // it moved far enough to matter.
 const SEND_EVERY = 50; // ms
 const MOVED = 0.002; // screen fractions; below this the mouse counts as still
-let sent = { on: false, sx: 0, sy: 0, hovering: false };
+let sent = { on: false, sx: 0, sy: 0, hovering: false, cellX: -1, cellY: -1 };
 let lastSentAt = -Infinity;
 let pending: ReturnType<typeof setTimeout> | null = null;
 
 function sendCursor(): void {
   lastSentAt = performance.now();
-  sent = { on: onScreen, sx: screenX, sy: screenY, hovering: hovered !== null };
+  sent = {
+    on: onScreen,
+    sx: screenX,
+    sy: screenY,
+    hovering: hovered !== null,
+    cellX: hovered?.x ?? -1,
+    cellY: hovered?.y ?? -1,
+  };
   connection.send({ type: "hover", on: sent.on, sx: sent.sx, sy: sent.sy, hovering: sent.hovering, cx: gridX, cy: gridY });
 }
 
@@ -35,6 +42,8 @@ function shareCursor(): void {
   const moved =
     onScreen !== sent.on ||
     (hovered !== null) !== sent.hovering ||
+    (hovered?.x ?? -1) !== sent.cellX ||
+    (hovered?.y ?? -1) !== sent.cellY ||
     Math.abs(screenX - sent.sx) > MOVED ||
     Math.abs(screenY - sent.sy) > MOVED;
   if (!moved) return;

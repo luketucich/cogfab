@@ -200,11 +200,13 @@ const card: CSSProperties = {
 };
 
 const tagChip: CSSProperties = {
+  display: "inline-block",
   marginLeft: 4,
   fontSize: 9,
   fontWeight: 800,
   letterSpacing: 0.5,
   color: ACCENT,
+  whiteSpace: "nowrap",
 };
 
 const buyButton: CSSProperties = {

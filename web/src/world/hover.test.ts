@@ -50,6 +50,28 @@ describe("the cursor share throttle", () => {
     expect(sendSpy).toHaveBeenLastCalledWith({ type: "hover", on: true, sx: 0.5, sy: 0.5, hovering: true, cx: 1.4, cy: 2.1 });
   });
 
+  it("shares a new grid cell even when the screen cursor barely moves", async () => {
+    const { pointerMoved, setHover } = await fresh();
+    pointerMoved(0.5, 0.5);
+    vi.advanceTimersByTime(60);
+    setHover({ x: 1, y: 1 }, { x: 1.49, y: 1.49 });
+    vi.advanceTimersByTime(60);
+    sendSpy.mockClear();
+
+    setHover({ x: 2, y: 1 }, { x: 1.51, y: 1.49 });
+
+    expect(sendSpy).toHaveBeenCalledOnce();
+    expect(sendSpy).toHaveBeenLastCalledWith({
+      type: "hover",
+      on: true,
+      sx: 0.5,
+      sy: 0.5,
+      hovering: true,
+      cx: 1.51,
+      cy: 1.49,
+    });
+  });
+
   it("shares leaving the grid and leaving the screen", async () => {
     const { pointerMoved, pointerLeft, setHover } = await fresh();
     pointerMoved(0.5, 0.5);

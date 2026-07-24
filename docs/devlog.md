@@ -2,6 +2,33 @@
 
 What I've worked on, newest first.
 
+## 2026-07-23
+
+- Unified hover and build intent across the room: local intent is a clean white
+  model-flush fade, while collaborators see the exact same geometry and motion
+  in the hovering player's color. Building tooltips now stay readable and
+  bottom-anchored over machines from minimum through maximum zoom, with a
+  quick spring entrance, restrained overshoot, and softer exit.
+- Rebalanced the refiner from a 2-second to a 0.4-second base cycle. A new
+  refiner now raises a standard raw line's cash flow by 50%, two speed levels
+  unlock its full 3× rate, and upgraded or merged lines can still overload one
+  machine and reward parallel layouts.
+- Hardened late-game scaling: production upgrades stop at a safe level 40,
+  balances saturate at the browser's exact-integer ceiling, batched ore keeps
+  its real refiner processing cost, cosmetic material stays within its draw
+  budget, and all refiner progress bars share instanced WebGL draws.
+- Gave each machine a role-specific Factory Kit finish so dense production
+  lines remain readable: cool blue extractors, warm copper refiners, and teal
+  sellers. The refiner now surrounds a continuous belt, visibly turns rough ore
+  into metallic ingots, reports its queue and processing progress, accepts
+  material from either end, and can replace a straight belt in place. Flat-based
+  ore and ingot meshes now ride on the belt surface, with physical spacing when
+  material backs up at a refiner. That queue now applies authoritative
+  backpressure to the extractor instead of consuming deposits into an invisible
+  stockpile. Tooltips distinguish normally moving inbound ore from material
+  actually stopped in that queue. A small always-visible gradient bar shows the
+  next refined output without requiring hover.
+
 ## 2026-07-21
 
 - Added the refiner: an optional mid-line machine that turns raw ore into

@@ -5,7 +5,8 @@ import { DirectionIndicator } from "./DirectionIndicator";
 
 const MARKER_Y = 1.3; // float above the machine roofs
 
-// MouthMarkers show which way each placed extractor, seller, and refiner faces.
+// MouthMarkers show the true one-way mouth on extractors and sellers. Refiners
+// intentionally have no arrow because either end of their axis can be the input.
 export function MouthMarkers() {
   const snap = useSyncExternalStore(subscribe, getLatest);
   if (!snap) return null;
@@ -14,7 +15,7 @@ export function MouthMarkers() {
   return (
     <group>
       {snap.tiles.map((tile, i) => {
-        if (tile.kind !== "extractor" && tile.kind !== "seller" && tile.kind !== "refiner") return null;
+        if (tile.kind !== "extractor" && tile.kind !== "seller") return null;
         const x = (i % snap.width) - offX;
         const z = Math.floor(i / snap.width) - offZ;
         return (

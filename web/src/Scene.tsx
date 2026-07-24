@@ -11,12 +11,12 @@ import { FlowItems } from "./world/FlowItems";
 import { Bursts } from "./world/Bursts";
 import { BuildPreviews } from "./world/BuildPreviews";
 import { Ground } from "./world/Ground";
-import { HoverGlow } from "./world/HoverGlow";
 import { MouthMarkers } from "./world/MouthMarkers";
-import { PlayerCursors } from "./world/PlayerCursors";
+import { WorldHighlights } from "./world/WorldHighlights";
 import { Region } from "./world/Region";
 import { ResourceField } from "./world/ResourceField";
 import { ResourceTooltip } from "./world/ResourceTooltip";
+import { RefinerProgress } from "./world/RefinerProgress";
 
 // Scene is the whole 3D view: a locked isometric camera you pan and zoom like a
 // map, soft even lighting, the checkered floor, and the factory. The camera's
@@ -52,13 +52,13 @@ export function Scene() {
         <ResourceField />
         <BuildPreviews />
         <Factory />
-        <HoverGlow />
+        <RefinerProgress />
+        <WorldHighlights />
       </Suspense>
       <ResourceTooltip />
       <FlowItems />
       <FlowArrows />
       <MouthMarkers />
-      <PlayerCursors />
       <Bursts />
     </Canvas>
   );
