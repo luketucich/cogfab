@@ -17,7 +17,7 @@ const CONTROLS: [string, string][] = [
   ["Q / E", "Spin the camera"],
   ["R", "Rotate a building or your aim"],
   ["Shift", "Lock the placement direction"],
-  ["1 - 4", "Pick a tool"],
+  ["1 - 5", "Pick a tool"],
 ];
 
 export function Settings() {

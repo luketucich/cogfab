@@ -1,4 +1,4 @@
-import type { DepositView, PlaceableKind, ResourceKind, StateMessage } from "../net/types";
+import type { DepositView, PlaceableKind, ResourceKind, StateMessage, TileView } from "../net/types";
 
 export type ResourceStyle = {
   label: string;
@@ -13,7 +13,32 @@ export const RESOURCE_PALETTE: Record<ResourceKind, ResourceStyle> = {
   copper: { label: "Copper", color: "#d88458", baseCredits: 3 },
   quartz: { label: "Quartz", color: "#d6c9f2", baseCredits: 8 },
   gold: { label: "Gold", color: "#e7bb52", baseCredits: 20 },
+  ironBar: { label: "Iron bar", color: "#c0c6ce", baseCredits: 3 },
+  copperSheet: { label: "Copper sheet", color: "#f0a06e", baseCredits: 9 },
+  quartzCrystal: { label: "Quartz crystal", color: "#efe6ff", baseCredits: 24 },
+  goldIngot: { label: "Gold ingot", color: "#ffd76a", baseCredits: 60 },
 };
+
+export const RAW_RESOURCES: ResourceKind[] = ["iron", "copper", "quartz", "gold"];
+
+export function isRawResource(kind: ResourceKind): boolean {
+  return RAW_RESOURCES.includes(kind);
+}
+
+export function refineResource(kind: ResourceKind): ResourceKind {
+  switch (kind) {
+    case "iron":
+      return "ironBar";
+    case "copper":
+      return "copperSheet";
+    case "quartz":
+      return "quartzCrystal";
+    case "gold":
+      return "goldIngot";
+    default:
+      return kind;
+  }
+}
 
 let cachedDeposits: StateMessage["deposits"] | null = null;
 let cachedDepositWidth = 0;
@@ -56,4 +81,10 @@ export function placementTerrainAllows(snap: StateMessage, kind: PlaceableKind, 
   if (kind === "extractor") return !!deposit && deposit.remaining > 0 && !isPort;
   if (kind === "seller") return isPort && !deposit;
   return !isPort && (!deposit || deposit.remaining === 0);
+}
+
+// Ordinary structures still require an empty cell. A refiner is an inline belt
+// upgrade, so it may replace a belt without a separate destroy action.
+export function placementOccupancyAllows(kind: PlaceableKind, existing: TileView["kind"]): boolean {
+  return existing === "empty" || (kind === "refiner" && existing === "belt");
 }

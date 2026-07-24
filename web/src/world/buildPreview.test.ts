@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { BuildPreview, StateMessage } from "../net/types";
-import { continuousPlacementPaths, previewSnapshot, visibleBuildPreview } from "./buildPreviewData";
+import {
+  continuousPlacementPaths,
+  previewSnapshot,
+  resolvePlacementDirections,
+  visibleBuildPreview,
+} from "./buildPreviewData";
 import { buildPreviewsEqual } from "./buildPreviewStore";
 
 const preview = (x = 1): BuildPreview => ({
@@ -89,6 +94,53 @@ describe("build preview rendering data", () => {
       ],
     };
     expect(visibleBuildPreview(belt, snap)?.placements).toEqual([belt.placements[1]]);
+  });
+
+  it("shows a refiner over a belt and inherits its routed alignment instead of its facing", () => {
+    const withBelt = {
+      ...snap,
+      tiles: [
+        { kind: "extractor" as const, dir: "east" as const },
+        { kind: "belt" as const, dir: "south" as const },
+        { kind: "belt" as const, dir: "south" as const },
+        { kind: "seller" as const, dir: "west" as const },
+      ],
+    };
+    const refiner: BuildPreview = {
+      kind: "refiner",
+      placements: [{ x: 2, y: 0, dir: "north" }],
+    };
+    const placements = resolvePlacementDirections(refiner.kind, refiner.placements, withBelt);
+
+    expect(placements).toEqual([{ x: 2, y: 0, dir: "east" }]);
+    expect(visibleBuildPreview({ ...refiner, placements }, withBelt)?.placements).toEqual(placements);
+  });
+
+  it("does not offer a straight refiner over a belt corner", () => {
+    const corner: StateMessage = {
+      type: "state",
+      width: 3,
+      height: 3,
+      tiles: [
+        { kind: "extractor", dir: "east" },
+        { kind: "belt", dir: "east" },
+        { kind: "belt", dir: "south" },
+        { kind: "empty", dir: "north" },
+        { kind: "empty", dir: "north" },
+        { kind: "belt", dir: "south" },
+        { kind: "empty", dir: "north" },
+        { kind: "empty", dir: "north" },
+        { kind: "seller", dir: "north" },
+      ],
+      deposits: [{ x: 0, y: 0, kind: "iron", capacity: 100, remaining: 100 }],
+      ports: [{ x: 2, y: 2 }],
+    };
+    const refiner: BuildPreview = {
+      kind: "refiner",
+      placements: [{ x: 2, y: 0, dir: "south" }],
+    };
+
+    expect(visibleBuildPreview(refiner, corner)).toBeNull();
   });
 
   it("keeps a turning build stroke in one continuous path", () => {

@@ -5,7 +5,8 @@ import { DirectionIndicator } from "./DirectionIndicator";
 
 const MARKER_Y = 1.3; // float above the machine roofs
 
-// MouthMarkers show which way each placed extractor and seller faces.
+// MouthMarkers show the true one-way mouth on extractors and sellers. Refiners
+// intentionally have no arrow because either end of their axis can be the input.
 export function MouthMarkers() {
   const snap = useSyncExternalStore(subscribe, getLatest);
   if (!snap) return null;

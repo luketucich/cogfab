@@ -31,6 +31,7 @@ type snapshot struct {
 	ExtractorLevel int            `json:"extractorLevel"`
 	BeltLevel      int            `json:"beltLevel"`
 	ValueLevel     int            `json:"valueLevel"`
+	RefinerLevel   int            `json:"refinerLevel,omitempty"`
 	GridTier       int            `json:"gridTier"`
 	Deposits       []savedDeposit `json:"deposits,omitempty"`
 	Ports          []savedCell    `json:"ports,omitempty"`
@@ -67,9 +68,11 @@ type savedRoute struct {
 }
 
 type savedChunk struct {
-	Route int     `json:"route"`
-	Dist  float64 `json:"dist"`
-	Units int     `json:"units"`
+	Route       int     `json:"route"`
+	Dist        float64 `json:"dist"`
+	Units       int     `json:"units"`
+	Resource    uint8   `json:"resource,omitempty"`
+	ProcessLeft float64 `json:"processLeft,omitempty"`
 }
 
 // valid reports whether decoded save data can become live room state.
@@ -80,13 +83,16 @@ func (s snapshot) valid() bool {
 	if s.Version != snapshotVersion ||
 		s.Width != resourceWorldSize || s.Height != resourceWorldSize ||
 		len(s.Tiles) != s.Width*s.Height ||
-		s.Credits < 0 ||
-		s.ExtractorLevel < 0 || s.BeltLevel < 0 || s.ValueLevel < 0 ||
+		s.Credits < 0 || s.Credits > maxCredits ||
+		s.ExtractorLevel < 0 || s.ExtractorLevel > maxUpgradeLevel ||
+		s.BeltLevel < 0 || s.BeltLevel > maxUpgradeLevel ||
+		s.ValueLevel < 0 || s.ValueLevel > maxUpgradeLevel ||
+		s.RefinerLevel < 0 || s.RefinerLevel > maxUpgradeLevel ||
 		s.GridTier < 0 || s.GridTier >= len(gridTiers) {
 		return false
 	}
 	for _, tile := range s.Tiles {
-		if engine.TileKind(tile.K) > engine.Seller || engine.Direction(tile.D) > engine.West {
+		if engine.TileKind(tile.K) > engine.Refiner || engine.Direction(tile.D) > engine.West {
 			return false
 		}
 	}
@@ -136,7 +142,7 @@ func (s snapshot) valid() bool {
 			if features[i] != 2 {
 				return false
 			}
-		case engine.Belt:
+		case engine.Belt, engine.Refiner:
 			if features[i] == 2 {
 				return false
 			}
@@ -206,13 +212,33 @@ func (s snapshot) validSimulation(deposits map[int]savedDeposit) bool {
 
 	inFlight := make(map[int]int)
 	referencedRoutes := make([]bool, len(s.Routes))
+	activeRefiners := make(map[int]bool)
 	for _, chunk := range s.Chunks {
 		if chunk.Route < 0 || chunk.Route >= len(s.Routes) || chunk.Units <= 0 ||
 			math.IsNaN(chunk.Dist) || math.IsInf(chunk.Dist, 0) || chunk.Dist < 0 ||
-			chunk.Dist >= float64(len(s.Routes[chunk.Route].Cells)) {
+			chunk.Dist >= float64(len(s.Routes[chunk.Route].Cells)) ||
+			math.IsNaN(chunk.ProcessLeft) || math.IsInf(chunk.ProcessLeft, 0) || chunk.ProcessLeft < 0 {
 			return false
 		}
 		route := s.Routes[chunk.Route]
+		kind := engine.ResourceKind(chunk.Resource)
+		if chunk.Resource == 0 {
+			kind = engine.ResourceKind(route.Resource)
+		}
+		routeResource := engine.ResourceKind(route.Resource)
+		if kind != routeResource && kind != engine.Refine(routeResource) {
+			return false
+		}
+		if chunk.ProcessLeft > 0 {
+			cell := route.Cells[int(chunk.Dist)]
+			if !engine.IsRaw(kind) ||
+				engine.TileKind(s.Tiles[cell].K) != engine.Refiner ||
+				chunk.ProcessLeft > baseRefineTime/refineMult(s.RefinerLevel)*float64(chunk.Units) ||
+				activeRefiners[cell] {
+				return false
+			}
+			activeRefiners[cell] = true
+		}
 		referencedRoutes[chunk.Route] = true
 		deposit := deposits[route.Extractor]
 		available := deposit.Capacity - deposit.Remaining - inFlight[route.Extractor]
@@ -237,8 +263,10 @@ func adjacentCells(a, b, width int) bool {
 
 func (s snapshot) validV1() bool {
 	if s.Width <= 0 || s.Width > 12 || s.Height <= 0 || s.Height > 8 ||
-		len(s.Tiles) != s.Width*s.Height || s.LegacyCredits < 0 ||
-		s.ExtractorLevel < 0 || s.BeltLevel < 0 || s.ValueLevel < 0 ||
+		len(s.Tiles) != s.Width*s.Height || s.LegacyCredits < 0 || s.LegacyCredits > maxCredits ||
+		s.ExtractorLevel < 0 || s.ExtractorLevel > maxUpgradeLevel ||
+		s.BeltLevel < 0 || s.BeltLevel > maxUpgradeLevel ||
+		s.ValueLevel < 0 || s.ValueLevel > maxUpgradeLevel ||
 		s.GridTier < 0 || s.GridTier > 4 {
 		return false
 	}
@@ -280,6 +308,7 @@ func (h *Hub) snapshot() snapshot {
 		ExtractorLevel: h.extractorLevel,
 		BeltLevel:      h.beltLevel,
 		ValueLevel:     h.valueLevel,
+		RefinerLevel:   h.refinerLevel,
 		GridTier:       h.gridTier,
 		Deposits:       deposits,
 		Ports:          ports,
@@ -319,9 +348,16 @@ func (h *Hub) simulationSnapshot() ([]savedRoute, []savedChunk) {
 
 	chunks := make([]savedChunk, 0, len(h.chunks))
 	for _, c := range h.chunks {
-		chunks = append(chunks, savedChunk{
+		saved := savedChunk{
 			Route: addRoute(c.route, false), Dist: c.dist, Units: c.units,
-		})
+		}
+		if c.resource != c.route.resource {
+			saved.Resource = uint8(c.resource)
+		}
+		if c.processLeft > 0 {
+			saved.ProcessLeft = c.processLeft
+		}
+		chunks = append(chunks, saved)
 	}
 	return routes, chunks
 }
@@ -339,6 +375,8 @@ func (s snapshot) world() *engine.World {
 			w.PlaceExtractor(x, y, dir)
 		case engine.Seller:
 			w.PlaceSeller(x, y, dir)
+		case engine.Refiner:
+			w.PlaceRefiner(x, y, dir)
 		}
 	}
 	for _, deposit := range s.Deposits {
@@ -362,6 +400,7 @@ func hubFromSnapshot(s snapshot, code string) *Hub {
 	h.extractorLevel = s.ExtractorLevel
 	h.beltLevel = s.BeltLevel
 	h.valueLevel = s.ValueLevel
+	h.refinerLevel = s.RefinerLevel
 	h.gridTier = s.GridTier
 	h.restoreSimulation(s)
 	return h
@@ -377,18 +416,32 @@ func (h *Hub) restoreSimulation(s snapshot) {
 			routes[i] = current
 			continue
 		}
-		routes[i] = &route{
+		rt := &route{
 			cells:     append([]int(nil), saved.Cells...),
 			extractor: saved.Extractor,
 			seller:    saved.Seller,
 			resource:  engine.ResourceKind(saved.Resource),
 			unitPart:  saved.UnitPart,
 		}
+		setRouteRefiner(h.world, rt)
+		routes[i] = rt
 	}
 	for _, saved := range s.Chunks {
-		h.chunks = append(h.chunks, &chunk{
+		resource := engine.ResourceKind(saved.Resource)
+		if saved.Resource == 0 {
+			resource = routes[saved.Route].resource
+		}
+		c := &chunk{
 			route: routes[saved.Route], dist: saved.Dist, units: saved.Units,
-		})
+			resource: resource, processLeft: saved.ProcessLeft,
+		}
+		h.chunks = append(h.chunks, c)
+		if c.processLeft > 0 {
+			cell := int(c.dist)
+			if cell >= 0 && cell < len(c.route.cells) && h.world.IsRefiner(c.route.cells[cell]) {
+				h.refinerBusy[c.route.cells[cell]] = c
+			}
+		}
 	}
 }
 

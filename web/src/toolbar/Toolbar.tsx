@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import type { IconType } from "react-icons";
-import { PiCaretDoubleRightFill, PiShovelFill, PiStorefrontFill, PiTrashFill } from "react-icons/pi";
+import { PiCaretDoubleRightFill, PiShovelFill, PiStorefrontFill, PiFireFill, PiTrashFill } from "react-icons/pi";
 import { TOOLS, getSelectedId, selectTool, subscribe } from "./tools";
 import { getStats, spendableCredits, subscribeStats } from "../world/economy";
 import { tile, ACCENT, CREDIT_TEXT, isTyping } from "../ui";
@@ -12,6 +12,7 @@ const ICONS: Record<string, IconType> = {
   belt: PiCaretDoubleRightFill,
   extractor: PiShovelFill,
   seller: PiStorefrontFill,
+  refiner: PiFireFill,
   destroy: PiTrashFill,
 };
 

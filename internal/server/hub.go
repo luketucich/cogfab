@@ -78,10 +78,12 @@ type Hub struct {
 	extractorLevel int // global Extractor Rate level; higher emits material denser
 	beltLevel      int // global Belt Speed level; higher carries material faster
 	valueLevel     int // global Sale Value level; higher makes each delivery worth more
+	refinerLevel   int // global Refiner Speed level; higher finishes jobs faster
 	gridTier       int // index into gridTiers: how much of the world is unlocked
 
-	routes map[string]*route // live extractor-to-seller paths, for emitting material
-	chunks []*chunk          // material in flight on the belts
+	routes      map[string]*route // live extractor-to-seller paths, for emitting material
+	chunks      []*chunk          // material in flight on the belts
+	refinerBusy map[int]*chunk    // refiner cell → chunk currently processing there
 
 	clients    map[*Client]bool
 	register   chan *Client
@@ -93,14 +95,15 @@ type Hub struct {
 // NewHub creates a hub for the given world.
 func NewHub(w *engine.World) *Hub {
 	h := &Hub{
-		world:      w,
-		credits:    startingCredits,
-		routes:     make(map[string]*route),
-		clients:    make(map[*Client]bool),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		commands:   make(chan clientCommand),
-		done:       make(chan struct{}),
+		world:       w,
+		credits:     startingCredits,
+		routes:      make(map[string]*route),
+		refinerBusy: make(map[int]*chunk),
+		clients:     make(map[*Client]bool),
+		register:    make(chan *Client),
+		unregister:  make(chan *Client),
+		commands:    make(chan clientCommand),
+		done:        make(chan struct{}),
 	}
 	h.recompute()
 	return h
@@ -382,11 +385,14 @@ func (h *Hub) statsBytes() []byte {
 		BeltCost:       h.beltCost(),
 		ValueLevel:     h.valueLevel,
 		ValueCost:      h.valueCost(),
+		RefinerLevel:   h.refinerLevel,
+		RefinerCost:    h.refinerCost(),
 		GridWidth:      x1 - x0 + 1,
 		GridHeight:     y1 - y0 + 1,
 		GridCost:       h.gridCost(),
 		NextGridWidth:  nextW,
 		NextGridHeight: nextH,
+		Refiners:       h.refinerViews(),
 	})
 	return b
 }

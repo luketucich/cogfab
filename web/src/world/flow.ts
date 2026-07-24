@@ -1,5 +1,5 @@
 import type { Dir, ResourceKind, StateMessage } from "../net/types";
-import { OPPOSITE, SIDES, STEP } from "./dir";
+import { OPPOSITE, sameAxis, SIDES, STEP } from "./dir";
 import { cellIndex } from "./grid";
 import { depositAt } from "./resources";
 
@@ -11,8 +11,8 @@ const neighbour = (snap: StateMessage, index: number, side: Dir): number => {
   return cellIndex(snap, x + dx, y + dy);
 };
 
-// FlowStep is one belt on a run: the cell and the sides material enters and leaves by
-// (opposite sides run straight, perpendicular sides curve).
+// FlowStep is one cell on a run: the cell and the sides material enters and leaves by
+// (opposite sides run straight, perpendicular sides curve). Refiners sit in the path.
 export type FlowStep = { x: number; y: number; entry: Dir; exit: Dir };
 
 // FlowRun is one extractor's belt run. Source keeps separate extractors distinct
@@ -30,9 +30,10 @@ type DepositMembership = { width: number; key: string; sources: Set<number> };
 
 // flowPaths returns a run for the belt at each extractor's mouth: the shortest
 // path to a seller's mouth when one is reachable (complete), otherwise the path to
-// the farthest belt (broken). Material leaves an extractor and enters a seller only on
-// the side each faces; between belts facing does not gate flow, so the run is just
-// the connected path the material travels.
+// the farthest conveying cell (broken). Material leaves an extractor and enters
+// a seller only on the side each faces. Refiners are straight inline processors:
+// either end of their horizontal or vertical axis can become the input. Belt
+// facing never gates flow.
 //
 // Material, arrows, and belt models share this result. Resource updates keep the
 // same tile array, so they reuse the routed steps and only refresh run state.
@@ -106,6 +107,7 @@ function connectionsFor(snap: StateMessage, runs: FlowTopologyRun[]): ReadonlyMa
   for (const run of runs) {
     for (const step of run.steps) {
       const index = step.y * snap.width + step.x;
+      if (snap.tiles[index]?.kind !== "belt") continue;
       const sides = collected.get(index) ?? new Set<Dir>();
       sides.add(step.entry);
       sides.add(step.exit);
@@ -153,8 +155,9 @@ function computeFlowTopology(snap: StateMessage): FlowTopologyRun[] {
   const tiles = snap.tiles;
   const runs: FlowTopologyRun[] = [];
 
-  // Every complete route shares one distance field. Broken routes still need
-  // their own search because the farthest belt depends on where they start.
+  // Every complete route shares one distance field over belts and refiners.
+  // Broken routes still need their own search because the farthest conveying
+  // cell depends on where they start.
   const sellerDistance = new Int32Array(tiles.length);
   const previous = new Int32Array(tiles.length);
   const seen = new Int32Array(tiles.length);
@@ -169,6 +172,21 @@ function computeFlowTopology(snap: StateMessage): FlowTopologyRun[] {
     if (toX < fromX) return "west";
     return to > from ? "south" : "north";
   };
+
+  const isConveying = (index: number): boolean => {
+    const kind = tiles[index]?.kind;
+    return kind === "belt" || kind === "refiner";
+  };
+
+  // Belts connect on every side. A refiner connects only on its straight axis,
+  // but both ends are equivalent, so its stored direction has no polarity.
+  const connectsOn = (index: number, side: Dir): boolean => {
+    if (!isConveying(index)) return false;
+    return tiles[index].kind === "belt" || sameAxis(tiles[index].dir, side);
+  };
+
+  const conveyingEdge = (from: number, to: number, side: Dir): boolean =>
+    isConveying(to) && connectsOn(from, side) && connectsOn(to, OPPOSITE[side]);
 
   const runFor = (
     cells: number[],
@@ -186,15 +204,21 @@ function computeFlowTopology(snap: StateMessage): FlowTopologyRun[] {
     return { steps, complete, source };
   };
 
+  const enqueueSellerReachable = (index: number, distance: number) => {
+    if (sellerDistance[index] >= 0) return;
+    sellerDistance[index] = distance;
+    queue[tail++] = index;
+  };
+
   let head = 0;
   let tail = 0;
   for (let index = 0; index < tiles.length; index++) {
-    if (tiles[index].kind !== "belt") continue;
+    if (!isConveying(index)) continue;
     for (const side of SIDES) {
+      if (!connectsOn(index, side)) continue;
       const next = neighbour(snap, index, side);
       if (next >= 0 && tiles[next].kind === "seller" && tiles[next].dir === OPPOSITE[side]) {
-        sellerDistance[index] = 0;
-        queue[tail++] = index;
+        enqueueSellerReachable(index, 0);
         break;
       }
     }
@@ -203,9 +227,8 @@ function computeFlowTopology(snap: StateMessage): FlowTopologyRun[] {
     const current = queue[head++];
     for (const side of SIDES) {
       const next = neighbour(snap, current, side);
-      if (next >= 0 && tiles[next].kind === "belt" && sellerDistance[next] < 0) {
-        sellerDistance[next] = sellerDistance[current] + 1;
-        queue[tail++] = next;
+      if (next >= 0 && conveyingEdge(current, next, side)) {
+        enqueueSellerReachable(next, sellerDistance[current] + 1);
       }
     }
   }
@@ -221,20 +244,21 @@ function computeFlowTopology(snap: StateMessage): FlowTopologyRun[] {
         const candidate = neighbour(snap, current, side);
         if (
           candidate >= 0 &&
-          tiles[candidate].kind === "belt" &&
-          sellerDistance[candidate] === sellerDistance[current] - 1
+          sellerDistance[candidate] === sellerDistance[current] - 1 &&
+          conveyingEdge(current, candidate, side)
         ) {
           next = candidate;
           break;
         }
       }
-      if (next < 0) throw new Error("seller distance has no next belt");
+      if (next < 0) throw new Error("seller distance has no next conveying cell");
       current = next;
       cells.push(current);
     }
 
     let sellerDir: Dir = "north";
     for (const side of SIDES) {
+      if (!connectsOn(current, side)) continue;
       const next = neighbour(snap, current, side);
       if (next >= 0 && tiles[next].kind === "seller" && tiles[next].dir === OPPOSITE[side]) {
         sellerDir = side;
@@ -256,7 +280,7 @@ function computeFlowTopology(snap: StateMessage): FlowTopologyRun[] {
       farthest = current; // breadth-first, so the last cell dequeued is the deepest
       for (const side of SIDES) {
         const next = neighbour(snap, current, side);
-        if (next >= 0 && tiles[next].kind === "belt" && seen[next] !== visit) {
+        if (next >= 0 && seen[next] !== visit && conveyingEdge(current, next, side)) {
           seen[next] = visit;
           previous[next] = current;
           queue[tail++] = next;
@@ -276,11 +300,11 @@ function computeFlowTopology(snap: StateMessage): FlowTopologyRun[] {
 
   for (let index = 0; index < tiles.length; index++) {
     if (tiles[index].kind !== "extractor") continue;
-    // material leaves an extractor only from the side it faces, so the run starts at the
-    // belt at its mouth, not a belt touching a side
+    // Material leaves an extractor only from the side it faces. Replacing that
+    // mouth belt with an axis-aligned refiner keeps the same route alive.
     const out = tiles[index].dir;
     const start = neighbour(snap, index, out);
-    if (start < 0 || tiles[start].kind !== "belt") continue;
+    if (start < 0 || !connectsOn(start, OPPOSITE[out])) continue;
     const route = sellerDistance[start] >= 0 ? completeRoute : brokenRoute;
     runs.push(route(start, OPPOSITE[out], index));
   }

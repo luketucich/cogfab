@@ -13,6 +13,7 @@ import {
 } from "../toolbar/tools";
 import { isTyping } from "../ui";
 import { extendBuildStroke, strokePlacements } from "./buildStroke";
+import { placementOccupancyAllowsAt, resolvePlacementDirections } from "./buildPreviewData";
 import { setBuildPreview } from "./buildPreviewStore";
 import { addBurst } from "./burst";
 import { getStats, spendableCredits } from "./economy";
@@ -35,14 +36,13 @@ import { showPlacementFeedback } from "./placementFeedback";
 const AIM_STEP = 0.15; // cursor distance (in cells) before placement direction changes
 
 const tileAt = (snap: StateMessage, cell: Cell) => snap.tiles[cellIndex(snap, cell.x, cell.y)];
-const kindAt = (snap: StateMessage, cell: Cell) => tileAt(snap, cell).kind;
 const cellUnlocked = (snap: StateMessage, cell: Cell) => {
   const stats = getStats();
   return isUnlocked(unlockedRect(snap, stats.gridWidth, stats.gridHeight), cell.x, cell.y);
 };
 
 function placeableKind(id: string): PlaceableKind | null {
-  if (id === "belt" || id === "extractor" || id === "seller") return id;
+  if (id === "belt" || id === "extractor" || id === "seller" || id === "refiner") return id;
   return null;
 }
 
@@ -78,11 +78,12 @@ export function Ground() {
       !cell ||
       !kind ||
       !cellUnlocked(snap, cell) ||
-      kindAt(snap, cell) !== "empty" ||
+      !placementOccupancyAllowsAt(snap, kind, cell.x, cell.y) ||
       !placementTerrainAllows(snap, kind, cell.x, cell.y)
     )
       return null;
-    return { kind, placements: [{ ...cell, dir: getFacing() }] };
+    const placements = resolvePlacementDirections(kind, [{ ...cell, dir: getFacing() }], snap);
+    return { kind, placements };
   }
 
   function showHoverPreview(cell = target.current) {
@@ -91,7 +92,9 @@ export function Ground() {
 
   function showBuildPreview(cells: Cell[]) {
     const kind = strokeKind.current;
-    const placements = strokePlacements(cells, getFacing(), shiftLock.current);
+    const snap = getTerrain();
+    const raw = strokePlacements(cells, getFacing(), shiftLock.current);
+    const placements = kind && snap ? resolvePlacementDirections(kind, raw, snap) : raw;
     setBuildPreview(kind && placements.length > 0 ? { kind, placements } : null);
   }
 
@@ -130,7 +133,7 @@ export function Ground() {
       placements.every(
         (cell) =>
           cellUnlocked(snap, cell) &&
-          kindAt(snap, cell) === "empty" &&
+          placementOccupancyAllowsAt(snap, kind, cell.x, cell.y) &&
           placementTerrainAllows(snap, kind, cell.x, cell.y),
       )
     );
@@ -147,10 +150,22 @@ export function Ground() {
       else if (anchor) next = extendBuildStroke([anchor], to).slice(1);
       const snap = getTerrain();
       if (snap) {
-        const blocked = next.findIndex((cell) => !placementTerrainAllows(snap, kind, cell.x, cell.y));
+        const blocked = next.findIndex(
+          (cell) =>
+            !cellUnlocked(snap, cell) ||
+            !placementOccupancyAllowsAt(snap, kind, cell.x, cell.y) ||
+            !placementTerrainAllows(snap, kind, cell.x, cell.y),
+        );
         if (blocked >= 0) next = next.slice(0, blocked);
       }
-      if (anchor && to.x === anchor.x && to.y === anchor.y && snap && kindAt(snap, anchor) !== "empty") next = [];
+      if (
+        anchor &&
+        to.x === anchor.x &&
+        to.y === anchor.y &&
+        snap &&
+        !placementOccupancyAllowsAt(snap, kind, anchor.x, anchor.y)
+      )
+        next = [];
       const added = next.length - cells.length;
       if (added > 0) sfx.preview(added);
       stroke.current = next;
@@ -177,14 +192,22 @@ export function Ground() {
         clearStroke();
         return;
       }
-      const placements = strokePlacements(cells, getFacing(), shiftLock.current);
+      const snap = getTerrain();
+      if (!snap) {
+        clearStroke();
+        return;
+      }
+      const placements = resolvePlacementDirections(
+        kind,
+        strokePlacements(cells, getFacing(), shiftLock.current),
+        snap,
+      );
       const valid = canPlaceBatch(kind, placements, unitCost);
       if (!valid) {
         clearStroke();
         sfx.deny();
         return;
       }
-      const snap = getTerrain();
       const updates = placements.map((placement) => ({ ...placement, kind }));
       const sent = connection.sendAction({ type: "placeBatch", kind, placements }, updates, placements.length * unitCost);
       clearStroke();
@@ -279,7 +302,9 @@ export function Ground() {
           snap &&
           (!cellUnlocked(snap, cell) ||
             (tool.id !== "destroy" && (tool.cost ?? 0) > spendableCredits()) ||
-            (!!kind && kindAt(snap, cell) === "empty" && !placementTerrainAllows(snap, kind, cell.x, cell.y)))
+            (!!kind &&
+              (!placementOccupancyAllowsAt(snap, kind, cell.x, cell.y) ||
+                !placementTerrainAllows(snap, kind, cell.x, cell.y))))
         ) {
           sfx.deny();
         }
@@ -288,7 +313,8 @@ export function Ground() {
         strokeAnchor.current = cell;
         strokeKind.current = kind;
         strokeCost.current = tool.cost ?? 0;
-        const startsOnStructure = !!kind && !!snap && kindAt(snap, cell) !== "empty";
+        const startsOnStructure =
+          !!kind && !!snap && !placementOccupancyAllowsAt(snap, kind, cell.x, cell.y);
         const startsOnInvalidTerrain = !!kind && !!snap && !placementTerrainAllows(snap, kind, cell.x, cell.y);
         stroke.current = startsOnStructure || startsOnInvalidTerrain ? [] : [cell];
         if (kind) showBuildPreview(stroke.current);

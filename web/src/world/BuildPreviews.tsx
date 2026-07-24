@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { BuildPreview } from "./BuildPreview";
-import { visibleBuildPreview } from "./buildPreviewData";
+import { placementOccupancyAllowsAt, visibleBuildPreview } from "./buildPreviewData";
 import { getBuildPreview, subscribeBuildPreview } from "./buildPreviewStore";
 import { getStats, spendableCredits, subscribeStats } from "./economy";
 import { cellIndex, isUnlocked, unlockedRect } from "./grid";
@@ -10,7 +10,7 @@ import { getTerrain, subscribeResources } from "./store";
 import { getSession, subscribeSession } from "../net/session";
 import type { BuildPreview as BuildPreviewData, PlaceableKind, StateMessage } from "../net/types";
 import { TOOLS } from "../toolbar/tools";
-import { DANGER, PLAYER_COLORS, playerColor } from "../ui";
+import { DANGER, playerColor } from "../ui";
 import { placementTerrainAllows } from "./resources";
 
 function previewIsValid(preview: BuildPreviewData, snap: StateMessage): boolean {
@@ -23,7 +23,7 @@ function previewIsValid(preview: BuildPreviewData, snap: StateMessage): boolean 
     return (
       index >= 0 &&
       isUnlocked(region, placement.x, placement.y) &&
-      snap.tiles[index].kind === "empty" &&
+      placementOccupancyAllowsAt(snap, preview.kind, placement.x, placement.y) &&
       placementTerrainAllows(snap, preview.kind, placement.x, placement.y)
     );
   });
@@ -44,15 +44,13 @@ export function BuildPreviews() {
   const models = useFactoryModels();
   if (!snap) return null;
 
-  const me = players.find((player) => player.slot === session.slot);
-  const localColor = me ? playerColor(me) : PLAYER_COLORS[session.slot];
   const visibleLocal = local ? visibleBuildPreview(local, snap) : null;
   return (
     <>
       {local && visibleLocal && previewCostExists(local.kind) && (
         <BuildPreview
           preview={visibleLocal}
-          color={previewIsValid(local, snap) ? localColor : DANGER}
+          color={previewIsValid(local, snap) ? "#ffffff" : DANGER}
           snap={snap}
           models={models}
           owner="local"

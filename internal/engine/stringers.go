@@ -26,6 +26,8 @@ func (k TileKind) String() string {
 		return "extractor"
 	case Seller:
 		return "seller"
+	case Refiner:
+		return "refiner"
 	}
 	return "unknown"
 }
@@ -56,6 +58,14 @@ func (r ResourceKind) String() string {
 		return "quartz"
 	case Gold:
 		return "gold"
+	case IronBar:
+		return "ironBar"
+	case CopperSheet:
+		return "copperSheet"
+	case QuartzCrystal:
+		return "quartzCrystal"
+	case GoldIngot:
+		return "goldIngot"
 	default:
 		return "none"
 	}

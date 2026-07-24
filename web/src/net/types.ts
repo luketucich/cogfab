@@ -2,11 +2,19 @@
 // change these to match.
 
 export type TileView = {
-  kind: "empty" | "belt" | "extractor" | "seller";
+  kind: "empty" | "belt" | "extractor" | "seller" | "refiner";
   dir: "north" | "east" | "south" | "west";
 };
 
-export type ResourceKind = "iron" | "copper" | "quartz" | "gold";
+export type ResourceKind =
+  | "iron"
+  | "copper"
+  | "quartz"
+  | "gold"
+  | "ironBar"
+  | "copperSheet"
+  | "quartzCrystal"
+  | "goldIngot";
 
 export type DepositView = {
   x: number;
@@ -27,8 +35,20 @@ export type StateMessage = {
   ports: PortView[];
 };
 
+export type RefinerStatus = {
+  x: number;
+  y: number;
+  resource?: ResourceKind;
+  remaining: number;
+  duration: number;
+  nextOutput?: number;
+  queued: number;
+  incoming?: number;
+};
+
 // StatsMessage is the economy update: the shared credits, production rate, and
-// where the upgrades stand. A cost of 0 means that upgrade is maxed out.
+// live refiner queues, and where the upgrades stand. A cost of 0 means that
+// upgrade is maxed out.
 // Mirror of wire.StatsMessage in Go.
 export type StatsMessage = {
   type: "stats";
@@ -40,11 +60,14 @@ export type StatsMessage = {
   beltCost: number;
   valueLevel: number;
   valueCost: number;
+  refinerLevel: number;
+  refinerCost: number;
   gridWidth: number; // unlocked region, centred in the world
   gridHeight: number;
   gridCost: number;
   nextGridWidth: number; // the tier Grid Size buys next, 0 when maxed
   nextGridHeight: number;
+  refiners?: RefinerStatus[]; // optional while a new client reconnects to an older server
 };
 
 // WelcomeMessage is the first thing we hear after joining: our room's code (the
@@ -211,7 +234,7 @@ export type RotateCommand = {
 
 export type BuyCommand = {
   type: "buy";
-  upgrade: "extractorRate" | "beltSpeed" | "oreValue" | "gridSize";
+  upgrade: "extractorRate" | "beltSpeed" | "oreValue" | "refinerSpeed" | "gridSize";
 };
 
 export type HoverCommand = {

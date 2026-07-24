@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { cellsBetween, dirBetween, dirFromDelta } from "./grid";
+import { BELT_ROTATION, MACHINE_ROTATION, cellsBetween, dirBetween, dirFromDelta } from "./grid";
+import type { Dir } from "../net/types";
+
+const DIRECTIONS: Dir[] = ["north", "east", "south", "west"];
+
+describe("machine rotation", () => {
+  it("turns every machine opening a quarter-turn onto the conveyor path", () => {
+    for (const dir of DIRECTIONS) {
+      expect(MACHINE_ROTATION[dir] - BELT_ROTATION[dir]).toBeCloseTo(Math.PI / 2);
+    }
+  });
+});
 
 describe("dirBetween", () => {
   it("names the facing toward an adjacent cell", () => {

@@ -1,6 +1,7 @@
 package engine
 
-// ResourceKind identifies the raw material held by a deposit.
+// ResourceKind identifies a material on a deposit or in flight. Deposits only
+// hold the raw ores; refined products are created by refiners on belts.
 type ResourceKind uint8
 
 const (
@@ -9,7 +10,32 @@ const (
 	Copper
 	Quartz
 	Gold
+	IronBar
+	CopperSheet
+	QuartzCrystal
+	GoldIngot
 )
+
+// IsRaw reports whether kind is a deposit ore rather than a refined product.
+func IsRaw(kind ResourceKind) bool {
+	return kind >= Iron && kind <= Gold
+}
+
+// Refine maps a raw ore to its refined product. Non-raw kinds are unchanged.
+func Refine(kind ResourceKind) ResourceKind {
+	switch kind {
+	case Iron:
+		return IronBar
+	case Copper:
+		return CopperSheet
+	case Quartz:
+		return QuartzCrystal
+	case Gold:
+		return GoldIngot
+	default:
+		return kind
+	}
+}
 
 // Deposit is a finite raw-material source beneath a factory tile.
 type Deposit struct {

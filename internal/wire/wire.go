@@ -68,24 +68,44 @@ type ResourcesMessage struct {
 	Deposits []DepositView `json:"deposits"`
 }
 
+// RefinerView is one placed refiner's live queue. Resource is empty between
+// jobs; Remaining is authoritative while processing, and Duration is the
+// expected interval between completed items. NextOutput is the ETA when no job
+// is active. Queued counts visible jobs stopped by the machine; Incoming counts
+// jobs still moving normally toward it.
+type RefinerView struct {
+	X          int     `json:"x"`
+	Y          int     `json:"y"`
+	Resource   string  `json:"resource,omitempty"`
+	Remaining  float64 `json:"remaining"`
+	Duration   float64 `json:"duration"`
+	NextOutput float64 `json:"nextOutput,omitempty"`
+	Queued     int     `json:"queued"`
+	Incoming   int     `json:"incoming,omitempty"`
+}
+
 // StatsMessage is the economy update: the authoritative credit total, the
-// current production rate, and where the upgrades stand. A cost of 0 means
-// that upgrade is maxed out. Item motion is cosmetic and lives on the client.
+// current production rate, live refiner queues, and where the upgrades stand.
+// A cost of 0 means that upgrade is maxed out. Ordinary item motion is cosmetic
+// and lives on the client; refiner timing remains authoritative here.
 type StatsMessage struct {
-	Type           string  `json:"type"`
-	Credits        int     `json:"credits"`
-	Rate           float64 `json:"ratePerSec"` // production rate of the current routes
-	ExtractorLevel int     `json:"extractorLevel"`
-	ExtractorCost  int     `json:"extractorCost"`
-	BeltLevel      int     `json:"beltLevel"`
-	BeltCost       int     `json:"beltCost"`
-	ValueLevel     int     `json:"valueLevel"`
-	ValueCost      int     `json:"valueCost"`
-	GridWidth      int     `json:"gridWidth"` // unlocked region, centred in the world
-	GridHeight     int     `json:"gridHeight"`
-	GridCost       int     `json:"gridCost"`
-	NextGridWidth  int     `json:"nextGridWidth"` // the tier Grid Size buys next, 0 when maxed
-	NextGridHeight int     `json:"nextGridHeight"`
+	Type           string        `json:"type"`
+	Credits        int           `json:"credits"`
+	Rate           float64       `json:"ratePerSec"` // production rate of the current routes
+	ExtractorLevel int           `json:"extractorLevel"`
+	ExtractorCost  int           `json:"extractorCost"`
+	BeltLevel      int           `json:"beltLevel"`
+	BeltCost       int           `json:"beltCost"`
+	ValueLevel     int           `json:"valueLevel"`
+	ValueCost      int           `json:"valueCost"`
+	RefinerLevel   int           `json:"refinerLevel"`
+	RefinerCost    int           `json:"refinerCost"`
+	GridWidth      int           `json:"gridWidth"` // unlocked region, centred in the world
+	GridHeight     int           `json:"gridHeight"`
+	GridCost       int           `json:"gridCost"`
+	NextGridWidth  int           `json:"nextGridWidth"` // the tier Grid Size buys next, 0 when maxed
+	NextGridHeight int           `json:"nextGridHeight"`
+	Refiners       []RefinerView `json:"refiners"`
 }
 
 // WelcomeMessage is the first thing a client hears after joining: its room,

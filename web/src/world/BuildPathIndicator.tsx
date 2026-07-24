@@ -15,6 +15,7 @@ type Props = {
   offX: number;
   offZ: number;
   y: number;
+  color: string;
 };
 
 type Point = { x: number; z: number };
@@ -93,7 +94,7 @@ function buildGeometry(placements: Placement[], offX: number, offZ: number): { g
 }
 
 // BuildPathIndicator draws one continuous arrow over an entire build drag.
-export function BuildPathIndicator({ placements, offX, offZ, y }: Props) {
+export function BuildPathIndicator({ placements, offX, offZ, y, color }: Props) {
   const path = useMemo(() => buildGeometry(placements, offX, offZ), [placements, offX, offZ]);
   const pulse = useRef<THREE.Group>(null!);
   const mainMaterial = useRef<THREE.MeshBasicMaterial>(null!);
@@ -131,7 +132,7 @@ export function BuildPathIndicator({ placements, offX, offZ, y }: Props) {
               ref={(material) => {
                 echoMaterials.current[index] = material;
               }}
-              color="#ffffff"
+              color={color}
               transparent
               opacity={0}
               depthTest={false}
@@ -146,7 +147,7 @@ export function BuildPathIndicator({ placements, offX, offZ, y }: Props) {
         <mesh geometry={path.geometry} renderOrder={11} raycast={() => null}>
           <meshBasicMaterial
             ref={mainMaterial}
-            color="#ffffff"
+            color={color}
             transparent
             opacity={0.9}
             depthTest={false}

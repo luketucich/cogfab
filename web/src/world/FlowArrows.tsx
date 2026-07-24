@@ -9,7 +9,9 @@ import { makeCurve, curvePoint, curveHeading, type Curve } from "./beltCurve";
 import { drainRuns, flowPaths, removeDrainedRuns, runKey } from "./flow";
 
 const MAX_CHEVRONS = 8192;
-const CHEVRON_Y = 0.46; // ride just above the belt surface
+// The conveyor tops out at y=0.4 and material starts at y=0.405. Keep the
+// painted cue in that tiny gap so ore and ingots always occlude it.
+const CHEVRON_Y = 0.402;
 const SPEED = 0.6; // visual cells per second
 const OPACITY = 0.3; // subtle directional cue
 const FADE = 0.4; // seconds a deleted run's arrows take to shrink away

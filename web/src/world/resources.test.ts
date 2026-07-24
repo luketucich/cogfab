@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StateMessage } from "../net/types";
-import { depositAt, hasPortAt, placementTerrainAllows, RESOURCE_PALETTE } from "./resources";
+import { depositAt, hasPortAt, placementOccupancyAllows, placementTerrainAllows, RESOURCE_PALETTE } from "./resources";
 
 const snap: StateMessage = {
   type: "state",
@@ -17,8 +17,18 @@ const snap: StateMessage = {
 describe("resource terrain", () => {
   it("indexes deposits and defines every resource style", () => {
     expect(depositAt(snap, 0, 0)?.kind).toBe("copper");
-    expect(Object.keys(RESOURCE_PALETTE)).toEqual(["iron", "copper", "quartz", "gold"]);
+    expect(Object.keys(RESOURCE_PALETTE)).toEqual([
+      "iron",
+      "copper",
+      "quartz",
+      "gold",
+      "ironBar",
+      "copperSheet",
+      "quartzCrystal",
+      "goldIngot",
+    ]);
     expect(RESOURCE_PALETTE.gold.baseCredits).toBe(20);
+    expect(RESOURCE_PALETTE.goldIngot.baseCredits).toBe(60);
     expect(hasPortAt(snap, 2, 0)).toBe(true);
   });
 
@@ -30,9 +40,22 @@ describe("resource terrain", () => {
     expect(placementTerrainAllows(snap, "seller", 0, 0)).toBe(false);
   });
 
+  it("allows refiners on open land like belts", () => {
+    expect(placementTerrainAllows(snap, "refiner", 1, 0)).toBe(true);
+    expect(placementTerrainAllows(snap, "refiner", 0, 0)).toBe(false);
+    expect(placementTerrainAllows(snap, "refiner", 2, 0)).toBe(false);
+  });
+
   it("keeps belts off ports and live deposits but allows depleted tiles", () => {
     expect(placementTerrainAllows(snap, "belt", 0, 0)).toBe(false);
     expect(placementTerrainAllows(snap, "belt", 1, 0)).toBe(true);
     expect(placementTerrainAllows(snap, "belt", 2, 0)).toBe(false);
+  });
+
+  it("allows only a refiner to replace an existing belt", () => {
+    expect(placementOccupancyAllows("refiner", "belt")).toBe(true);
+    expect(placementOccupancyAllows("seller", "belt")).toBe(false);
+    expect(placementOccupancyAllows("refiner", "extractor")).toBe(false);
+    expect(placementOccupancyAllows("belt", "empty")).toBe(true);
   });
 });
