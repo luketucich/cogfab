@@ -35,7 +35,7 @@ describe("flowPaths", () => {
     expect(runs[0].steps[1].exit).toBe("east"); // leaves into the seller
   });
 
-  it("routes through a correctly faced refiner", () => {
+  it("routes through either direction on a refiner's axis", () => {
     const snap = grid(5, 1, {
       "0,0": E("east"),
       "1,0": B("east"),
@@ -51,6 +51,34 @@ describe("flowPaths", () => {
       [2, 0],
       [3, 0],
     ]);
+
+    const opposite = grid(5, 1, {
+      "0,0": E("east"),
+      "1,0": B("east"),
+      "2,0": R("east"),
+      "3,0": B("east"),
+      "4,0": S("west"),
+    });
+    expect(flowPaths(opposite)[0].complete).toBe(true);
+  });
+
+  it("does not route sideways through a refiner's straight axis", () => {
+    const snap = grid(5, 1, {
+      "0,0": E("east"),
+      "1,0": B("east"),
+      "2,0": R("north"),
+      "3,0": B("east"),
+      "4,0": S("west"),
+    });
+    expect(flowPaths(snap)[0].complete).toBe(false);
+  });
+
+  it("keeps routing when the mouth belt itself becomes a refiner", () => {
+    const snap = grid(3, 1, { "0,0": E("east"), "1,0": R("west"), "2,0": S("west") });
+    expect(flowPaths(snap)[0]).toMatchObject({
+      complete: true,
+      steps: [{ x: 1, y: 0, entry: "west", exit: "east" }],
+    });
   });
 
   it("marks a run that reaches no seller broken, tracing to the farthest belt", () => {

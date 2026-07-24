@@ -7,6 +7,11 @@ var steps = [4][2]int{{0, -1}, {1, 0}, {0, 1}, {-1, 0}}
 // opposite is the Direction facing the other way.
 func opposite(d Direction) Direction { return (d + 2) % 4 }
 
+// sameAxis reports whether two directions lie on the same straight line. A
+// refiner has an axis, not an input end: north/south and east/west are each
+// equivalent pairs.
+func sameAxis(a, b Direction) bool { return a%2 == b%2 }
+
 // faceCell is the cell one step from i in direction d, or -1 off the grid.
 func (w *World) faceCell(i int, d Direction) int {
 	x, y := i%w.width, i/w.width
@@ -35,6 +40,93 @@ func (w *World) IsConveying(i int) bool {
 	}
 	kind := w.tiles[i].Kind
 	return kind == Belt || kind == Refiner
+}
+
+// connectsOn reports whether material can leave conveying cell i on side d.
+// Belts connect on every side; a refiner connects on the two sides of its axis.
+func (w *World) connectsOn(i int, d Direction) bool {
+	if !w.IsConveying(i) {
+		return false
+	}
+	tile := w.tiles[i]
+	return tile.Kind == Belt || sameAxis(tile.Dir, d)
+}
+
+// StraightBeltDirection returns the axis a refiner should use when replacing
+// the belt at (x, y). Complete producer routes are authoritative because they
+// include extractor and seller mouths; belts outside a route fall back to
+// their neighbouring belts, matching the client's belt-shape preview.
+//
+// An isolated belt or one with a single connection keeps its stored direction.
+// Two opposite connections form a straight axis. Corners and junctions cannot
+// be replaced by a straight refiner.
+func (w *World) StraightBeltDirection(x, y int) (Direction, bool) {
+	if !w.inBounds(x, y) {
+		return North, false
+	}
+	cell := w.index(x, y)
+	tile := w.tiles[cell]
+	if tile.Kind != Belt {
+		return North, false
+	}
+
+	var sides [4]bool
+	for _, producer := range w.Producers() {
+		for pathIndex, pathCell := range producer.Path {
+			if pathCell != cell {
+				continue
+			}
+			previous := producer.Cell
+			if pathIndex > 0 {
+				previous = producer.Path[pathIndex-1]
+			}
+			next := producer.Seller
+			if pathIndex < len(producer.Path)-1 {
+				next = producer.Path[pathIndex+1]
+			}
+			w.addSideToward(cell, previous, &sides)
+			w.addSideToward(cell, next, &sides)
+		}
+	}
+
+	if countSides(sides) == 0 {
+		for direction := Direction(0); direction < 4; direction++ {
+			sides[direction] = w.IsBelt(w.faceCell(cell, direction))
+		}
+	}
+
+	count := countSides(sides)
+	if count < 2 {
+		return tile.Dir, true
+	}
+	for direction := Direction(0); direction < 4; direction++ {
+		if sides[direction] {
+			if count == 2 && sides[opposite(direction)] {
+				return direction, true
+			}
+			break
+		}
+	}
+	return North, false
+}
+
+func (w *World) addSideToward(cell, neighbour int, sides *[4]bool) {
+	for direction := Direction(0); direction < 4; direction++ {
+		if w.faceCell(cell, direction) == neighbour {
+			sides[direction] = true
+			return
+		}
+	}
+}
+
+func countSides(sides [4]bool) int {
+	count := 0
+	for _, connected := range sides {
+		if connected {
+			count++
+		}
+	}
+	return count
 }
 
 // Producer is one productive extractor: the cells its material crosses
@@ -67,9 +159,9 @@ func newPathSearch(cells int) *pathSearch {
 
 // Producers lists every extractor whose material reaches a seller. Material
 // leaves an extractor only from the side it faces and enters a seller only on
-// the side it faces. A refiner accepts input on the side it faces and emits from
-// the opposite side, so a path may include refiners between belts. Mirrors the
-// client's flowPaths; keep the two in step.
+// the side it faces. A refiner is a straight, bidirectional processor: either
+// end of its axis can be the input. Mirrors the client's flowPaths; keep the two
+// in step.
 func (w *World) Producers() []Producer {
 	var out []Producer
 	var search *pathSearch
@@ -78,8 +170,8 @@ func (w *World) Producers() []Producer {
 			continue
 		}
 		mouth := w.faceCell(i, w.tiles[i].Dir)
-		if mouth < 0 || w.tiles[mouth].Kind != Belt {
-			continue // the extractor is not facing a belt
+		if mouth < 0 || !w.connectsOn(mouth, opposite(w.tiles[i].Dir)) {
+			continue // the extractor is not facing a connected belt or refiner
 		}
 		if search == nil {
 			search = newPathSearch(len(w.tiles))
@@ -91,10 +183,10 @@ func (w *World) Producers() []Producer {
 	return out
 }
 
-// pathToSeller walks belts (and refiners) out from start (an extractor's mouth
-// belt) to the nearest seller mouth, returning the ordered cells on that path,
-// the seller cell, and whether a seller was reached. A seller or refiner counts
-// only when it faces the belt feeding it.
+// pathToSeller walks belts and refiners out from start (an extractor's mouth
+// conveyor) to the nearest seller mouth, returning the ordered cells on that path,
+// the seller cell, and whether a seller was reached. Sellers still have one
+// input mouth; refiners accept material from either end of their straight axis.
 func (w *World) pathToSeller(start int, search *pathSearch) (path []int, seller int, reached bool) {
 	for i := 0; i < search.visited; i++ {
 		search.previous[search.queue[i]] = -1
@@ -106,16 +198,10 @@ func (w *World) pathToSeller(start int, search *pathSearch) (path []int, seller 
 	for head < tail && end < 0 {
 		current := search.queue[head]
 		head++
-		if w.tiles[current].Kind == Refiner {
-			out := w.faceCell(current, opposite(w.tiles[current].Dir))
-			if out >= 0 && w.tiles[out].Kind == Belt && search.previous[out] < 0 {
-				search.previous[out] = current
-				search.queue[tail] = out
-				tail++
-			}
-			continue
-		}
 		for d := Direction(0); d < 4; d++ {
+			if !w.connectsOn(current, d) {
+				continue
+			}
 			next := w.faceCell(current, d)
 			if next < 0 {
 				continue
@@ -125,12 +211,7 @@ func (w *World) pathToSeller(start int, search *pathSearch) (path []int, seller 
 				end, seller = current, next // current sits at the seller's mouth
 				break
 			}
-			if kind == Belt && search.previous[next] < 0 {
-				search.previous[next] = current
-				search.queue[tail] = next
-				tail++
-			}
-			if kind == Refiner && w.tiles[next].Dir == opposite(d) && search.previous[next] < 0 {
+			if (kind == Belt || kind == Refiner) && w.connectsOn(next, opposite(d)) && search.previous[next] < 0 {
 				search.previous[next] = current
 				search.queue[tail] = next
 				tail++

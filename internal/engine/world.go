@@ -91,8 +91,8 @@ func (w *World) PlaceExtractor(x, y int, dir Direction) { w.set(x, y, Tile{Kind:
 // PlaceSeller puts a seller facing dir at (x, y).
 func (w *World) PlaceSeller(x, y int, dir Direction) { w.set(x, y, Tile{Kind: Seller, Dir: dir}) }
 
-// PlaceRefiner puts a refiner facing dir at (x, y). Facing points at the input
-// belt; refined material leaves from the opposite side.
+// PlaceRefiner puts a refiner on the straight axis selected by dir at (x, y).
+// Either end can accept input; refined material leaves from the other end.
 func (w *World) PlaceRefiner(x, y int, dir Direction) { w.set(x, y, Tile{Kind: Refiner, Dir: dir}) }
 
 // Destroy empties the tile at (x, y), removing any structure on it.

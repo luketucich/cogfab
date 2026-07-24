@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StateMessage } from "../net/types";
-import { depositAt, hasPortAt, placementTerrainAllows, RESOURCE_PALETTE } from "./resources";
+import { depositAt, hasPortAt, placementOccupancyAllows, placementTerrainAllows, RESOURCE_PALETTE } from "./resources";
 
 const snap: StateMessage = {
   type: "state",
@@ -50,5 +50,12 @@ describe("resource terrain", () => {
     expect(placementTerrainAllows(snap, "belt", 0, 0)).toBe(false);
     expect(placementTerrainAllows(snap, "belt", 1, 0)).toBe(true);
     expect(placementTerrainAllows(snap, "belt", 2, 0)).toBe(false);
+  });
+
+  it("allows only a refiner to replace an existing belt", () => {
+    expect(placementOccupancyAllows("refiner", "belt")).toBe(true);
+    expect(placementOccupancyAllows("seller", "belt")).toBe(false);
+    expect(placementOccupancyAllows("refiner", "extractor")).toBe(false);
+    expect(placementOccupancyAllows("belt", "empty")).toBe(true);
   });
 });

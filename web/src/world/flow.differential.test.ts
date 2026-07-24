@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Dir, ResourceKind, StateMessage, TileView } from "../net/types";
-import { OPPOSITE, SIDES, STEP } from "./dir";
+import { OPPOSITE, sameAxis, SIDES, STEP } from "./dir";
 import { flowPaths, type FlowRun } from "./flow";
 
 const neighbour = (snap: StateMessage, index: number, side: Dir): number => {
@@ -12,8 +12,13 @@ const neighbour = (snap: StateMessage, index: number, side: Dir): number => {
   return nx < 0 || ny < 0 || nx >= snap.width || ny >= snap.height ? -1 : ny * snap.width + nx;
 };
 
-// This is the original per-extractor search. It stays test-only so routing
-// optimizations can be checked against the behavior players already know.
+const isConveying = (tile: TileView): boolean => tile.kind === "belt" || tile.kind === "refiner";
+
+const connectsOn = (tile: TileView, side: Dir): boolean =>
+  tile.kind === "belt" || (tile.kind === "refiner" && sameAxis(tile.dir, side));
+
+// This straightforward per-extractor search stays test-only so the optimized
+// shared-distance routing can be checked against an independent reference.
 function legacyFlowPaths(snap: StateMessage): FlowRun[] {
   const deposits = new Map(snap.deposits.map((deposit) => [deposit.y * snap.width + deposit.x, deposit]));
   const runs: FlowRun[] = [];
@@ -39,6 +44,7 @@ function legacyFlowPaths(snap: StateMessage): FlowRun[] {
       farthest = current;
       let complete = false;
       for (const side of SIDES) {
+        if (!connectsOn(snap.tiles[current], side)) continue;
         const next = neighbour(snap, current, side);
         if (next < 0) continue;
         if (snap.tiles[next].kind === "seller" && snap.tiles[next].dir === OPPOSITE[side]) {
@@ -47,7 +53,7 @@ function legacyFlowPaths(snap: StateMessage): FlowRun[] {
           complete = true;
           break;
         }
-        if (snap.tiles[next].kind === "belt" && !seen.has(next)) {
+        if (isConveying(snap.tiles[next]) && connectsOn(snap.tiles[next], OPPOSITE[side]) && !seen.has(next)) {
           seen.add(next);
           previous.set(next, current);
           queue.push(next);
@@ -78,7 +84,7 @@ function legacyFlowPaths(snap: StateMessage): FlowRun[] {
     const tile = snap.tiles[index];
     if (tile.kind !== "extractor" || !deposits.has(index)) continue;
     const start = neighbour(snap, index, tile.dir);
-    if (start >= 0 && snap.tiles[start].kind === "belt") {
+    if (start >= 0 && isConveying(snap.tiles[start]) && connectsOn(snap.tiles[start], OPPOSITE[tile.dir])) {
       runs.push(route(start, OPPOSITE[tile.dir], index));
     }
   }
@@ -119,9 +125,9 @@ function randomState(random: () => number): StateMessage {
   for (let index = 0; index < tiles.length; index++) {
     const roll = random();
     const dir = SIDES[Math.floor(random() * SIDES.length)];
-    if (roll < 0.52) {
+    if (roll < 0.48) {
       tiles[index] = tile("belt", dir);
-    } else if (roll < 0.64) {
+    } else if (roll < 0.59) {
       tiles[index] = tile("extractor", dir);
       if (random() < 0.8) {
         deposits.push({
@@ -132,8 +138,10 @@ function randomState(random: () => number): StateMessage {
           remaining: random() < 0.2 ? 0 : 100,
         });
       }
-    } else if (roll < 0.76) {
+    } else if (roll < 0.70) {
       tiles[index] = tile("seller", dir);
+    } else if (roll < 0.80) {
+      tiles[index] = tile("refiner", dir);
     }
   }
   return { type: "state", width, height, tiles, deposits, ports: [] };
@@ -178,7 +186,7 @@ describe("flow route compatibility", () => {
     ]);
   });
 
-  it("matches the previous search across deterministic random worlds", () => {
+  it("matches the reference search across deterministic random worlds", () => {
     const random = seededRandom(0xc09fab);
     for (let sample = 0; sample < 2_000; sample++) {
       const snap = randomState(random);

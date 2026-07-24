@@ -1,17 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StatsMessage } from "../net/types";
 import {
+  BASE_REFINE_TIME,
   clearPendingSpend,
   creditsAfterReserve,
   fmtNum,
   getStats,
   pendingSpendTotal,
   releaseSpend,
+  refinerAt,
+  refinerProgress,
+  refinerRemaining,
+  refineTime,
   reserveSpend,
   setStats,
   settleSpend,
   spendableCredits,
   subscribeStats,
+  visualBatchSize,
 } from "./economy";
 
 function stats(credits: number): StatsMessage {
@@ -66,6 +72,118 @@ describe("creditsAfterReserve", () => {
     expect(creditsAfterReserve(900, 500)).toBe(400);
     expect(creditsAfterReserve(300, 500)).toBe(0);
     expect(creditsAfterReserve(300, 0)).toBe(300);
+  });
+});
+
+describe("refiner balance", () => {
+  it("mirrors the server processing curve", () => {
+    expect(BASE_REFINE_TIME).toBe(0.4);
+    expect(refineTime(0)).toBe(0.4);
+    expect(refineTime(1)).toBeCloseTo(0.4 / 1.5);
+    expect(refineTime(2)).toBe(0.2);
+  });
+
+  it("scales visible processing batches without changing physical capacity", () => {
+    expect(visualBatchSize(5, 5)).toBe(1);
+    expect(visualBatchSize(12, 12)).toBeCloseTo(
+      ((1 + 0.5 * 12) / (1 + 0.5 * 5)) * ((1 + 0.25 * 12) / (1 + 0.25 * 5)),
+    );
+  });
+});
+
+describe("refiner status", () => {
+  it("keeps older-server stats compatible", () => {
+    expect(getStats().refiners).toEqual([]);
+    expect(refinerAt(2, 3)).toBeUndefined();
+  });
+
+  it("interpolates progress between authoritative snapshots", () => {
+    setStats({
+      ...stats(250),
+      refiners: [{ x: 2, y: 3, resource: "copper", remaining: 1.5, duration: 2, queued: 4 }],
+    });
+    const refiner = refinerAt(2, 3)!;
+    const halfSecondLater = getStats().receivedAt + 500;
+
+    expect(refinerRemaining(refiner, halfSecondLater)).toBeCloseTo(1);
+    expect(refinerProgress(refiner, halfSecondLater)).toBeCloseTo(0.5);
+    expect(refiner.queued).toBe(4);
+  });
+
+  it("shows no countdown while idle", () => {
+    setStats({ ...stats(250), refiners: [{ x: 1, y: 1, remaining: 0, duration: 2, queued: 0 }] });
+    const refiner = refinerAt(1, 1)!;
+
+    expect(refinerRemaining(refiner, getStats().receivedAt + 10_000)).toBe(0);
+    expect(refinerProgress(refiner, getStats().receivedAt + 10_000)).toBe(0);
+  });
+
+  it("uses the authoritative inbound ETA before settling into output cadence", () => {
+    setStats({
+      ...stats(250),
+      refiners: [{ x: 1, y: 1, remaining: 0, duration: 0.5, nextOutput: 1.5, queued: 0, incoming: 4 }],
+    });
+    const refiner = refinerAt(1, 1)!;
+    const receivedAt = getStats().receivedAt;
+
+    expect(refinerRemaining(refiner, receivedAt + 100)).toBeCloseTo(1.4);
+    expect(refinerProgress(refiner, receivedAt + 100)).toBeCloseTo(1 / 15);
+    expect(refinerRemaining(refiner, receivedAt + 1_600)).toBe(0);
+    expect(refinerProgress(refiner, receivedAt + 1_600)).toBe(1);
+  });
+
+  it("cycles only through ore that is actually waiting at the machine", () => {
+    setStats({
+      ...stats(250),
+      refiners: [{ x: 1, y: 1, remaining: 0, duration: 0.5, nextOutput: 1.5, queued: 4, incoming: 2 }],
+    });
+    const refiner = refinerAt(1, 1)!;
+    const receivedAt = getStats().receivedAt;
+
+    expect(refinerRemaining(refiner, receivedAt + 1_600)).toBeCloseTo(0.4);
+    expect(refinerProgress(refiner, receivedAt + 1_600)).toBeCloseTo(0.2);
+    expect(refinerRemaining(refiner, receivedAt + 3_100)).toBe(0);
+    expect(refinerProgress(refiner, receivedAt + 3_100)).toBe(1);
+  });
+
+  it("does not invent an ETA from an inbound count alone", () => {
+    setStats({
+      ...stats(250),
+      refiners: [{ x: 1, y: 1, remaining: 0, duration: 0.5, queued: 0, incoming: 4 }],
+    });
+    const refiner = refinerAt(1, 1)!;
+
+    expect(refinerRemaining(refiner, getStats().receivedAt + 100)).toBe(0);
+    expect(refinerProgress(refiner, getStats().receivedAt + 100)).toBe(0);
+  });
+
+  it("does not schedule distant inbound ore behind an active job", () => {
+    setStats({
+      ...stats(250),
+      refiners: [
+        { x: 1, y: 1, resource: "iron", remaining: 0.25, duration: 0.5, queued: 0, incoming: 4 },
+      ],
+    });
+    const refiner = refinerAt(1, 1)!;
+    const afterActiveJob = getStats().receivedAt + 300;
+
+    expect(refinerRemaining(refiner, afterActiveJob)).toBe(0);
+    expect(refinerProgress(refiner, afterActiveJob)).toBe(1);
+  });
+
+  it("keeps cycling between coarse snapshots while work is queued", () => {
+    setStats({
+      ...stats(250),
+      refiners: [{ x: 1, y: 1, resource: "iron", remaining: 0.25, duration: 0.5, queued: 3 }],
+    });
+    const refiner = refinerAt(1, 1)!;
+    const receivedAt = getStats().receivedAt;
+
+    expect(refinerProgress(refiner, receivedAt + 100)).toBeCloseTo(0.7);
+    expect(refinerRemaining(refiner, receivedAt + 300)).toBeCloseTo(0.45);
+    expect(refinerProgress(refiner, receivedAt + 300)).toBeCloseTo(0.1);
+    expect(refinerRemaining(refiner, receivedAt + 1_800)).toBe(0);
+    expect(refinerProgress(refiner, receivedAt + 1_800)).toBe(1);
   });
 });
 

@@ -1,4 +1,4 @@
-import type { DepositView, PlaceableKind, ResourceKind, StateMessage } from "../net/types";
+import type { DepositView, PlaceableKind, ResourceKind, StateMessage, TileView } from "../net/types";
 
 export type ResourceStyle = {
   label: string;
@@ -81,4 +81,10 @@ export function placementTerrainAllows(snap: StateMessage, kind: PlaceableKind, 
   if (kind === "extractor") return !!deposit && deposit.remaining > 0 && !isPort;
   if (kind === "seller") return isPort && !deposit;
   return !isPort && (!deposit || deposit.remaining === 0);
+}
+
+// Ordinary structures still require an empty cell. A refiner is an inline belt
+// upgrade, so it may replace a belt without a separate destroy action.
+export function placementOccupancyAllows(kind: PlaceableKind, existing: TileView["kind"]): boolean {
+  return existing === "empty" || (kind === "refiner" && existing === "belt");
 }

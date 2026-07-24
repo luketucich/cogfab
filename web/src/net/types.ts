@@ -35,8 +35,20 @@ export type StateMessage = {
   ports: PortView[];
 };
 
+export type RefinerStatus = {
+  x: number;
+  y: number;
+  resource?: ResourceKind;
+  remaining: number;
+  duration: number;
+  nextOutput?: number;
+  queued: number;
+  incoming?: number;
+};
+
 // StatsMessage is the economy update: the shared credits, production rate, and
-// where the upgrades stand. A cost of 0 means that upgrade is maxed out.
+// live refiner queues, and where the upgrades stand. A cost of 0 means that
+// upgrade is maxed out.
 // Mirror of wire.StatsMessage in Go.
 export type StatsMessage = {
   type: "stats";
@@ -55,6 +67,7 @@ export type StatsMessage = {
   gridCost: number;
   nextGridWidth: number; // the tier Grid Size buys next, 0 when maxed
   nextGridHeight: number;
+  refiners?: RefinerStatus[]; // optional while a new client reconnects to an older server
 };
 
 // WelcomeMessage is the first thing we hear after joining: our room's code (the

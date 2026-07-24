@@ -1,4 +1,4 @@
-import type { StatsMessage } from "../net/types";
+import type { RefinerStatus, StatsMessage } from "../net/types";
 
 // The latest economy numbers from the server: the authoritative credit total,
 // the production rate, and where the upgrades stand, with the time they arrived
@@ -12,8 +12,10 @@ export const MATERIAL_SPEED = 2.5;
 export const MATERIAL_GAP = 0.5;
 
 // BASE_REFINE_TIME is how long a level-0 refiner holds one job, in seconds.
-// Mirror of baseRefineTime in economy.go.
-export const BASE_REFINE_TIME = 2.0;
+// This lets a new refiner process half of an untouched 5 ore/s line, making
+// the 3x product value a 1.5x cash-flow gain. Mirror of baseRefineTime in
+// economy.go.
+export const BASE_REFINE_TIME = 0.4;
 
 // MAX_SIM_LEVEL is where the visuals stop getting busier: past this the belts
 // are maxed on screen, and each visible chunk represents more raw units.
@@ -68,6 +70,20 @@ export function refineTime(refinerLevel: number): number {
   return BASE_REFINE_TIME / refineMultiplier(refinerLevel);
 }
 
+// visualBatchSize is how many physical ore units one rendered chunk represents
+// beyond the simulation cap. Refiners multiply their visible processing time by
+// the same amount so batching never creates free capacity.
+export function visualBatchSize(extractorLevel: number, beltLevel: number): number {
+  let units = 1;
+  if (extractorLevel > MAX_SIM_LEVEL) {
+    units *= emissionMultiplier(extractorLevel) / emissionMultiplier(MAX_SIM_LEVEL);
+  }
+  if (beltLevel > MAX_SIM_LEVEL) {
+    units *= beltMultiplier(beltLevel) / beltMultiplier(MAX_SIM_LEVEL);
+  }
+  return units;
+}
+
 type Stats = {
   credits: number;
   ratePerSec: number;
@@ -84,6 +100,7 @@ type Stats = {
   gridCost: number; // 0 = maxed
   nextGridWidth: number; // 0 when maxed
   nextGridHeight: number;
+  refiners: readonly RefinerStatus[];
   receivedAt: number;
 };
 
@@ -103,6 +120,7 @@ let stats: Stats = {
   gridCost: 0,
   nextGridWidth: 0,
   nextGridHeight: 0,
+  refiners: [],
   receivedAt: 0,
 };
 const listeners = new Set<() => void>();
@@ -202,6 +220,7 @@ export function setStats(msg: StatsMessage): void {
     gridCost: msg.gridCost,
     nextGridWidth: msg.nextGridWidth,
     nextGridHeight: msg.nextGridHeight,
+    refiners: msg.refiners ?? [],
     receivedAt: performance.now(),
   };
   for (const fn of listeners) fn();
@@ -210,6 +229,56 @@ export function setStats(msg: StatsMessage): void {
 // getStats returns the latest economy numbers.
 export function getStats(): Stats {
   return stats;
+}
+
+export function refinerAt(x: number, y: number): RefinerStatus | undefined {
+  return stats.refiners.find((refiner) => refiner.x === x && refiner.y === y);
+}
+
+function pendingRefinerJobs(refiner: RefinerStatus): number {
+  return refiner.queued + (refiner.incoming ?? 0);
+}
+
+function elapsedSinceStats(now: number): number {
+  return stats.receivedAt ? Math.max(now - stats.receivedAt, 0) / 1000 : 0;
+}
+
+function remainingAcrossJobs(first: number, laterJobs: number, duration: number, elapsed: number): number {
+  if (elapsed < first) return first - elapsed;
+  const laterElapsed = elapsed - first;
+  if (laterJobs <= 0 || laterElapsed >= laterJobs * duration) return 0;
+  return duration - (laterElapsed % duration);
+}
+
+// refinerRemaining interpolates between the server's one-second snapshots.
+// Each fresh snapshot replaces this estimate, so the server remains the source
+// of truth while the progress display moves smoothly.
+export function refinerRemaining(refiner: RefinerStatus, now = performance.now()): number {
+  if (refiner.duration <= 0) return 0;
+  const pending = pendingRefinerJobs(refiner);
+  const elapsed = elapsedSinceStats(now);
+  if (refiner.resource) {
+    return remainingAcrossJobs(refiner.remaining, refiner.queued, refiner.duration, elapsed);
+  }
+  const nextOutput = refiner.nextOutput ?? 0;
+  if (nextOutput <= 0 || pending <= 0) return 0;
+  return remainingAcrossJobs(nextOutput, Math.max(refiner.queued - 1, 0), refiner.duration, elapsed);
+}
+
+export function refinerProgress(refiner: RefinerStatus, now = performance.now()): number {
+  if (refiner.duration <= 0) return 0;
+  const pending = pendingRefinerJobs(refiner);
+  const elapsed = elapsedSinceStats(now);
+  const first = refiner.resource ? refiner.remaining : (refiner.nextOutput ?? 0);
+  if (first <= 0 || (!refiner.resource && pending <= 0)) return 0;
+  if (elapsed < first) {
+    const window = refiner.resource ? refiner.duration : first;
+    return Math.min(Math.max(1 - (first - elapsed) / window, 0), 1);
+  }
+  const laterJobs = refiner.resource ? refiner.queued : Math.max(refiner.queued - 1, 0);
+  const laterElapsed = elapsed - first;
+  if (laterJobs <= 0 || laterElapsed >= laterJobs * refiner.duration) return 1;
+  return (laterElapsed % refiner.duration) / refiner.duration;
 }
 
 // subscribeStats notifies panels that show the rate, costs, and levels. The

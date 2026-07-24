@@ -30,6 +30,20 @@ func denseHub(w, h int) *Hub {
 	return hub
 }
 
+func denseRefinerHub(w, h int) *Hub {
+	world := engine.NewWorld(w, h)
+	for y := 0; y < h; y++ {
+		for x := 0; x+2 < w; x += 3 {
+			world.SetDeposit(x, y, engine.Iron, 1_000_000_000)
+			world.SetPort(x+2, y, true)
+			world.PlaceExtractor(x, y, engine.East)
+			world.PlaceRefiner(x+1, y, engine.East)
+			world.PlaceSeller(x+2, y, engine.West)
+		}
+	}
+	return NewHub(world)
+}
+
 // connectedResourceHub turns every generated deposit into an extractor and
 // fills the remaining terrain with one connected belt network. It exercises
 // the largest resource world a real room can build, including long shared
@@ -95,6 +109,21 @@ func BenchmarkTickSmallBoard(b *testing.B) {
 
 func BenchmarkTickFullWorld(b *testing.B) {
 	h := denseHub(resourceWorldSize, resourceWorldSize)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		h.tick()
+	}
+}
+
+func BenchmarkTickFullWorldRefiners(b *testing.B) {
+	h := denseRefinerHub(resourceWorldSize, resourceWorldSize)
+	h.extractorLevel = maxUpgradeLevel
+	h.beltLevel = maxUpgradeLevel
+	h.valueLevel = maxUpgradeLevel
+	h.refinerLevel = maxUpgradeLevel
+	for i := 0; i < 5; i++ {
+		h.tick()
+	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		h.tick()

@@ -147,22 +147,91 @@ func TestProducers(t *testing.T) {
 		w := NewWorld(6, 1)
 		w.PlaceExtractor(0, 0, East)
 		w.PlaceBelt(1, 0, East)
-		w.PlaceRefiner(2, 0, West) // input from west, output east
+		w.PlaceRefiner(2, 0, West)
 		w.PlaceBelt(3, 0, East)
 		w.PlaceSeller(4, 0, West)
 		want := []int{w.index(1, 0), w.index(2, 0), w.index(3, 0)}
 		assertProducerRoute(t, w, want, w.index(4, 0))
 	})
 
-	t.Run("a refiner facing the wrong way does not complete the run", func(t *testing.T) {
+	t.Run("the opposite refiner direction keeps the same axis productive", func(t *testing.T) {
 		w := NewWorld(6, 1)
 		w.PlaceExtractor(0, 0, East)
 		w.PlaceBelt(1, 0, East)
-		w.PlaceRefiner(2, 0, East) // faces away from the incoming belt
+		w.PlaceRefiner(2, 0, East)
+		w.PlaceBelt(3, 0, East)
+		w.PlaceSeller(4, 0, West)
+		want := []int{w.index(1, 0), w.index(2, 0), w.index(3, 0)}
+		assertProducerRoute(t, w, want, w.index(4, 0))
+	})
+
+	t.Run("a perpendicular refiner axis does not bend material", func(t *testing.T) {
+		w := NewWorld(6, 1)
+		w.PlaceExtractor(0, 0, East)
+		w.PlaceBelt(1, 0, East)
+		w.PlaceRefiner(2, 0, North)
 		w.PlaceBelt(3, 0, East)
 		w.PlaceSeller(4, 0, West)
 		if got := len(w.Producers()); got != 0 {
 			t.Fatalf("got %d, want 0", got)
+		}
+	})
+
+	t.Run("a refiner can replace the only belt between an extractor and seller", func(t *testing.T) {
+		w := NewWorld(3, 1)
+		w.PlaceExtractor(0, 0, East)
+		w.PlaceRefiner(1, 0, West)
+		w.PlaceSeller(2, 0, West)
+		assertProducerRoute(t, w, []int{w.index(1, 0)}, w.index(2, 0))
+	})
+}
+
+func TestStraightBeltDirection(t *testing.T) {
+	t.Run("prefers the live route over unrelated neighbouring belts", func(t *testing.T) {
+		w := NewWorld(7, 5)
+		w.PlaceExtractor(0, 2, East)
+		w.PlaceBelt(1, 2, East)
+		w.PlaceBelt(2, 2, South) // stored direction is not the routed axis
+		w.PlaceBelt(3, 2, East)
+		w.PlaceBelt(4, 2, East)
+		w.PlaceSeller(5, 2, West)
+		w.PlaceBelt(2, 1, South) // an unused branch must not turn this into a tee
+
+		direction, straight := w.StraightBeltDirection(2, 2)
+		if !straight || direction != East {
+			t.Fatalf("direction = %v, straight = %v, want east and true", direction, straight)
+		}
+	})
+
+	t.Run("uses neighbouring belts when there is no complete route", func(t *testing.T) {
+		tests := []struct {
+			name       string
+			neighbours []Direction
+			want       Direction
+			straight   bool
+		}{
+			{name: "isolated keeps stored direction", want: South, straight: true},
+			{name: "one side keeps stored direction", neighbours: []Direction{East}, want: South, straight: true},
+			{name: "opposite sides choose their axis", neighbours: []Direction{East, West}, want: East, straight: true},
+			{name: "corner is rejected", neighbours: []Direction{North, East}, straight: false},
+			{name: "tee is rejected", neighbours: []Direction{North, East, South}, straight: false},
+			{name: "cross is rejected", neighbours: []Direction{North, East, South, West}, straight: false},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				w := NewWorld(5, 5)
+				w.PlaceBelt(2, 2, South)
+				for _, direction := range test.neighbours {
+					step := steps[direction]
+					w.PlaceBelt(2+step[0], 2+step[1], direction)
+				}
+
+				direction, straight := w.StraightBeltDirection(2, 2)
+				if straight != test.straight || straight && direction != test.want {
+					t.Fatalf("direction = %v, straight = %v, want %v and %v", direction, straight, test.want, test.straight)
+				}
+			})
 		}
 	})
 }

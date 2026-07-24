@@ -80,12 +80,18 @@ func TestLoadRejectsInvalidSnapshots(t *testing.T) {
 			s.Tiles = make([]savedTile, s.Height)
 		}},
 		{"wrong tile count", func(s *snapshot) { s.Tiles = s.Tiles[:len(s.Tiles)-1] }},
-		{"unknown tile kind", func(s *snapshot) { s.Tiles[0].K = uint8(engine.Seller) + 1 }},
+		{"unknown tile kind", func(s *snapshot) { s.Tiles[0].K = uint8(engine.Refiner) + 1 }},
 		{"unknown direction", func(s *snapshot) { s.Tiles[0].D = uint8(engine.West) + 1 }},
 		{"negative credits", func(s *snapshot) { s.Credits = -1 }},
+		{"credits past browser-safe maximum", func(s *snapshot) { s.Credits = maxCredits + 1 }},
 		{"negative extractor level", func(s *snapshot) { s.ExtractorLevel = -1 }},
 		{"negative belt level", func(s *snapshot) { s.BeltLevel = -1 }},
 		{"negative value level", func(s *snapshot) { s.ValueLevel = -1 }},
+		{"negative refiner level", func(s *snapshot) { s.RefinerLevel = -1 }},
+		{"extractor level past maximum", func(s *snapshot) { s.ExtractorLevel = maxUpgradeLevel + 1 }},
+		{"belt level past maximum", func(s *snapshot) { s.BeltLevel = maxUpgradeLevel + 1 }},
+		{"value level past maximum", func(s *snapshot) { s.ValueLevel = maxUpgradeLevel + 1 }},
+		{"refiner level past maximum", func(s *snapshot) { s.RefinerLevel = maxUpgradeLevel + 1 }},
 		{"negative grid tier", func(s *snapshot) { s.GridTier = -1 }},
 		{"grid tier past final", func(s *snapshot) { s.GridTier = len(gridTiers) }},
 	}
@@ -416,6 +422,107 @@ func TestSnapshotRestoresActiveRouteAndChunks(t *testing.T) {
 	}
 	if back.credits != h.credits || back.world.DepositAt(30, 32) != h.world.DepositAt(30, 32) {
 		t.Fatal("restored active simulation diverged from the original")
+	}
+}
+
+func TestSnapshotRebuildsTransientRefinerBackpressure(t *testing.T) {
+	w := engine.NewWorld(7, 1)
+	w.SetDeposit(0, 0, engine.Iron, 10_000)
+	w.PlaceExtractor(0, 0, engine.East)
+	w.PlaceBelt(1, 0, engine.East)
+	w.PlaceBelt(2, 0, engine.East)
+	w.PlaceRefiner(3, 0, engine.East)
+	w.PlaceBelt(4, 0, engine.East)
+	w.PlaceSeller(5, 0, engine.West)
+	w.SetPort(5, 0, true)
+	h := NewHub(w)
+	tickN(h, 10)
+	if views := h.refinerViews(); len(views) != 1 || views[0].Queued == 0 {
+		t.Fatalf("setup did not create refiner backpressure: %+v", views)
+	}
+
+	back := hubFromSnapshot(h.snapshot(), "BACKPR")
+	h.tick()
+	back.tick()
+	if back.credits != h.credits ||
+		back.world.DepositAt(0, 0) != h.world.DepositAt(0, 0) ||
+		len(back.chunks) != len(h.chunks) ||
+		!reflect.DeepEqual(back.refinerViews(), h.refinerViews()) {
+		t.Fatalf("restored backpressure diverged\noriginal: credits=%d stock=%+v chunks=%d views=%+v\nrestored: credits=%d stock=%+v chunks=%d views=%+v",
+			h.credits, h.world.DepositAt(0, 0), len(h.chunks), h.refinerViews(),
+			back.credits, back.world.DepositAt(0, 0), len(back.chunks), back.refinerViews())
+	}
+}
+
+func TestV2SnapshotRejectsImpossibleRefinerJobs(t *testing.T) {
+	w := engine.NewWorld(7, 1)
+	w.SetDeposit(0, 0, engine.Iron, 10_000)
+	w.PlaceExtractor(0, 0, engine.East)
+	w.PlaceBelt(1, 0, engine.East)
+	w.PlaceRefiner(2, 0, engine.East)
+	w.PlaceBelt(3, 0, engine.East)
+	w.PlaceSeller(4, 0, engine.West)
+	w.SetPort(4, 0, true)
+	h := NewHub(w)
+	tickN(h, 2)
+	base := h.snapshot()
+
+	active := -1
+	for i, chunk := range base.Chunks {
+		if chunk.ProcessLeft > 0 {
+			active = i
+			break
+		}
+	}
+	if active < 0 {
+		t.Fatal("test setup did not capture an active refiner job")
+	}
+
+	copySnapshot := func() snapshot {
+		s := base
+		s.Deposits = append([]savedDeposit(nil), base.Deposits...)
+		s.Chunks = append([]savedChunk(nil), base.Chunks...)
+		return s
+	}
+	tests := []struct {
+		name   string
+		mutate func(*snapshot)
+	}{
+		{"refined material cannot still be processing", func(s *snapshot) {
+			s.Chunks[active].Resource = uint8(engine.IronBar)
+		}},
+		{"material must match its source route", func(s *snapshot) {
+			s.Chunks[active].Resource = uint8(engine.Gold)
+		}},
+		{"finished product must match its source route", func(s *snapshot) {
+			s.Chunks[active].Resource = uint8(engine.GoldIngot)
+			s.Chunks[active].ProcessLeft = 0
+		}},
+		{"a processing job must occupy a refiner", func(s *snapshot) {
+			s.Chunks[active].Dist = 0
+		}},
+		{"remaining work cannot exceed a level zero job", func(s *snapshot) {
+			s.Chunks[active].ProcessLeft = baseRefineTime*float64(s.Chunks[active].Units) + 0.01
+		}},
+		{"remaining work must fit the saved speed level", func(s *snapshot) {
+			s.RefinerLevel = 2
+			s.Chunks[active].ProcessLeft = 0.3 * float64(s.Chunks[active].Units)
+		}},
+		{"one refiner cannot own two jobs", func(s *snapshot) {
+			duplicate := s.Chunks[active]
+			duplicate.Units = 1
+			s.Chunks = append(s.Chunks, duplicate)
+			s.Deposits[0].Remaining--
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			s := copySnapshot()
+			test.mutate(&s)
+			if s.valid() {
+				t.Fatal("impossible refiner state passed snapshot validation")
+			}
+		})
 	}
 }
 

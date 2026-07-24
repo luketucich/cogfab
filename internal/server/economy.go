@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/luketucich/cogfab/internal/engine"
+	"github.com/luketucich/cogfab/internal/wire"
 )
 
 // The material the client draws and the total the server keeps come from the
@@ -20,8 +21,10 @@ const (
 	subSteps = 40
 
 	// baseRefineTime is how long a level-0 refiner holds one job, in seconds.
-	// Mirror of BASE_REFINE_TIME in economy.ts.
-	baseRefineTime = 2.0
+	// At the untouched 5 ore/s line rate, 0.4s processes half the incoming ore:
+	// the 3x sale price makes that line earn 1.5x as fast while its deposit lasts
+	// twice as long. Mirror of BASE_REFINE_TIME in economy.ts.
+	baseRefineTime = 0.4
 )
 
 // extractorMult and beltMult are the level multipliers the two rate upgrades
@@ -83,8 +86,27 @@ func rawValue(kind engine.ResourceKind) int {
 	}
 }
 
+// JavaScript receives credits as JSON numbers, so the server saturates at the
+// largest integer the browser can represent exactly instead of Go's wider
+// platform-dependent int limit.
+const maxCredits = 1<<53 - 1
+
+func addCredits(balance, amount int) int {
+	if amount > maxCredits-balance {
+		return maxCredits
+	}
+	return balance + amount
+}
+
+func multiplyCredits(a, b int) int {
+	if a != 0 && b > maxCredits/a {
+		return maxCredits
+	}
+	return a * b
+}
+
 func (h *Hub) chunkValue(kind engine.ResourceKind, units int) int {
-	return rawValue(kind) * units * h.saleValueMultiplier()
+	return multiplyCredits(multiplyCredits(rawValue(kind), units), h.saleValueMultiplier())
 }
 
 // unitsPerChunk converts throughput above the visual cap into units carried by
@@ -102,30 +124,38 @@ func (h *Hub) unitsPerChunk() float64 {
 
 // currentRate is the factory's credits per second: actual item throughput times
 // each route's material value and the global sale multiplier. Routes that pass
-// a refiner use refined prices and are capped by refining speed.
+// through the same refiner share that machine's processing capacity.
 func (h *Hub) currentRate() float64 {
-	chunksPerSec := materialSpeed * beltMult(h.beltLevel) / (materialGap / extractorMult(h.extractorLevel))
-	refinePerSec := 1.0 / h.refineTime()
+	visibleChunksPerSec := h.beltSpeed() / h.emitGap()
+	unitsPerChunk := h.unitsPerChunk()
+	unitsPerSec := visibleChunksPerSec * unitsPerChunk
+	type refinerRate struct {
+		routes int
+		value  int
+	}
+	var refinerRates map[int]refinerRate
 	total := 0.0
 	for _, rt := range h.routes {
-		kind := rt.resource
-		throughput := chunksPerSec
-		if routeHasRefiner(h.world, rt) {
-			kind = engine.Refine(rt.resource)
-			throughput = min(throughput, refinePerSec)
+		if rt.refines {
+			if refinerRates == nil {
+				refinerRates = make(map[int]refinerRate)
+			}
+			rate := refinerRates[rt.refiner]
+			rate.routes++
+			rate.value += rawValue(engine.Refine(rt.resource))
+			refinerRates[rt.refiner] = rate
+			continue
 		}
-		total += float64(rawValue(kind)*h.saleValueMultiplier()) * throughput
+		total += float64(rawValue(rt.resource)) * unitsPerSec
 	}
-	return total
-}
 
-func routeHasRefiner(world *engine.World, rt *route) bool {
-	for _, cell := range rt.cells {
-		if world.IsRefiner(cell) {
-			return true
-		}
+	refinePerSec := 1.0 / h.refineTime()
+	for _, rate := range refinerRates {
+		refinedUnitsPerSec := min(float64(rate.routes)*unitsPerSec, refinePerSec)
+		averageValue := float64(rate.value) / float64(rate.routes)
+		total += refinedUnitsPerSec * averageValue
 	}
-	return false
+	return total * float64(h.saleValueMultiplier())
 }
 
 // route is one extractor-to-seller path the material rides: the belts and
@@ -139,6 +169,10 @@ type route struct {
 	resource  engine.ResourceKind
 	unitPart  float64
 	nearest   float64 // scratch: the closest chunk to the extractor this sub-step, for emit
+	refiner   int     // first refiner cell on the route
+	refinerAt int     // index of that cell in cells
+	refines   bool
+	rawFront  float64 // scratch: closest queued raw chunk to the refiner this sub-step
 }
 
 // chunk is one visible item in flight. Units may be greater than one when
@@ -150,6 +184,7 @@ type chunk struct {
 	units       int
 	resource    engine.ResourceKind
 	processLeft float64
+	waiting     bool // scratch: this raw chunk was stopped by a refiner queue
 }
 
 // recompute rebuilds the live routes after a world change, reusing one whose path
@@ -167,18 +202,50 @@ func (h *Hub) recompute() {
 		if was, ok := h.routes[key]; ok {
 			was.seller = p.Seller
 			was.resource = deposit.Kind
+			setRouteRefiner(h.world, was)
 			next[key] = was
 		} else {
-			next[key] = &route{
+			rt := &route{
 				cells: p.Path, extractor: p.Cell, seller: p.Seller, resource: deposit.Kind,
 			}
+			setRouteRefiner(h.world, rt)
+			next[key] = rt
 		}
 	}
 	h.routes = next
+	// Chunks from a depleted or broken source keep draining on an inactive
+	// route object. Refresh those routes too so a refiner added or removed
+	// while they are in flight is reflected by processing, backpressure, and
+	// the status UI.
+	refreshed := make(map[*route]bool, len(h.routes))
+	for _, rt := range h.routes {
+		refreshed[rt] = true
+	}
+	for _, c := range h.chunks {
+		if !refreshed[c.route] {
+			setRouteRefiner(h.world, c.route)
+			refreshed[c.route] = true
+		}
+	}
 	// Drop busy marks for refiners that no longer exist on any live route.
-	for cell := range h.refinerBusy {
+	for cell, owner := range h.refinerBusy {
 		if !h.world.IsRefiner(cell) {
+			if owner != nil {
+				owner.processLeft = 0
+			}
 			delete(h.refinerBusy, cell)
+		}
+	}
+}
+
+func setRouteRefiner(world *engine.World, rt *route) {
+	rt.refines = false
+	for step, cell := range rt.cells {
+		if world.IsRefiner(cell) {
+			rt.refiner = cell
+			rt.refinerAt = step
+			rt.refines = true
+			return
 		}
 	}
 }
@@ -193,15 +260,26 @@ func (h *Hub) tick() bool {
 	dt := 1.0 / subSteps
 	resourcesChanged := false
 	depositDepleted := false
+	refinerBudget := make(map[int]float64)
 	for s := 0; s < subSteps; s++ {
+		clear(refinerBudget)
 		for _, rt := range h.routes {
 			rt.nearest = -1
+			rt.rawFront = -1
+		}
+		for _, c := range h.chunks {
+			// A depleted extractor removes its route from h.routes while the
+			// already-consumed chunks keep their route pointer and drain. Reset
+			// that route's queue scratch too, so its first raw chunk is not
+			// packed behind stale state from the previous sub-step.
+			c.route.rawFront = -1
+			c.waiting = false
 		}
 		alive := h.chunks[:0]
 		for _, c := range h.chunks {
-			if h.advanceChunk(c, speed, dt) {
+			if h.advanceChunk(c, speed, dt, refinerBudget) {
 				if h.world.IsSeller(c.route.seller) {
-					earned += h.chunkValue(c.resource, c.units)
+					earned = addCredits(earned, h.chunkValue(c.resource, c.units))
 				}
 				continue
 			}
@@ -209,6 +287,23 @@ func (h *Hub) tick() bool {
 			if cell >= len(c.route.cells) || !h.world.IsConveying(c.route.cells[cell]) {
 				h.clearRefinerJob(c)
 				continue // its path cell is gone: fell off
+			}
+			if c.route.refines && engine.IsRaw(c.resource) {
+				// Chunks are append-only and visited oldest-first. Pack each
+				// waiting ore one visible gap behind the ore ahead; once the
+				// queue reaches the extractor at distance zero, nearest stops
+				// emission naturally. Persisted oversized queues overlap at
+				// zero until they drain rather than losing consumed ore.
+				if c.route.rawFront >= 0 {
+					maxDistance := max(c.route.rawFront-h.emitGap(), 0)
+					if c.dist > maxDistance {
+						if c.dist-maxDistance > 1e-9 {
+							c.waiting = true
+						}
+						c.dist = maxDistance
+					}
+				}
+				c.route.rawFront = c.dist
 			}
 			if c.route.nearest < 0 || c.dist < c.route.nearest {
 				c.route.nearest = c.dist // noted in passing, so emit never rescans
@@ -220,7 +315,7 @@ func (h *Hub) tick() bool {
 		resourcesChanged = changed || resourcesChanged
 		depositDepleted = depleted || depositDepleted
 	}
-	h.credits += earned
+	h.credits = addCredits(h.credits, earned)
 	if depositDepleted {
 		h.recompute()
 	}
@@ -228,22 +323,37 @@ func (h *Hub) tick() bool {
 }
 
 // advanceChunk moves one chunk forward, pausing on refiners while they work.
-// It returns true when the chunk has been delivered to its seller.
-func (h *Hub) advanceChunk(c *chunk, speed, dt float64) (delivered bool) {
+// refinerBudget gives every machine exactly dt of processing per sub-step. If
+// one job finishes early, only its unused fraction is available to the next
+// queued job. It returns true when the chunk has been delivered to its seller.
+func (h *Hub) advanceChunk(c *chunk, speed, dt float64, refinerBudget map[int]float64) (delivered bool) {
 	cell := int(c.dist)
 	if cell < len(c.route.cells) && h.world.IsRefiner(c.route.cells[cell]) && engine.IsRaw(c.resource) {
 		refiner := c.route.cells[cell]
 		if owner, busy := h.refinerBusy[refiner]; busy && owner != c {
 			c.dist = float64(cell)
+			c.waiting = true
 			return false
 		}
 		if c.processLeft <= 0 {
 			h.refinerBusy[refiner] = c
-			c.processLeft = h.refineTime()
+			// Past the visual simulation cap one chunk represents several ore.
+			// Processing time scales with that batch so the rendering cap never
+			// grants free refiner capacity.
+			c.processLeft = h.refineTime() * float64(c.units)
 		}
-		c.processLeft -= dt
-		if c.processLeft > 0 {
-			c.dist = float64(cell)
+		budget, exists := refinerBudget[refiner]
+		if !exists {
+			budget = dt
+		}
+		used := min(c.processLeft, budget)
+		c.processLeft -= used
+		refinerBudget[refiner] = budget - used
+		if c.processLeft > 1e-12 {
+			// Hold the active job inside the machine, one emission gap past
+			// its entrance. The next queued ore can wait exactly at the
+			// entrance and begin immediately when this job finishes.
+			c.dist = float64(cell) + h.emitGap()
 			return false
 		}
 		c.processLeft = 0
@@ -265,6 +375,79 @@ func (h *Hub) clearRefinerJob(c *chunk) {
 			delete(h.refinerBusy, cell)
 		}
 	}
+}
+
+// refinerViews reports every placed refiner, including idle ones, so clients
+// can show a truthful hover state without reconstructing queue ownership from
+// cosmetic item motion.
+func (h *Hub) refinerViews() []wire.RefinerView {
+	processDuration := h.refineTime() * h.unitsPerChunk()
+	views := make([]wire.RefinerView, 0)
+	byCell := make(map[int]int)
+	for y := 0; y < h.world.Height(); y++ {
+		for x := 0; x < h.world.Width(); x++ {
+			if h.world.At(x, y).Kind != engine.Refiner {
+				continue
+			}
+			cell := y*h.world.Width() + x
+			byCell[cell] = len(views)
+			views = append(views, wire.RefinerView{X: x, Y: y, Duration: processDuration})
+		}
+	}
+
+	arrivalCadence := make(map[int]float64)
+	routeCounts := make(map[int]int)
+	for _, rt := range h.routes {
+		if rt.refines {
+			routeCounts[rt.refiner]++
+		}
+	}
+	for cell, routes := range routeCounts {
+		// Shared input routes shorten the average arrival interval before
+		// processing capacity becomes the bottleneck again.
+		arrivalInterval := h.emitGap() / (h.beltSpeed() * float64(routes))
+		arrivalCadence[cell] = max(processDuration, arrivalInterval)
+	}
+
+	for cell, owner := range h.refinerBusy {
+		if index, ok := byCell[cell]; ok && owner != nil {
+			views[index].Resource = owner.resource.String()
+			views[index].Remaining = max(owner.processLeft, 0)
+			views[index].Duration = h.refineTime() * float64(owner.units)
+		}
+	}
+	for _, c := range h.chunks {
+		if !c.route.refines || !engine.IsRaw(c.resource) {
+			continue
+		}
+		if int(c.dist) > c.route.refinerAt {
+			continue // this raw chunk was already downstream when the refiner was placed
+		}
+		index, ok := byCell[c.route.refiner]
+		if !ok || h.refinerBusy[c.route.refiner] == c {
+			continue
+		}
+		if c.waiting {
+			views[index].Queued++
+		} else {
+			views[index].Incoming++
+		}
+		if views[index].Resource == "" {
+			travel := max(float64(c.route.refinerAt)-c.dist, 0) / h.beltSpeed()
+			nextOutput := travel + h.refineTime()*float64(c.units)
+			if views[index].NextOutput == 0 || nextOutput < views[index].NextOutput {
+				views[index].NextOutput = nextOutput
+			}
+		}
+	}
+	for cell, index := range byCell {
+		if views[index].Resource == "" && views[index].Queued == 0 && views[index].Incoming > 0 {
+			if cadence := arrivalCadence[cell]; cadence > 0 {
+				views[index].Duration = cadence
+			}
+		}
+	}
+	return views
 }
 
 // emit adds a chunk at the head of each route once the nearest one has moved a

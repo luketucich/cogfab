@@ -1,6 +1,7 @@
 package server
 
 import (
+	"math"
 	"testing"
 
 	"github.com/luketucich/cogfab/internal/engine"
@@ -17,6 +18,17 @@ func run(n int) (*engine.World, *Hub) {
 	w.PlaceSeller(n+1, 0, engine.West)
 	w.SetPort(n+1, 0, true)
 	return w, NewHub(w)
+}
+
+func onlyRoute(t *testing.T, h *Hub) *route {
+	t.Helper()
+	if len(h.routes) != 1 {
+		t.Fatalf("routes = %d, want exactly one", len(h.routes))
+	}
+	for _, rt := range h.routes {
+		return rt
+	}
+	return nil
 }
 
 func tickN(h *Hub, n int) {
@@ -44,6 +56,43 @@ func TestMaterialSimCountsDeliveries(t *testing.T) {
 	tickN(h, 10)
 	if got := h.credits - before; got != 50 {
 		t.Fatalf("delivered %d over 10s at steady state, want 50 (5/s)", got)
+	}
+}
+
+func TestCreditsSaturateInsteadOfWrappingNegative(t *testing.T) {
+	_, h := run(1)
+	h.credits = maxCredits - 1
+	tickN(h, 3)
+
+	if h.credits != maxCredits {
+		t.Fatalf("credits = %d after earning near the integer limit, want %d", h.credits, maxCredits)
+	}
+	persisted := NewHub(NewResourceWorld("MAXCRED")).snapshot()
+	persisted.Credits = h.credits
+	if !persisted.valid() {
+		t.Fatal("a saturated maximum balance should remain persistable")
+	}
+}
+
+func TestFullWorldRefinersStayBoundedAtMaximumUpgrades(t *testing.T) {
+	h := denseRefinerHub(resourceWorldSize, resourceWorldSize)
+	h.extractorLevel = maxUpgradeLevel
+	h.beltLevel = maxUpgradeLevel
+	h.valueLevel = maxUpgradeLevel
+	h.refinerLevel = maxUpgradeLevel
+	tickN(h, 20)
+
+	if len(h.routes) == 0 || h.credits <= startingCredits {
+		t.Fatalf("max-level refiner world did not produce: routes=%d credits=%d", len(h.routes), h.credits)
+	}
+	if got, limit := len(h.chunks), len(h.routes)*4; got > limit {
+		t.Fatalf("max-level refiner world retained %d chunks, want at most %d", got, limit)
+	}
+	if rate := h.currentRate(); rate <= 0 || math.IsNaN(rate) || math.IsInf(rate, 0) {
+		t.Fatalf("max-level refiner rate is not finite and positive: %v", rate)
+	}
+	if views := h.refinerViews(); len(views) != len(h.routes) {
+		t.Fatalf("refiner statuses=%d, want one for each of %d machines", len(views), len(h.routes))
 	}
 }
 
@@ -92,6 +141,27 @@ func TestMaterialSimPaysTheTrueRatePastTheSimCap(t *testing.T) {
 	want := h.currentRate() * 10
 	if got < want*0.97 || got > want*1.03 {
 		t.Fatalf("earned %v over 10s at deep levels, want ~%v (the advertised rate)", got, want)
+	}
+}
+
+func TestRefinerCapacityDoesNotGrowWithVisualBatching(t *testing.T) {
+	w, h := run(3)
+	w.PlaceRefiner(2, 0, engine.East)
+	h.recompute()
+	h.extractorLevel, h.beltLevel = 12, 12
+
+	// Deep production upgrades batch several physical units into each visible
+	// chunk. The batch must take proportionally longer to refine, or those
+	// unrelated upgrades would silently make a level-zero refiner faster.
+	if got := h.currentRate(); got != 7.5 {
+		t.Fatalf("deep-level refiner rate = %v, want the level-zero capacity of 7.5 credits/s", got)
+	}
+	tickN(h, 20)
+	before := h.credits
+	tickN(h, 200)
+	got, want := float64(h.credits-before), h.currentRate()*200
+	if got < want*0.99 || got > want*1.01 {
+		t.Fatalf("deep-level refiner earned %v over 200s, want ~%v", got, want)
 	}
 }
 
@@ -269,7 +339,7 @@ func TestCappedVisualChunksStillConsumeEveryRawUnit(t *testing.T) {
 	}
 }
 
-func TestRefinerTriplesSaleValueAfterProcessing(t *testing.T) {
+func TestBaseRefinerRaisesCashflowAfterProcessing(t *testing.T) {
 	w := engine.NewWorld(5, 1)
 	w.SetDeposit(0, 0, engine.Iron, 1_000_000)
 	w.PlaceExtractor(0, 0, engine.East)
@@ -280,28 +350,347 @@ func TestRefinerTriplesSaleValueAfterProcessing(t *testing.T) {
 	w.SetPort(4, 0, true)
 	h := NewHub(w)
 
-	// Raw iron would be 5 credits/s; refined iron bars are 3× so 15 credits/s,
-	// but the level-0 refiner only clears 0.5 jobs/s, so the HUD rate is 1.5.
-	if got := h.currentRate(); got != 1.5 {
-		t.Fatalf("refined rate = %v, want 1.5", got)
+	// Raw iron earns 5 credits/s. A level-0 refiner clears 2.5 jobs/s,
+	// each worth 3, so adding one raises cash flow by 50% instead of becoming
+	// an early-game bottleneck.
+	if got := h.currentRate(); got != 7.5 {
+		t.Fatalf("refined rate = %v, want 7.5", got)
 	}
 
-	tickN(h, int(baseRefineTime)+5)
+	tickN(h, 6)
 	before := h.credits
 	tickN(h, 10)
 	got := h.credits - before
-	if got < 10 || got > 20 {
-		t.Fatalf("delivered %d credits over 10s through a refiner, want about 15", got)
+	if got < 70 || got > 80 {
+		t.Fatalf("delivered %d credits over 10s through a refiner, want about 75", got)
+	}
+}
+
+func TestRefinerBackpressureBoundsTheQueueAndPreservesTheDeposit(t *testing.T) {
+	const stock = 1_000_000
+	w := engine.NewWorld(5, 1)
+	w.SetDeposit(0, 0, engine.Iron, stock)
+	w.PlaceExtractor(0, 0, engine.East)
+	w.PlaceBelt(1, 0, engine.East)
+	w.PlaceRefiner(2, 0, engine.East)
+	w.PlaceBelt(3, 0, engine.East)
+	w.PlaceSeller(4, 0, engine.West)
+	w.SetPort(4, 0, true)
+	h := NewHub(w)
+
+	tickN(h, 100)
+	consumed := stock - w.DepositAt(0, 0).Remaining
+	if consumed < 245 || consumed > 260 {
+		t.Fatalf("base refiner consumed %d ore in 100s, want about 250 with backpressure", consumed)
+	}
+	if got := len(h.chunks); got > 12 {
+		t.Fatalf("base refiner retained %d chunks, want a bounded physical queue", got)
+	}
+	views := h.refinerViews()
+	if len(views) != 1 || views[0].Queued == 0 || views[0].Queued > 4 {
+		t.Fatalf("refiner queue = %+v, want one to four actually waiting chunks", views)
 	}
 }
 
 func TestRefinerSpeedUpgradeShortensProcessTime(t *testing.T) {
 	_, h := run(1)
-	if got := h.refineTime(); got != baseRefineTime {
-		t.Fatalf("level 0 refine time = %v, want %v", got, baseRefineTime)
+	for _, test := range []struct {
+		level int
+		want  float64
+	}{
+		{0, 0.4},
+		{1, 0.4 / 1.5},
+		{2, 0.2},
+	} {
+		h.refinerLevel = test.level
+		if got := h.refineTime(); got != test.want {
+			t.Errorf("level %d refine time = %v, want %v", test.level, got, test.want)
+		}
 	}
-	h.refinerLevel = 2
-	if got := h.refineTime(); got != baseRefineTime/refineMult(2) {
-		t.Fatalf("level 2 refine time = %v, want %v", got, baseRefineTime/refineMult(2))
+}
+
+func TestRefinerSpeedFillsAStandardLineInUsefulSteps(t *testing.T) {
+	w, h := run(3)
+	w.PlaceRefiner(2, 0, engine.East)
+	h.recompute()
+
+	for _, test := range []struct {
+		level int
+		want  float64
+	}{
+		{0, 7.5},   // half of the ore becomes a 3-credit bar
+		{1, 11.25}, // three quarters of the line is refined
+		{2, 15},    // the full 5 ore/s line is refined
+	} {
+		h.refinerLevel = test.level
+		if got := h.currentRate(); got != test.want {
+			t.Errorf("level %d refined rate = %v, want %v", test.level, got, test.want)
+		}
+	}
+}
+
+func TestFractionalRefinerCycleMatchesAdvertisedRate(t *testing.T) {
+	w, h := run(3)
+	w.PlaceRefiner(2, 0, engine.East)
+	h.recompute()
+	h.refinerLevel = 1 // 0.4 / 1.5 seconds does not divide a 25 ms sub-step
+
+	tickN(h, 10)
+	before := h.credits
+	tickN(h, 100)
+	if got, want := h.credits-before, int(h.currentRate()*100); got != want {
+		t.Fatalf("level-1 refiner earned %d credits over 100 seconds, want %d", got, want)
+	}
+}
+
+func TestRefinerPreservesTripleLifetimeValue(t *testing.T) {
+	const stock = 13
+	w := engine.NewWorld(5, 1)
+	w.SetDeposit(0, 0, engine.Copper, stock)
+	w.PlaceExtractor(0, 0, engine.East)
+	w.PlaceBelt(1, 0, engine.East)
+	w.PlaceRefiner(2, 0, engine.East)
+	w.PlaceBelt(3, 0, engine.East)
+	w.PlaceSeller(4, 0, engine.West)
+	w.SetPort(4, 0, true)
+	h := NewHub(w)
+
+	for i := 0; i < 60 && (len(h.routes) > 0 || len(h.chunks) > 0); i++ {
+		h.tick()
+	}
+	if len(h.routes) > 0 || len(h.chunks) > 0 {
+		t.Fatalf("refined line did not drain: routes=%d chunks=%d", len(h.routes), len(h.chunks))
+	}
+	if got, want := h.credits-startingCredits, stock*rawValue(engine.CopperSheet); got != want {
+		t.Fatalf("earned %d credits from %d copper, want %d (triple lifetime value)", got, stock, want)
+	}
+}
+
+func TestDeepLevelRefinerPreservesEveryBatchedUnit(t *testing.T) {
+	const stock = 137
+	w := engine.NewWorld(5, 1)
+	w.SetDeposit(0, 0, engine.Copper, stock)
+	w.PlaceExtractor(0, 0, engine.East)
+	w.PlaceBelt(1, 0, engine.East)
+	w.PlaceRefiner(2, 0, engine.East)
+	w.PlaceBelt(3, 0, engine.East)
+	w.PlaceSeller(4, 0, engine.West)
+	w.SetPort(4, 0, true)
+	h := NewHub(w)
+	h.extractorLevel, h.beltLevel = 12, 12
+
+	for i := 0; i < 100 && (len(h.routes) > 0 || len(h.chunks) > 0); i++ {
+		h.tick()
+	}
+	if len(h.routes) > 0 || len(h.chunks) > 0 {
+		t.Fatalf("deep refined line did not drain: routes=%d chunks=%d", len(h.routes), len(h.chunks))
+	}
+	if got, want := h.credits-startingCredits, stock*rawValue(engine.CopperSheet); got != want {
+		t.Fatalf("earned %d credits from %d batched copper, want %d", got, stock, want)
+	}
+}
+
+func TestRefinerViewsReportActiveQueueAndIdleMachines(t *testing.T) {
+	w := engine.NewWorld(4, 1)
+	w.PlaceRefiner(1, 0, engine.West)
+	w.PlaceRefiner(3, 0, engine.West)
+	h := NewHub(w)
+	rt := &route{cells: []int{1}, refiner: 1, refines: true}
+	active := &chunk{route: rt, dist: 0, units: 1, resource: engine.Copper, processLeft: 0.3}
+	h.chunks = []*chunk{
+		active,
+		{route: rt, dist: 0, units: 1, resource: engine.Copper, waiting: true},
+		{route: rt, dist: 0, units: 1, resource: engine.Iron, waiting: true},
+	}
+	h.refinerBusy[1] = active
+
+	views := h.refinerViews()
+	if len(views) != 2 {
+		t.Fatalf("refiner views = %d, want 2", len(views))
+	}
+	if got := views[0]; got.X != 1 || got.Y != 0 || got.Resource != "copper" || got.Remaining != 0.3 || got.Duration != baseRefineTime || got.Queued != 2 {
+		t.Fatalf("active refiner = %+v, want copper with 0.3s left and 2 queued", got)
+	}
+	if got := views[1]; got.X != 3 || got.Y != 0 || got.Resource != "" || got.Remaining != 0 || got.Duration != baseRefineTime || got.Queued != 0 {
+		t.Fatalf("idle refiner = %+v, want an empty queue", got)
+	}
+}
+
+func TestRefinerViewsSeparateMovingOreFromARealQueue(t *testing.T) {
+	w := engine.NewWorld(4, 1)
+	w.PlaceRefiner(2, 0, engine.East)
+	h := NewHub(w)
+	rt := &route{cells: []int{0, 1, 2}, refiner: 2, refinerAt: 2, refines: true}
+	h.chunks = []*chunk{
+		{route: rt, dist: 1.5, units: 1, resource: engine.Iron},
+		{route: rt, dist: 1, units: 1, resource: engine.Iron, waiting: true},
+	}
+
+	views := h.refinerViews()
+	if len(views) != 1 {
+		t.Fatalf("refiner views = %d, want 1", len(views))
+	}
+	if got := views[0]; got.Queued != 1 || got.Incoming != 1 {
+		t.Fatalf("refiner inventory = %+v, want one waiting and one incoming", got)
+	}
+}
+
+func TestRefinerViewUsesArrivalLimitedOutputCadence(t *testing.T) {
+	w, h := run(3)
+	w.PlaceRefiner(2, 0, engine.East)
+	h.recompute()
+	h.refinerLevel = 5
+	tickN(h, 5)
+
+	views := h.refinerViews()
+	if len(views) != 1 {
+		t.Fatalf("refiner views = %d, want 1", len(views))
+	}
+	if got := views[0].Duration; got != 0.2 {
+		t.Fatalf("output interval = %v, want 0.2s from the untouched belt line", got)
+	}
+}
+
+func TestBusyOrQueuedFastRefinerUsesItsProcessDuration(t *testing.T) {
+	w := engine.NewWorld(3, 1)
+	w.PlaceRefiner(1, 0, engine.East)
+	h := NewHub(w)
+	h.refinerLevel = 5
+	rt := &route{cells: []int{1}, refiner: 1, refines: true}
+	active := &chunk{route: rt, units: 1, resource: engine.Iron, processLeft: 0.05}
+	h.routes = map[string]*route{"active": rt}
+	h.chunks = []*chunk{
+		active,
+		{route: rt, units: 1, resource: engine.Iron, waiting: true},
+	}
+	h.refinerBusy[1] = active
+
+	views := h.refinerViews()
+	if len(views) != 1 {
+		t.Fatalf("refiner views = %d, want 1", len(views))
+	}
+	if got, want := views[0].Duration, h.refineTime(); got != want {
+		t.Fatalf("busy output duration = %v, want process duration %v", got, want)
+	}
+}
+
+func TestRefinerViewIgnoresRawOreAlreadyDownstreamWhenPlaced(t *testing.T) {
+	w := engine.NewWorld(3, 1)
+	w.PlaceRefiner(1, 0, engine.East)
+	h := NewHub(w)
+	rt := &route{cells: []int{0, 1, 2}, refiner: 1, refinerAt: 1, refines: true}
+	h.routes = map[string]*route{"replacement": rt}
+	h.chunks = []*chunk{
+		{route: rt, dist: 2.2, units: 1, resource: engine.Iron},
+		{route: rt, dist: 0.5, units: 1, resource: engine.Iron},
+	}
+
+	views := h.refinerViews()
+	if len(views) != 1 {
+		t.Fatalf("refiner views = %d, want 1", len(views))
+	}
+	if got := views[0]; got.Incoming != 1 || got.Queued != 0 || got.NextOutput < 0.599 || got.NextOutput > 0.601 {
+		t.Fatalf("replacement refiner = %+v, want only upstream ore with a 0.6s ETA", got)
+	}
+}
+
+func TestRemovedRefinerJobReacquiresTheNextMachine(t *testing.T) {
+	w := engine.NewWorld(7, 1)
+	w.SetDeposit(0, 0, engine.Iron, 100)
+	w.PlaceExtractor(0, 0, engine.East)
+	w.PlaceBelt(1, 0, engine.East)
+	w.PlaceRefiner(2, 0, engine.East)
+	w.PlaceBelt(3, 0, engine.East)
+	w.PlaceRefiner(4, 0, engine.East)
+	w.PlaceBelt(5, 0, engine.East)
+	w.PlaceSeller(6, 0, engine.West)
+	w.SetPort(6, 0, true)
+	h := NewHub(w)
+	rt := onlyRoute(t, h)
+	owner := &chunk{
+		route: rt, dist: float64(rt.refinerAt) + h.emitGap(), units: 1,
+		resource: engine.Iron, processLeft: 0.2,
+	}
+	h.chunks = []*chunk{owner}
+	h.refinerBusy[rt.refiner] = owner
+
+	w.PlaceBelt(2, 0, engine.East)
+	h.recompute()
+	if owner.processLeft != 0 || len(h.refinerBusy) != 0 {
+		t.Fatalf("removed refiner left process=%v busy=%d, want a clean job", owner.processLeft, len(h.refinerBusy))
+	}
+	rt = onlyRoute(t, h)
+	owner.dist = float64(rt.refinerAt)
+	h.advanceChunk(owner, h.beltSpeed(), 1.0/subSteps, make(map[int]float64))
+	if h.refinerBusy[rt.refiner] != owner || owner.processLeft >= h.refineTime() {
+		t.Fatalf("next refiner did not acquire a fresh job: process=%v busy=%v", owner.processLeft, h.refinerBusy[rt.refiner] == owner)
+	}
+}
+
+func TestInactiveDrainingRouteRefreshesRefinerMetadata(t *testing.T) {
+	w, h := run(3)
+	rt := onlyRoute(t, h)
+	h.chunks = []*chunk{{route: rt, dist: 0.5, units: 1, resource: engine.Iron}}
+	w.Consume(0, 0, w.DepositAt(0, 0).Remaining)
+	w.PlaceRefiner(2, 0, engine.East)
+
+	h.recompute()
+	if len(h.routes) != 0 || !rt.refines || rt.refiner != 2 || rt.refinerAt != 1 {
+		t.Fatalf("inactive route metadata = routes=%d refines=%v cell=%d at=%d", len(h.routes), rt.refines, rt.refiner, rt.refinerAt)
+	}
+	tickN(h, 3)
+	if len(h.chunks) != 0 || h.credits-startingCredits != rawValue(engine.IronBar) {
+		t.Fatalf("draining ore was not refined after the source stopped: chunks=%d earned=%d", len(h.chunks), h.credits-startingCredits)
+	}
+}
+
+func TestFastRefinerReportsMovingOreWithoutAFalseQueue(t *testing.T) {
+	w, h := run(12)
+	w.PlaceRefiner(11, 0, engine.East)
+	h.recompute()
+	h.refinerLevel = 3
+
+	h.tick()
+	warming := h.refinerViews()
+	if len(warming) != 1 || warming[0].NextOutput < 3 {
+		t.Fatalf("warm-up ETA = %+v, want the distant ore's multi-second travel time", warming)
+	}
+
+	tickN(h, 20)
+	views := h.refinerViews()
+	if len(views) != 1 {
+		t.Fatalf("refiner views = %d, want 1", len(views))
+	}
+	if got := views[0]; got.Queued != 0 || got.Incoming == 0 || got.NextOutput <= 0 {
+		t.Fatalf("fast refiner inventory = %+v, want moving inbound ore, a truthful ETA, and no waiting queue", got)
+	}
+}
+
+func TestSharedRefinerRateUsesOneMachineCapacity(t *testing.T) {
+	w := engine.NewWorld(6, 3)
+	for _, y := range []int{0, 2} {
+		w.SetDeposit(0, y, engine.Iron, 1_000_000)
+		w.PlaceExtractor(0, y, engine.East)
+		w.PlaceBelt(1, y, engine.East)
+		w.PlaceBelt(2, y, engine.East)
+	}
+	w.PlaceBelt(2, 1, engine.East)
+	w.PlaceRefiner(3, 1, engine.West)
+	w.PlaceBelt(4, 1, engine.East)
+	w.PlaceSeller(5, 1, engine.West)
+	w.SetPort(5, 1, true)
+	h := NewHub(w)
+
+	if got := len(h.routes); got != 2 {
+		t.Fatalf("routes = %d, want 2", got)
+	}
+	if got := h.currentRate(); got != 7.5 {
+		t.Fatalf("shared-refiner rate = %v, want 7.5", got)
+	}
+	tickN(h, 20)
+	before := h.credits
+	tickN(h, 100)
+	if got, want := h.credits-before, int(h.currentRate()*100); got != want {
+		t.Fatalf("shared refiner earned %d credits over 100 seconds, want %d", got, want)
 	}
 }

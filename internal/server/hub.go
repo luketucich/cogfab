@@ -392,6 +392,7 @@ func (h *Hub) statsBytes() []byte {
 		GridCost:       h.gridCost(),
 		NextGridWidth:  nextW,
 		NextGridHeight: nextH,
+		Refiners:       h.refinerViews(),
 	})
 	return b
 }

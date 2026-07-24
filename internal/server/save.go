@@ -83,8 +83,11 @@ func (s snapshot) valid() bool {
 	if s.Version != snapshotVersion ||
 		s.Width != resourceWorldSize || s.Height != resourceWorldSize ||
 		len(s.Tiles) != s.Width*s.Height ||
-		s.Credits < 0 ||
-		s.ExtractorLevel < 0 || s.BeltLevel < 0 || s.ValueLevel < 0 || s.RefinerLevel < 0 ||
+		s.Credits < 0 || s.Credits > maxCredits ||
+		s.ExtractorLevel < 0 || s.ExtractorLevel > maxUpgradeLevel ||
+		s.BeltLevel < 0 || s.BeltLevel > maxUpgradeLevel ||
+		s.ValueLevel < 0 || s.ValueLevel > maxUpgradeLevel ||
+		s.RefinerLevel < 0 || s.RefinerLevel > maxUpgradeLevel ||
 		s.GridTier < 0 || s.GridTier >= len(gridTiers) {
 		return false
 	}
@@ -209,6 +212,7 @@ func (s snapshot) validSimulation(deposits map[int]savedDeposit) bool {
 
 	inFlight := make(map[int]int)
 	referencedRoutes := make([]bool, len(s.Routes))
+	activeRefiners := make(map[int]bool)
 	for _, chunk := range s.Chunks {
 		if chunk.Route < 0 || chunk.Route >= len(s.Routes) || chunk.Units <= 0 ||
 			math.IsNaN(chunk.Dist) || math.IsInf(chunk.Dist, 0) || chunk.Dist < 0 ||
@@ -221,8 +225,19 @@ func (s snapshot) validSimulation(deposits map[int]savedDeposit) bool {
 		if chunk.Resource == 0 {
 			kind = engine.ResourceKind(route.Resource)
 		}
-		if kind <= engine.NoResource || kind > engine.GoldIngot {
+		routeResource := engine.ResourceKind(route.Resource)
+		if kind != routeResource && kind != engine.Refine(routeResource) {
 			return false
+		}
+		if chunk.ProcessLeft > 0 {
+			cell := route.Cells[int(chunk.Dist)]
+			if !engine.IsRaw(kind) ||
+				engine.TileKind(s.Tiles[cell].K) != engine.Refiner ||
+				chunk.ProcessLeft > baseRefineTime/refineMult(s.RefinerLevel)*float64(chunk.Units) ||
+				activeRefiners[cell] {
+				return false
+			}
+			activeRefiners[cell] = true
 		}
 		referencedRoutes[chunk.Route] = true
 		deposit := deposits[route.Extractor]
@@ -248,8 +263,10 @@ func adjacentCells(a, b, width int) bool {
 
 func (s snapshot) validV1() bool {
 	if s.Width <= 0 || s.Width > 12 || s.Height <= 0 || s.Height > 8 ||
-		len(s.Tiles) != s.Width*s.Height || s.LegacyCredits < 0 ||
-		s.ExtractorLevel < 0 || s.BeltLevel < 0 || s.ValueLevel < 0 ||
+		len(s.Tiles) != s.Width*s.Height || s.LegacyCredits < 0 || s.LegacyCredits > maxCredits ||
+		s.ExtractorLevel < 0 || s.ExtractorLevel > maxUpgradeLevel ||
+		s.BeltLevel < 0 || s.BeltLevel > maxUpgradeLevel ||
+		s.ValueLevel < 0 || s.ValueLevel > maxUpgradeLevel ||
 		s.GridTier < 0 || s.GridTier > 4 {
 		return false
 	}
@@ -399,13 +416,15 @@ func (h *Hub) restoreSimulation(s snapshot) {
 			routes[i] = current
 			continue
 		}
-		routes[i] = &route{
+		rt := &route{
 			cells:     append([]int(nil), saved.Cells...),
 			extractor: saved.Extractor,
 			seller:    saved.Seller,
 			resource:  engine.ResourceKind(saved.Resource),
 			unitPart:  saved.UnitPart,
 		}
+		setRouteRefiner(h.world, rt)
+		routes[i] = rt
 	}
 	for _, saved := range s.Chunks {
 		resource := engine.ResourceKind(saved.Resource)

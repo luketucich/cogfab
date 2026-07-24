@@ -37,6 +37,7 @@ const (
 	beltBaseCost      = 200
 	valueBaseCost     = 400
 	refinerBaseCost   = 250
+	maxUpgradeLevel   = 40
 )
 
 // gridTiers are the unlockable region sizes, smallest first. Buying Grid Size
@@ -60,10 +61,14 @@ var gridTiers = []struct{ w, h, cost int }{
 }
 
 // doublingCost is the price of an upgrade's next level: the base, doubling per
-// level. The shift is clamped far past anything a player could ever afford, so
-// it cannot overflow.
+// level. Level 40 is the practical ceiling; returning zero there uses the wire
+// format's existing "maxed" state and keeps every multiplier and price in a
+// range the server and browser can represent safely.
 func doublingCost(level, base int) int {
-	return base << min(level, 40)
+	if level < 0 || level >= maxUpgradeLevel {
+		return 0
+	}
+	return base << level
 }
 
 func (h *Hub) extractorCost() int { return doublingCost(h.extractorLevel, extractorBaseCost) }
@@ -128,6 +133,12 @@ func (h *Hub) applyPlaceBatch(cmd wire.Command) bool {
 	return h.applyPlacements(cmd.Kind, cmd.Placements)
 }
 
+// placementOccupancyAllows keeps ordinary builds empty-cell-only while letting
+// a refiner upgrade a belt in place.
+func placementOccupancyAllows(kind, existing engine.TileKind) bool {
+	return existing == engine.Empty || kind == engine.Refiner && existing == engine.Belt
+}
+
 // applyPlacements is the authoritative path for every build. Commands run one
 // at a time, so the first valid overlapping batch wins and the next fails.
 func (h *Hub) applyPlacements(kindName string, placements []wire.Placement) bool {
@@ -142,9 +153,13 @@ func (h *Hub) applyPlacements(kindName string, placements []wire.Placement) bool
 	}
 
 	seen := make(map[int]bool, len(placements))
-	for _, placement := range placements {
-		if !validDirection(placement.Dir) || !h.unlocked(placement.X, placement.Y) ||
-			h.world.At(placement.X, placement.Y).Kind != engine.Empty ||
+	directions := make([]engine.Direction, len(placements))
+	for i, placement := range placements {
+		if !validDirection(placement.Dir) || !h.unlocked(placement.X, placement.Y) {
+			return false
+		}
+		existing := h.world.At(placement.X, placement.Y)
+		if !placementOccupancyAllows(kind, existing.Kind) ||
 			!h.terrainAllows(kind, placement.X, placement.Y) {
 			return false
 		}
@@ -153,10 +168,19 @@ func (h *Hub) applyPlacements(kindName string, placements []wire.Placement) bool
 			return false
 		}
 		seen[cell] = true
+
+		directions[i] = engine.ParseDirection(placement.Dir)
+		if kind == engine.Refiner && existing.Kind == engine.Belt {
+			direction, straight := h.world.StraightBeltDirection(placement.X, placement.Y)
+			if !straight {
+				return false
+			}
+			directions[i] = direction
+		}
 	}
 
-	for _, placement := range placements {
-		dir := engine.ParseDirection(placement.Dir)
+	for i, placement := range placements {
+		dir := directions[i]
 		switch kind {
 		case engine.Belt:
 			h.world.PlaceBelt(placement.X, placement.Y, dir)
@@ -208,7 +232,7 @@ func (h *Hub) applyDestroy(cmd wire.Command) bool {
 	if !h.hasActiveProducer() {
 		back = buildCost[kind]
 	}
-	h.credits += back
+	h.credits = addCredits(h.credits, back)
 	return true
 }
 
@@ -251,6 +275,7 @@ func matchesExpectedTile(tile engine.Tile, cmd wire.Command) bool {
 func (h *Hub) applyBuy(cmd wire.Command) bool {
 	var cost int
 	var level *int
+	var rescaleRefinerJobs bool
 	productionUpgrade := true
 	switch cmd.Upgrade {
 	case wire.UpgradeExtractorRate:
@@ -261,6 +286,7 @@ func (h *Hub) applyBuy(cmd wire.Command) bool {
 		cost, level = h.valueCost(), &h.valueLevel
 	case wire.UpgradeRefinerSpeed:
 		cost, level = h.refinerCost(), &h.refinerLevel
+		rescaleRefinerJobs = true
 	case wire.UpgradeGridSize:
 		productionUpgrade = false
 		cost, level = h.gridCost(), &h.gridTier
@@ -278,6 +304,16 @@ func (h *Hub) applyBuy(cmd wire.Command) bool {
 		return false
 	}
 	h.credits -= cost
+	previousRefineTime := 0.0
+	if rescaleRefinerJobs {
+		previousRefineTime = h.refineTime()
+	}
 	*level++
+	if rescaleRefinerJobs {
+		scale := h.refineTime() / previousRefineTime
+		for _, owner := range h.refinerBusy {
+			owner.processLeft *= scale
+		}
+	}
 	return true
 }

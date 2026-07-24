@@ -24,3 +24,10 @@ export const SIDES: Dir[] = ["north", "east", "south", "west"];
 export function clockwise(dir: Dir): Dir {
   return SIDES[(SIDES.indexOf(dir) + 1) % SIDES.length];
 }
+
+// sameAxis treats opposite directions as the same straight orientation. A
+// refiner uses this so either end can become its input without changing the
+// horizontal or vertical model alignment.
+export function sameAxis(a: Dir, b: Dir): boolean {
+  return STEP[a][0] === 0 ? STEP[b][0] === 0 : STEP[b][1] === 0;
+}

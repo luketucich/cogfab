@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clockwise } from "./dir";
+import { clockwise, sameAxis } from "./dir";
 
 describe("clockwise", () => {
   it("turns through each grid direction", () => {
@@ -7,5 +7,13 @@ describe("clockwise", () => {
     expect(clockwise("east")).toBe("south");
     expect(clockwise("south")).toBe("west");
     expect(clockwise("west")).toBe("north");
+  });
+});
+
+describe("sameAxis", () => {
+  it("ignores polarity but keeps horizontal and vertical orientations separate", () => {
+    expect(sameAxis("east", "west")).toBe(true);
+    expect(sameAxis("north", "south")).toBe(true);
+    expect(sameAxis("east", "north")).toBe(false);
   });
 });

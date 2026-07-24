@@ -152,6 +152,93 @@ func TestPlacingCannotOverwrite(t *testing.T) {
 	}
 }
 
+func TestRefinerCanReplaceAMisfacedBeltWithoutBreakingItsRoute(t *testing.T) {
+	h := shopHub()
+	h.world.SetDeposit(3, 2, engine.Iron, 100)
+	h.world.SetPort(6, 2, true)
+	h.world.PlaceExtractor(3, 2, engine.East)
+	h.world.PlaceBelt(4, 2, engine.South) // stored facing is irrelevant; the route is horizontal
+	h.world.PlaceBelt(5, 2, engine.South)
+	h.world.PlaceSeller(6, 2, engine.West)
+	if got := len(h.world.Producers()); got != 1 {
+		t.Fatalf("setup has %d producers, want one", got)
+	}
+	before := h.credits
+
+	if !h.apply(wire.Command{
+		Type: wire.CmdPlace,
+		X:    4,
+		Y:    2,
+		Kind: wire.KindRefiner,
+		Dir:  "north", // the server derives the horizontal route instead
+	}) {
+		t.Fatal("placing a refiner directly over a belt should succeed")
+	}
+	got := h.world.At(4, 2)
+	if got.Kind != engine.Refiner || got.Dir != engine.East {
+		t.Fatalf("replacement = %+v, want an east-aligned refiner", got)
+	}
+	if producers := len(h.world.Producers()); producers != 1 {
+		t.Fatalf("replacement left %d producers, want the route to stay connected", producers)
+	}
+	if want := before - buildCost[engine.Refiner]; h.credits != want {
+		t.Fatalf("credits = %d, want %d after one refiner", h.credits, want)
+	}
+}
+
+func TestRefinerRejectsNonStraightBeltTopologyAtomically(t *testing.T) {
+	tests := []struct {
+		name       string
+		neighbours []engine.Direction
+	}{
+		{name: "corner", neighbours: []engine.Direction{engine.North, engine.East}},
+		{name: "tee", neighbours: []engine.Direction{engine.North, engine.East, engine.South}},
+		{name: "cross", neighbours: []engine.Direction{engine.North, engine.East, engine.South, engine.West}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := shopHub()
+			h.credits = 1_000
+
+			// This first target is valid. The second target's shape must reject
+			// the entire batch before either belt is replaced.
+			h.world.PlaceBelt(4, 5, engine.North)
+			h.world.PlaceBelt(3, 5, engine.East)
+			h.world.PlaceBelt(5, 5, engine.East)
+			h.world.PlaceBelt(7, 2, engine.East)
+			for _, direction := range test.neighbours {
+				switch direction {
+				case engine.North:
+					h.world.PlaceBelt(7, 1, direction)
+				case engine.East:
+					h.world.PlaceBelt(8, 2, direction)
+				case engine.South:
+					h.world.PlaceBelt(7, 3, direction)
+				case engine.West:
+					h.world.PlaceBelt(6, 2, direction)
+				}
+			}
+
+			before := h.snapshot()
+			beforeCredits := h.credits
+			if h.apply(placeBatch(
+				wire.KindRefiner,
+				wire.Placement{X: 4, Y: 5, Dir: "north"},
+				wire.Placement{X: 7, Y: 2, Dir: "west"},
+			)) {
+				t.Fatal("a refiner batch containing a non-straight belt should be rejected")
+			}
+			if after := h.snapshot(); !reflect.DeepEqual(after, before) {
+				t.Fatalf("rejected batch changed the room\nbefore: %+v\nafter:  %+v", before, after)
+			}
+			if h.credits != beforeCredits {
+				t.Fatalf("rejected batch changed credits from %d to %d", beforeCredits, h.credits)
+			}
+		})
+	}
+}
+
 func TestTerrainControlsPlacement(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -480,9 +567,59 @@ func TestSaleValuePaybackSlowsEveryLevel(t *testing.T) {
 
 func TestRateUpgradesNeverMaxOut(t *testing.T) {
 	h := lineHub()
-	h.extractorLevel, h.beltLevel, h.valueLevel = 30, 30, 30
-	if h.extractorCost() <= 0 || h.beltCost() <= 0 || h.valueCost() <= 0 {
-		t.Fatalf("deep levels must still price a next level: %d %d %d", h.extractorCost(), h.beltCost(), h.valueCost())
+	h.extractorLevel, h.beltLevel, h.valueLevel, h.refinerLevel = 30, 30, 30, 30
+	if h.extractorCost() <= 0 || h.beltCost() <= 0 || h.valueCost() <= 0 || h.refinerCost() <= 0 {
+		t.Fatalf(
+			"deep levels must still price a next level: %d %d %d %d",
+			h.extractorCost(), h.beltCost(), h.valueCost(), h.refinerCost(),
+		)
+	}
+}
+
+func TestRateUpgradesStopAtTheSafeMaximum(t *testing.T) {
+	h := lineHub()
+	h.gridTier = len(gridTiers) - 1
+	h.extractorLevel = maxUpgradeLevel - 1
+	h.credits = h.extractorCost()
+	buy := wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeExtractorRate}
+
+	if !h.apply(buy) {
+		t.Fatal("the final extractor level should be buyable")
+	}
+	if h.extractorLevel != maxUpgradeLevel || h.extractorCost() != 0 {
+		t.Fatalf("extractor level=%d next cost=%d, want max level %d and no next price",
+			h.extractorLevel, h.extractorCost(), maxUpgradeLevel)
+	}
+	h.credits = maxCredits
+	if h.apply(buy) {
+		t.Fatal("an upgrade should not sell past its safe maximum")
+	}
+	if h.credits != maxCredits || h.extractorLevel != maxUpgradeLevel {
+		t.Fatal("a rejected max-level purchase should change nothing")
+	}
+}
+
+func TestBuyingRefinerSpeedRescalesTheActiveJob(t *testing.T) {
+	h := lineHub()
+	h.world.PlaceRefiner(5, 3, engine.East)
+	h.recompute()
+	rt := onlyRoute(t, h)
+	active := &chunk{
+		route: rt, dist: 0.5, units: 1, resource: engine.Iron, processLeft: 0.3,
+	}
+	h.chunks = []*chunk{active}
+	h.refinerBusy[5+3*h.world.Width()] = active
+	reserve := h.gridCost()
+	h.credits = reserve + h.refinerCost()
+
+	if !h.apply(wire.Command{Type: wire.CmdBuy, Upgrade: wire.UpgradeRefinerSpeed}) {
+		t.Fatal("the first refiner speed level should be buyable above the land reserve")
+	}
+	if h.refinerLevel != 1 || h.credits != reserve {
+		t.Fatalf("level=%d credits=%d after buying, want level 1 and reserve %d", h.refinerLevel, h.credits, reserve)
+	}
+	if active.processLeft < 0.199999 || active.processLeft > 0.200001 {
+		t.Fatalf("active job has %.6fs left, want its 75%% progress preserved at 0.2s", active.processLeft)
 	}
 }
 
